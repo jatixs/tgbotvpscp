@@ -4,13 +4,13 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.26.2-blue?style=flat-square" alt="Version 1.26.2"/>
+    <img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/>
     <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
     <img src="https://img.shields.io/badge/date-Oct%2022%202026-green?style=flat-square" alt="Date Oct 22 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
-## [1.26.2] - 2026-10-22
+## [1.27.0] - 2026-10-22
 
 ### 🚀 New Features
 * **Web Push Notifications for Browsers and PWA.** Implemented a comprehensive background Web Push notification system (VAPID / RFC 8291 aes128gcm + Service Worker) for the web panel and PWA on smartphones (Android, iOS 16.4+ PWA) and desktop. Notifications arrive even when the browser or app is closed, seamlessly sync with user alert preferences (CPU/RAM/disk thresholds, SSH logins, Fail2ban bans, node status), and include an instant toggle, test notification button, and revoke subscriptions across all devices in Settings.
