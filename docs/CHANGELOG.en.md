@@ -6,20 +6,30 @@
 <p align="center">
     <img src="https://img.shields.io/badge/version-v1.26.2-blue?style=flat-square" alt="Version 1.26.2"/>
     <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
-    <img src="https://img.shields.io/badge/date-Oct%2021%202026-green?style=flat-square" alt="Date Oct 21 2026"/>
+    <img src="https://img.shields.io/badge/date-Oct%2022%202026-green?style=flat-square" alt="Date Oct 22 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
-## [1.26.2] - 2026-10-21
+## [1.26.2] - 2026-10-22
 
 ### 🚀 New Features
-* **One-Click IP Copy in WebUI:** Quick IP copying has been integrated across all key web panel components: agent network block on the dashboard, node cards & node detail modals, nodes monitor (`nodes_monitor`), settings table, and the quick VNC connect dialog. Features smooth visual feedback with the icon transitioning into a green checkmark for 1.5 seconds.
-* **Touchscreen Optimization:** On mobile devices and tablets, tapping directly on the IP text immediately copies it to the clipboard. The text features subtle dotted underlining and an active touch highlight so users don't need to tap small icon targets.
+* **One-Click IP Copying.** Quickly copy server IP addresses across the dashboard, server cards, nodes monitor, settings, and VNC dialogs with smooth animated feedback (icon smoothly switches to a green checkmark).
+* **Touch-Friendly Mobile Experience.** On smartphones and tablets, simply tap the dotted IP address text to copy it instantly to your clipboard.
 
 ### ✨ Improved
-* **Agent Chart Tick Readability:** Enhanced time-axis tick formatting on agent resource charts: an even-distribution algorithm (`afterBuildTicks`) guarantees that the latest timestamp is always anchored to the right edge (preventing awkward trailing whitespace), while labels are tilted at 45° with font sizes responsive to mobile and desktop screens.
-* **Responsive Network Badges:** Network badge styling and typography have been refined for compact and narrow mobile viewports (down to 320–360px): dynamic font scaling via `clamp()`, condensed padding, and omission of decorative hint icons prevent IP truncation or multi-line breakage.
-* **Chart Range Dropdown Alignment:** The chart timeframe popover menu is now centered horizontally relative to its trigger button with improved boundary detection and an origin-centered scaling animation.
+* **Cleaner Resource Charts.** The timeline on agent graphs is now evenly spaced without awkward trailing whitespace, and 45°-angled time labels are easy to read on both mobile and desktop screens.
+* **Clear Password Visibility Toggle.** Replaced the cluttered strikethrough eye icon with an intuitive closed-eyelids symbol for clear visual feedback.
+* **Snappier Web Terminal Loading.** Terminal styles and scripts are now split into dedicated static files with automatic cache busting on updates.
+* **Compact Screen Layout.** The chart range dropdown opens neatly centered over its button, and network badges adapt fluidly to narrow displays.
+
+### 🐛 Fixed
+* **Web Terminal & VNC Connectivity.** Resolved an issue that prevented the terminal console and quick VNC dialog from launching properly.
+* **Encrypted SSH Key Login.** Passphrase dialogs now open reliably when connecting with protected private keys, including full support for modern OpenSSH keys.
+* **Mobile Text Wrapping.** Fixed layout issues on narrow screens (down to 320px) where long IP addresses could get clipped or wrap awkwardly.
+
+### 🔒 Security
+* **Encrypted Credential Storage.** All saved terminal passwords, private keys, and passphrases are now securely encrypted at rest on the server using Fernet (AES-128).
+* **Zero Browser Leakage.** The server never sends raw private keys or passwords back to the client (displaying safe placeholders instead), and unchecking "Remember" immediately purges saved credentials from the server.
 
 
 ## [1.26.1] - 2026-10-14

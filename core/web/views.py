@@ -303,6 +303,8 @@ async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
         "web_terminal_err_missing_host_user": _("web_terminal_err_missing_host_user", lang),
         "web_terminal_err_access_denied": _("web_terminal_err_access_denied", lang),
         "web_terminal_err_invalid_key": _("web_terminal_err_invalid_key", lang),
+        "web_terminal_err_bcrypt_required": _("web_terminal_err_bcrypt_required", lang),
+        "web_terminal_err_passphrase_required": _("web_terminal_err_passphrase_required", lang),
         "web_terminal_passphrase_placeholder": _("web_terminal_passphrase_placeholder", lang),
         "web_terminal_unit_hour": _("web_terminal_unit_hour", lang),
         "web_terminal_unit_min": _("web_terminal_unit_min", lang),
