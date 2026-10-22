@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -91,12 +92,23 @@ def compute_sha256(file_path: Path | str, normalize_text: bool = True) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _sanitize_git_branch(branch: str) -> str:
+    """Allow only safe git branch/ref-name characters used by this project."""
+    value = (branch or "").strip()
+    if not value:
+        return "main"
+    if not re.fullmatch(r"[A-Za-z0-9._/\-]+", value):
+        return "main"
+    return value
+
+
 def get_git_remote_blob(
     rel_path: str, branch: str = "main", repo_root: Path | str = "."
 ) -> Optional[bytes]:
     """Retrieve raw file content from git upstream origin/{branch}:{rel_path}."""
     git_path = rel_path.replace("\\", "/")
-    cmd = ["git", "show", f"origin/{branch}:{git_path}"]
+    safe_branch = _sanitize_git_branch(branch)
+    cmd = ["git", "show", f"origin/{safe_branch}:{git_path}"]
     try:
         res = subprocess.run(
             cmd,
