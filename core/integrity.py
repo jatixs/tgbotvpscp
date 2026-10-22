@@ -22,6 +22,7 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import re
 
 logger = logging.getLogger("core.integrity")
 
@@ -68,6 +69,17 @@ IGNORED_PATTERNS = {
 }
 
 
+def _sanitize_branch_name(branch: str) -> str:
+    """
+    Restrict git branch/ref input to a safe subset.
+    Falls back to 'main' for invalid values.
+    """
+    value = (branch or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._/\-]+", value):
+        return "main"
+    return value
+
+
 def _normalize_content(raw_bytes: bytes, is_binary: bool = False) -> bytes:
     """Normalize CRLF to LF for text files to prevent false diffs across OS."""
     if is_binary:
@@ -106,6 +118,7 @@ def get_git_remote_blob(
     rel_path: str, branch: str = "main", repo_root: Path | str = "."
 ) -> Optional[bytes]:
     """Retrieve raw file content from git upstream origin/{branch}:{rel_path}."""
+    branch = _sanitize_branch_name(branch)
     git_path = rel_path.replace("\\", "/")
     safe_branch = _sanitize_git_branch(branch)
     cmd = ["git", "show", f"origin/{safe_branch}:{git_path}"]
@@ -128,6 +141,7 @@ def get_git_tracked_files(
     repo_root: Path | str = ".", branch: str = "main"
 ) -> List[str]:
     """List tracked files from origin/{branch}."""
+    branch = _sanitize_branch_name(branch)
     cmd = ["git", "ls-tree", "-r", "--name-only", f"origin/{branch}"]
     try:
         res = subprocess.run(
@@ -294,6 +308,7 @@ def check_project_integrity(
     """
     Perform a complete SHA-256 integrity check of local project files against origin/{branch}.
     """
+    branch = _sanitize_branch_name(branch)
     root = Path(repo_root).resolve()
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -410,6 +425,7 @@ def backup_modified_files(
     Back up modified files to .backups/pre_update_YYYYMMDD_HHMMSS/ preserving directory tree.
     Returns (success, backup_dir_path, list_of_backed_up_files).
     """
+    branch = _sanitize_branch_name(branch)
     root = Path(repo_root).resolve()
     if modified_entries is None:
         report = check_project_integrity(branch=branch, repo_root=root)
