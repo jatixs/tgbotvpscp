@@ -13,7 +13,7 @@
 ## [1.26.2] - 2026-10-22
 
 ### 🚀 New Features
-* **Web Push Notifications for Browsers and PWA.** Implemented a comprehensive background Web Push notification system (VAPID / RFC 8291 aes128gcm + Service Worker) for the web panel and PWA on smartphones (Android, iOS 16.4+ PWA) and desktop. Notifications arrive even when the browser or app is closed, seamlessly sync with user alert preferences (CPU/RAM/disk thresholds, SSH logins, Fail2ban bans, node status), and include an instant toggle and test notification button in Settings.
+* **Web Push Notifications for Browsers and PWA.** Implemented a comprehensive background Web Push notification system (VAPID / RFC 8291 aes128gcm + Service Worker) for the web panel and PWA on smartphones (Android, iOS 16.4+ PWA) and desktop. Notifications arrive even when the browser or app is closed, seamlessly sync with user alert preferences (CPU/RAM/disk thresholds, SSH logins, Fail2ban bans, node status), and include an instant toggle, test notification button, and revoke subscriptions across all devices in Settings.
 * **One-Click IP Copying.** Quickly copy server IP addresses across the dashboard, server cards, nodes monitor, settings, and VNC dialogs with smooth animated feedback (icon smoothly switches to a green checkmark).
 * **Touch-Friendly Mobile Experience.** On smartphones and tablets, simply tap the dotted IP address text to copy it instantly to your clipboard.
 

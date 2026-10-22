@@ -1070,10 +1070,24 @@ async function getSwRegistration() {
     return null;
 }
 
+function updatePushTestButtonState(isActive) {
+    const btn = document.getElementById('sendTestPushBtn');
+    if (!btn) return;
+    const icon = btn.querySelector('svg');
+    btn.disabled = false;
+    if (isActive) {
+        btn.className = 'w-full py-2 px-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] min-w-0';
+        if (icon) icon.className = 'h-4 w-4 shrink-0 text-blue-500';
+    } else {
+        btn.className = 'w-full py-2 px-2.5 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-400 dark:text-gray-500 hover:bg-gray-200/60 dark:hover:bg-white/10 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] min-w-0';
+        if (icon) icon.className = 'h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500';
+    }
+}
+window.updatePushTestButtonState = updatePushTestButtonState;
+
 async function initPushNotificationsUI() {
     const toggle = document.getElementById('pushNotificationToggle');
     const badge = document.getElementById('pushStatusBadge');
-    const testBtn = document.getElementById('sendTestPushBtn');
     const warning = document.getElementById('pushHintWarning');
 
     if (!toggle || !badge) return;
@@ -1083,9 +1097,9 @@ async function initPushNotificationsUI() {
 
     if (!isSupported || !isSecure) {
         toggle.disabled = true;
-        if (testBtn) testBtn.disabled = true;
+        updatePushTestButtonState(false);
         badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_unsupported) ? I18N.web_push_status_unsupported : 'Unsupported / HTTPS required';
-        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 shrink-0 whitespace-nowrap';
         if (warning) {
             warning.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_unsupported) ? I18N.web_push_status_unsupported : 'Web Push requires HTTPS or localhost';
             warning.classList.remove('hidden');
@@ -1096,9 +1110,9 @@ async function initPushNotificationsUI() {
     if (Notification.permission === 'denied') {
         toggle.checked = false;
         toggle.disabled = false;
-        if (testBtn) testBtn.disabled = true;
+        updatePushTestButtonState(false);
         badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_blocked) ? I18N.web_push_status_blocked : 'Blocked';
-        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 shrink-0 whitespace-nowrap';
         if (warning) {
             warning.textContent = (typeof I18N !== 'undefined' && I18N.web_push_permission_denied) ? I18N.web_push_permission_denied : 'Permission denied in browser settings';
             warning.classList.remove('hidden');
@@ -1111,15 +1125,15 @@ async function initPushNotificationsUI() {
         const sub = reg ? await reg.pushManager.getSubscription() : null;
         if (sub) {
             toggle.checked = true;
-            if (testBtn) testBtn.disabled = false;
+            updatePushTestButtonState(true);
             badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_active) ? I18N.web_push_status_active : 'Active';
-            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 shrink-0 whitespace-nowrap';
             if (warning) warning.classList.add('hidden');
         } else {
             toggle.checked = false;
-            if (testBtn) testBtn.disabled = true;
+            updatePushTestButtonState(false);
             badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
-            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap';
             if (warning) warning.classList.add('hidden');
         }
     } catch (e) {
@@ -1130,20 +1144,28 @@ window.initPushNotificationsUI = initPushNotificationsUI;
 
 async function togglePushNotifications(checkbox) {
     const badge = document.getElementById('pushStatusBadge');
-    const testBtn = document.getElementById('sendTestPushBtn');
     const warning = document.getElementById('pushHintWarning');
+    const spinner = document.getElementById('pushToggleSpinner');
 
     checkbox.disabled = true;
+    if (spinner) spinner.classList.remove('hidden');
 
     if (checkbox.checked) {
+        if (badge) {
+            badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_waiting)
+                ? I18N.web_push_status_waiting
+                : ((typeof CURRENT_LANG !== 'undefined' && CURRENT_LANG === 'en') ? 'Waiting for confirmation' : 'Ожидание подтверждения');
+            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 shrink-0 whitespace-nowrap';
+        }
+
         try {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
                 checkbox.checked = false;
-                checkbox.disabled = false;
+                updatePushTestButtonState(false);
                 if (badge) {
                     badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_blocked) ? I18N.web_push_status_blocked : 'Blocked';
-                    badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+                    badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 shrink-0 whitespace-nowrap';
                 }
                 if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_permission_denied) ? I18N.web_push_permission_denied : 'Permission denied', 'warning');
                 return;
@@ -1180,9 +1202,9 @@ async function togglePushNotifications(checkbox) {
             if (saveResp.ok) {
                 if (badge) {
                     badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_active) ? I18N.web_push_status_active : 'Active';
-                    badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+                    badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 shrink-0 whitespace-nowrap';
                 }
-                if (testBtn) testBtn.disabled = false;
+                updatePushTestButtonState(true);
                 if (warning) warning.classList.add('hidden');
                 if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_subscribed) ? I18N.web_push_subscribed : 'Push notifications enabled!');
             } else {
@@ -1191,8 +1213,14 @@ async function togglePushNotifications(checkbox) {
         } catch (e) {
             console.error('Push subscribe error:', e);
             checkbox.checked = false;
+            updatePushTestButtonState(false);
+            if (badge) {
+                badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap';
+            }
             if (window.showToast) window.showToast(String(e.message || e), 'error');
         } finally {
+            if (spinner) spinner.classList.add('hidden');
             checkbox.disabled = false;
         }
     } else {
@@ -1212,14 +1240,15 @@ async function togglePushNotifications(checkbox) {
             }
             if (badge) {
                 badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
-                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap';
             }
-            if (testBtn) testBtn.disabled = true;
+            updatePushTestButtonState(false);
             if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_unsubscribed) ? I18N.web_push_unsubscribed : 'Push notifications disabled');
         } catch (e) {
             console.error('Push unsubscribe error:', e);
             if (window.showToast) window.showToast(String(e.message || e), 'error');
         } finally {
+            if (spinner) spinner.classList.add('hidden');
             checkbox.disabled = false;
         }
     }
@@ -1228,9 +1257,20 @@ window.togglePushNotifications = togglePushNotifications;
 
 async function sendTestPushNotification(btn) {
     if (!btn) return;
+    const toggle = document.getElementById('pushNotificationToggle');
+    if (!toggle || !toggle.checked) {
+        const defaultHint = (typeof CURRENT_LANG !== 'undefined' && CURRENT_LANG === 'en')
+            ? 'Cannot send test notification: please enable Web Push first'
+            : 'Невозможно отправить тестовое уведомление: включите Web Push';
+        const hint = (typeof I18N !== 'undefined' && I18N.web_push_test_disabled_hint)
+            ? I18N.web_push_test_disabled_hint
+            : defaultHint;
+        if (window.showToast) window.showToast(hint, 'warning');
+        return;
+    }
     const origHtml = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-3.5 w-3.5 text-blue-500 inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>...`;
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4 text-blue-500 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
 
     try {
         const resp = await fetch('/api/push/test', {
@@ -1255,6 +1295,65 @@ async function sendTestPushNotification(btn) {
     }
 }
 window.sendTestPushNotification = sendTestPushNotification;
+
+async function revokeAllPushSubscriptions(btn) {
+    if (!btn) return;
+    const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_push_revoke_confirm)
+        ? I18N.web_push_revoke_confirm
+        : 'Revoke all push subscriptions across all your devices?';
+    const confirmTitle = (typeof I18N !== 'undefined' && I18N.modal_title_confirm)
+        ? I18N.modal_title_confirm
+        : 'Confirm';
+
+    if (window.showModalConfirm) {
+        if (!await window.showModalConfirm(confirmMsg, confirmTitle)) return;
+    } else if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4 text-red-500 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+    try {
+        try {
+            const reg = await getSwRegistration();
+            if (reg) {
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) await sub.unsubscribe();
+            }
+        } catch (swErr) {
+            console.debug('Error unsubscribing current device:', swErr);
+        }
+
+        const resp = await fetch('/api/push/revoke-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (data && data.status === 'ok') {
+            const toggle = document.getElementById('pushNotificationToggle');
+            const badge = document.getElementById('pushStatusBadge');
+            if (toggle) toggle.checked = false;
+            updatePushTestButtonState(false);
+            if (badge) {
+                badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap';
+            }
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_revoked_success) ? I18N.web_push_revoked_success : 'All push subscriptions revoked!');
+        } else {
+            throw new Error(data?.error || 'Failed to revoke subscriptions');
+        }
+    } catch (e) {
+        console.error('Revoke push error:', e);
+        if (window.showToast) window.showToast(String(e.message || e), 'error');
+    } finally {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+    }
+}
+window.revokeAllPushSubscriptions = revokeAllPushSubscriptions;
 
 // --- NOTIFICATIONS MENU LOGIC ---
 let currentNodeForNotif = null;

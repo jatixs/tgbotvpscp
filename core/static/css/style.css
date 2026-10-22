@@ -2156,3 +2156,38 @@ html.dark .ip-copy-btn:hover {
         transform: scale(1.15);
     }
 }
+
+/* Tailwind Yellow utilities for badges and alerts */
+.bg-yellow-100 {
+    background-color: #fef9c3 !important;
+}
+.bg-yellow-500\/20 {
+    background-color: rgba(234, 179, 8, 0.2) !important;
+}
+.text-yellow-700 {
+    color: #a16207 !important;
+}
+.text-yellow-800 {
+    color: #854d0e !important;
+}
+.dark .dark\:bg-yellow-900\/30,
+:is(.dark *) .dark\:bg-yellow-900\/30,
+html.dark .dark\:bg-yellow-900\/30 {
+    background-color: rgba(113, 63, 18, 0.35) !important;
+}
+.dark .dark\:bg-yellow-500\/20,
+:is(.dark *) .dark\:bg-yellow-500\/20,
+html.dark .dark\:bg-yellow-500\/20 {
+    background-color: rgba(234, 179, 8, 0.2) !important;
+}
+.dark .dark\:text-yellow-300,
+:is(.dark *) .dark\:text-yellow-300,
+html.dark .dark\:text-yellow-300 {
+    color: #fde047 !important;
+}
+.dark .dark\:text-yellow-400,
+:is(.dark *) .dark\:text-yellow-400,
+html.dark .dark\:text-yellow-400 {
+    color: #facc15 !important;
+}
+

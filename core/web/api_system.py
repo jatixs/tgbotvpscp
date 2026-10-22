@@ -573,6 +573,23 @@ async def api_push_unsubscribe(request: web.Request) -> web.StreamResponse:
         return encrypted_json_response({"error": "Internal Server Error"}, status=500)
 
 
+@routes.post("/api/push/revoke-all")
+async def api_push_revoke_all(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user:
+        return encrypted_json_response({"error": "Unauthorized"}, status=401)
+
+    try:
+        user_id = int(user["id"])
+        from ..models import WebPushSubscription
+        deleted_count = await WebPushSubscription.filter(user_id=user_id).delete()
+        logging.info("Revoked all %d push subscriptions for user %d", deleted_count, user_id)
+        return encrypted_json_response({"status": "ok", "deleted": deleted_count})
+    except Exception as exc:
+        logging.error("Failed to revoke push subscriptions: %s", exc)
+        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
+
 @routes.post("/api/push/test")
 async def api_push_test(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
