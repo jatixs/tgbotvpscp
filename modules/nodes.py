@@ -1,6 +1,6 @@
 """
-Telegram-модуль управления нодами.
-Обеспечивает интерфейс (Inline-кнопки) для добавления, редактирования и мониторинга нод прямо в чате.
+Telegram node management module.
+Provides interface (Inline keyboards) for adding, editing, and monitoring nodes directly in chat.
 """
 import asyncio
 import html
@@ -72,8 +72,8 @@ def _fmt_billing_amount(amount, currency: str, lang: str) -> str:
 
 async def _broadcast_node_status_to_clients(event_type: str, changed_node_token: str, changed_node_name: str, current_now: float) -> None:
     """
-    Отправляет системный алерт через Gateway-бота всем подписчикам
-    с общим списком статусов серверов.
+    Broadcasts system alerts through Gateway bot to all subscribers
+    with an updated summary of server statuses.
     """
     try:
         from modules.client_alerts import (

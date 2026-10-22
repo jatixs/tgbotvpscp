@@ -200,7 +200,7 @@ NODE_OP_UPDATE=""
 
 op_header() { echo -e "\n${C_BOLD}=== $1 ===${C_RESET}"; }
 
-# "НОДЫ" / "АГЕНТА" — genitive label of what is currently installed.
+# "NODE" / "AGENT" — label of what is currently installed.
 target_label() {
     if [ -f "${ENV_FILE}" ] && grep -q "MODE=node" "${ENV_FILE}"; then echo "НОДЫ"; else echo "АГЕНТА"; fi
 }
@@ -211,11 +211,67 @@ mode_label() {
     echo "${runtime} - ${m}"
 }
 
-# "Установка АГЕНТА (Systemd - Secure)" on a clean host, "Переустановка …" over an existing install.
+# "Install AGENT (Systemd - Secure)" on a clean host, "Reinstall …" over an existing install.
 agent_install_header() {
     local verb="Установка"
     if [ -d "${BOT_INSTALL_PATH}" ] && [ -f "${ENV_FILE}" ]; then verb="Переустановка"; fi
     op_header "${verb} АГЕНТА ($(mode_label "$1" "$2"))"
+}
+
+ensure_integrity_tools_available() {
+    # 1. If BOT_INSTALL_PATH already has updated manage.py with integrity, we're good
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        return 0
+    fi
+    # 2. If BOT_INSTALL_PATH has core/integrity.py that can be run directly, we're good
+    if [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        return 0
+    fi
+
+    # 3. If running deploy.sh from a directory that has core/integrity.py and manage.py
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+    if [ -f "${script_dir}/core/integrity.py" ] && [ -f "${script_dir}/manage.py" ] && grep -q "integrity" "${script_dir}/manage.py" 2>/dev/null; then
+        sudo mkdir -p "${BOT_INSTALL_PATH}/core" 2>/dev/null || true
+        sudo cp -f "${script_dir}/core/integrity.py" "${BOT_INSTALL_PATH}/core/integrity.py" 2>/dev/null || true
+        sudo cp -f "${script_dir}/manage.py" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null || true
+        if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+            sudo chown ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/core/integrity.py" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null || true
+        fi
+        return 0
+    fi
+
+    # 4. If BOT_INSTALL_PATH has git, fetch and checkout manage.py and core/integrity.py from origin/$GIT_BRANCH
+    if [ -d "${BOT_INSTALL_PATH}/.git" ]; then
+        cd "${BOT_INSTALL_PATH}" || return 1
+        local exec_cmd=""
+        if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
+        $exec_cmd git fetch origin "$GIT_BRANCH" >/dev/null 2>&1 || true
+        $exec_cmd git checkout "origin/${GIT_BRANCH}" -- manage.py core/integrity.py >/dev/null 2>&1 || true
+        cd - >/dev/null 2>&1 || true
+    fi
+
+    # 5. Check again
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        return 0
+    fi
+    if [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        return 0
+    fi
+
+    return 1
+}
+
+run_integrity_cmd() {
+    local py_bin="python3"
+    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity "$@"
+    elif [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        $py_bin "${BOT_INSTALL_PATH}/core/integrity.py" "$@" --repo-root "${BOT_INSTALL_PATH}"
+    else
+        return 1
+    fi
 }
 
 check_integrity() {
@@ -231,20 +287,39 @@ check_integrity() {
         INTEGRITY_STATUS="${C_GREEN}🛡️ Режим НОДЫ (Git не требуется)${C_RESET}"
     elif [ -d "${BOT_INSTALL_PATH}/.git" ]; then
         cd "${BOT_INSTALL_PATH}" || return
-        git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
-        local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
-        local EXISTING_FILES=""
-        for f in $FILES_TO_CHECK; do
-            if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
-        done
-        if [ -z "$EXISTING_FILES" ]; then
-            INTEGRITY_STATUS="${C_YELLOW}⚠️ Файлы не найдены${C_RESET}"
-        else
-            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
-            if [ -n "$DIFF" ]; then
-                INTEGRITY_STATUS="${C_RED}⚠️ ЦЕЛОСТНОСТЬ НАРУШЕНА (Файлы изменены локально)${C_RESET}"
+        local json_report=""
+        if ensure_integrity_tools_available; then
+            json_report=$(run_integrity_cmd check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        fi
+
+        if [ -n "$json_report" ]; then
+            local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
+            local mod_count=$(echo "$json_report" | grep -oP '"rel_path"' | wc -l)
+            if [ "$status" == "OK" ]; then
+                INTEGRITY_STATUS="${C_GREEN}🛡️ SHA-256 подтвержден (${GIT_BRANCH})${C_RESET}"
+            elif [ "$status" == "CUSTOM_ACTIVE" ]; then
+                INTEGRITY_STATUS="${C_GREEN}🛡️ SHA-256 подтвержден + 🧩 Кастом активен${C_RESET}"
+            elif [ "$status" == "MODIFIED" ]; then
+                INTEGRITY_STATUS="${C_YELLOW}⚠️ Локальные изменения (${mod_count} файлов)${C_RESET}"
             else
                 INTEGRITY_STATUS="${C_GREEN}🛡️ Код подтвержден${C_RESET}"
+            fi
+        else
+            git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+            local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
+            local EXISTING_FILES=""
+            for f in $FILES_TO_CHECK; do
+                if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
+            done
+            if [ -z "$EXISTING_FILES" ]; then
+                INTEGRITY_STATUS="${C_YELLOW}⚠️ Файлы не найдены${C_RESET}"
+            else
+                local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
+                if [ -n "$DIFF" ]; then
+                    INTEGRITY_STATUS="${C_YELLOW}⚠️ Файлы изменены локально${C_RESET}"
+                else
+                    INTEGRITY_STATUS="${C_GREEN}🛡️ Код подтвержден${C_RESET}"
+                fi
             fi
         fi
         cd - >/dev/null
@@ -272,7 +347,7 @@ nginx_check() {
     output=$(sudo nginx -t 2>&1) || { printf '%s\n' "${output}" >&2; return 1; }
 }
 
-# Проверяет хост, срок действия и соответствие ключа сертификату.
+# Validates host, expiration, and key-certificate matching.
 tls_pair_valid() {
     local cert="$1" key="$2" seconds="$3" check_flag="-checkhost" cert_hash key_hash
     command -v openssl >/dev/null 2>&1 || return 1
@@ -285,7 +360,7 @@ tls_pair_valid() {
     [ -n "${cert_hash}" ] && [ "${cert_hash}" == "${key_hash}" ]
 }
 
-# Ищет готовую пару в конфигурации Nginx (включая свои и Cloudflare-сертификаты) и в Certbot.
+# Searches for a ready pair in Nginx configuration (including custom and Cloudflare certificates) and in Certbot.
 tls_find_certificate() {
     local min_seconds="$1" pair cert key
     local candidates=()
@@ -586,7 +661,7 @@ EOF
 
     local certbot_cmd="${CERTBOT_CMD:-$(command -v certbot 2>/dev/null || true)}"
     if [ "${TLS_KIND}" == "ip" ] && [ -x /snap/bin/certbot ]; then certbot_cmd="/snap/bin/certbot"; fi
-    # Внешние сертификаты (не из /etc/letsencrypt) продлеваются их владельцем.
+    # External certificates (not from /etc/letsencrypt) are renewed by their owner.
     if [[ "${TLS_CERT_FILE}" == /etc/letsencrypt/live/* ]] && [ -n "${certbot_cmd}" ]; then
         sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
         sudo tee /etc/letsencrypt/renewal-hooks/deploy/50-tgbot-nginx-reload >/dev/null <<'EOF'
@@ -750,7 +825,7 @@ download_vendor_assets() {
             echo "  ⚠ CDN недоступен: ${url}" >> /tmp/${SERVICE_NAME}_install.log
         done
 
-        # 3. Если обновление с CDN не удалось, но у нас есть копия из репозитория — восстанавливаем её
+        # 3. If update from CDN fails, but we have a copy from the repository — restore it
         if [ "$updated" = false ]; then
             if [ -n "${backup_tmp}" ] && [ -s "${backup_tmp}" ]; then
                 sudo cp -f "${backup_tmp}" "${dest}" 2>/dev/null || true
@@ -1787,6 +1862,40 @@ update_bot() {
 
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
+
+    if ensure_integrity_tools_available; then
+        local json_report=$(run_integrity_cmd check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
+        if [ "$status" == "MODIFIED" ]; then
+            echo ""
+            msg_warning "Внимание! Обнаружены локальные изменения системных файлов."
+            run_integrity_cmd check --branch "$GIT_BRANCH"
+            echo ""
+            echo "  1) Создать автоматический бэкап в .backups/ и продолжить (Рекомендуется)"
+            echo "  2) Показать Git diff"
+            echo "  3) Отменить обновление"
+            read -p "$(echo -e "${C_BOLD}Ваш выбор [1/2/3]: ${C_RESET}")" mod_choice
+            case $mod_choice in
+                2)
+                    git diff "origin/${GIT_BRANCH}" | less -R
+                    read -p "Продолжить обновление с созданием бэкапа? (y/n): " c_after_diff
+                    if [[ ! "$c_after_diff" =~ ^[Yy]$ ]]; then
+                        msg_info "Обновление отменено."
+                        return 0
+                    fi
+                    run_integrity_cmd backup --branch "$GIT_BRANCH"
+                    ;;
+                3)
+                    msg_info "Обновление отменено пользователем."
+                    return 0
+                    ;;
+                *)
+                    run_integrity_cmd backup --branch "$GIT_BRANCH"
+                    ;;
+            esac
+        fi
+    fi
+
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
     local new_ver=""
@@ -2062,7 +2171,7 @@ manage_alert_module() {
     fi
 
     if [ -n "$current_token" ]; then
-        # Токен уже задан — предлагаем удалить модуль
+        # Token already set — prompt to remove module
         echo -e "  ${C_GREEN}✅ Alert Bot активен (токен задан)${C_RESET}"
         echo ""
         echo -e "  ${C_YELLOW}Вы хотите удалить (деактивировать) Alert-модуль?${C_RESET}"
@@ -2070,10 +2179,10 @@ manage_alert_module() {
         echo ""
         read -p "$(echo -e "${C_BOLD}Подтвердить удаление? (y/n): ${C_RESET}")" confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
-            # Удаляем строку ALERT_BOT_TOKEN из .env
+            # Remove ALERT_BOT_TOKEN line from .env
             sed -i '/^ALERT_BOT_TOKEN=/d' "${ENV_FILE}"
             msg_success "ALERT_BOT_TOKEN удалён из .env"
-            # Перезапускаем сервис для применения изменений
+            # Restart service to apply changes
             if systemctl is-active --quiet "${SERVICE_NAME}"; then
                 msg_info "Перезапуск сервиса ${SERVICE_NAME}..."
                 sudo systemctl restart "${SERVICE_NAME}"
@@ -2085,7 +2194,7 @@ manage_alert_module() {
             msg_info "Отменено."
         fi
     else
-        # Токен не задан — предлагаем установить
+        # Token not set — prompt to configure
         echo -e "  ${C_YELLOW}⚠️  Alert Bot не активирован (ALERT_BOT_TOKEN не задан)${C_RESET}"
         echo ""
         echo "  Для активации нужен токен отдельного Telegram-бота."
@@ -2096,15 +2205,15 @@ manage_alert_module() {
             msg_info "Отменено."
             return
         fi
-        # Базовая проверка формата токена (цифры:строка)
+        # Basic token format check (digits:string)
         if ! echo "$new_token" | grep -qE '^[0-9]+:[A-Za-z0-9_-]{35,}$'; then
             msg_error "Некорректный формат токена. Ожидается: 123456789:ABCdef..."
             return
         fi
-        # Сохраняем токен в .env
+        # Save token to .env
         echo "ALERT_BOT_TOKEN=\"${new_token}\"" >> "${ENV_FILE}"
         msg_success "ALERT_BOT_TOKEN сохранён в .env"
-        # Перезапускаем сервис
+        # Restart service
         if systemctl is-active --quiet "${SERVICE_NAME}"; then
             msg_info "Перезапуск сервиса ${SERVICE_NAME}..."
             sudo systemctl restart "${SERVICE_NAME}"
@@ -2113,6 +2222,93 @@ manage_alert_module() {
             msg_warning "Сервис ${SERVICE_NAME} не запущен. Запустите его вручную."
         fi
     fi
+}
+
+manage_custom_modules() {
+    if ! ensure_integrity_tools_available; then
+        echo ""
+        msg_warning "Модуль integrity ещё не установлен в ${BOT_INSTALL_PATH}."
+        echo "  Для работы аудита SHA-256 и кастомных модулей необходимо сначала обновить бота."
+        echo "  Выберите пункт 1 (Обновить $(target_label)) в главном меню."
+        echo ""
+        read -p "Нажмите Enter для возврата..."
+        return
+    fi
+
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║     Кастомные модули и аудит целостности SHA-256      ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════════════════════════╝${C_RESET}"
+        echo "  Директория custom/ изолирована от Git и защищена от перезаписи при обновлениях."
+        echo "--------------------------------------------------------"
+        echo "  1) Полный аудит целостности SHA-256 (сверка с origin/${GIT_BRANCH})"
+        echo "  2) Список активных кастомных модулей и WebUI страниц"
+        echo "  3) Создать шаблон кастомного модуля бота (custom/modules/)"
+        echo "  4) Создать шаблон кастомной WebUI страницы (маршрут + шаблон)"
+        echo "  5) Создать бэкап изменённых системных файлов (.backups/)"
+        echo "  6) Показать Git diff с веткой origin/${GIT_BRANCH}"
+        echo "  0) Назад в главное меню"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" c_choice
+        case $c_choice in
+            1)
+                cd "${BOT_INSTALL_PATH}" || return
+                run_integrity_cmd check --branch "$GIT_BRANCH" -v
+                read -p "Нажмите Enter для продолжения..."
+                ;;
+            2)
+                cd "${BOT_INSTALL_PATH}" || return
+                run_integrity_cmd list-custom
+                read -p "Нажмите Enter для продолжения..."
+                ;;
+            3)
+                cd "${BOT_INSTALL_PATH}" || return
+                read -p "$(echo -e "${C_BOLD}Введите имя модуля (латиницей, например my_vpn): ${C_RESET}")" mod_name
+                if [ -n "$mod_name" ]; then
+                    run_integrity_cmd new-module "$mod_name"
+                    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+                        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
+                    fi
+                    read -p "Перезапустить бота для применения? (y/n): " r_choice
+                    if [[ "$r_choice" =~ ^[Yy]$ ]]; then
+                        sudo systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+                        msg_success "Сервис перезапущен!"
+                    fi
+                fi
+                read -p "Нажмите Enter..."
+                ;;
+            4)
+                cd "${BOT_INSTALL_PATH}" || return
+                read -p "$(echo -e "${C_BOLD}Введите имя страницы (например custom_stats): ${C_RESET}")" page_name
+                if [ -n "$page_name" ]; then
+                    run_integrity_cmd new-page "$page_name"
+                    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+                        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
+                    fi
+                    read -p "Перезапустить бота для применения? (y/n): " r_choice
+                    if [[ "$r_choice" =~ ^[Yy]$ ]]; then
+                        sudo systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+                        msg_success "Сервис перезапущен!"
+                    fi
+                fi
+                read -p "Нажмите Enter..."
+                ;;
+            5)
+                cd "${BOT_INSTALL_PATH}" || return
+                run_integrity_cmd backup --branch "$GIT_BRANCH"
+                read -p "Нажмите Enter для продолжения..."
+                ;;
+            6)
+                cd "${BOT_INSTALL_PATH}" || return
+                git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+                git diff "origin/${GIT_BRANCH}" | less -R
+                ;;
+            0)
+                break
+                ;;
+        esac
+    done
 }
 
 main_menu() {
@@ -2139,20 +2335,14 @@ main_menu() {
         echo "  6) Переустановить (Docker - Root)"
         if [ "$IS_NODE" == "yes" ]; then
             echo -e "${C_GREEN}  7) Установить НОДУ (Клиент)${C_RESET}"
-        fi
-        
-        if [ "$IS_NODE" == "yes" ]; then
             local monitoring_status=$(check_agent_monitoring_status)
             echo -e "${C_YELLOW}  8) Мониторинг агента (${monitoring_status})${C_RESET}"
-        fi
-
-        # Пункт Alert-модуля — только для не-нодового режима
-        if [ "$IS_NODE" != "yes" ]; then
+        else
             local alert_status="не активен"
             if [ -f "${ENV_FILE}" ] && grep -q '^ALERT_BOT_TOKEN=' "${ENV_FILE}"; then
                 alert_status="${C_GREEN}активен${C_RESET}"
             fi
-            echo -e "  9) Управление Alert-модулем (${alert_status})"
+            echo -e "  7) Управление Alert-модулем (${alert_status})"
         fi
 
         echo "  0) Выход"
@@ -2165,9 +2355,23 @@ main_menu() {
             4) install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
             5) install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
             6) install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-            7) if [ "$IS_NODE" == "yes" ]; then install_node_logic; read -p "Нажмите Enter..."; else msg_error "Пункт доступен только в режиме НОДЫ."; sleep 2; fi ;;
-            8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Нажмите Enter..."; fi ;;
-            9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Нажмите Enter..."; fi ;;
+            7)
+                if [ "$IS_NODE" == "yes" ]; then
+                    install_node_logic; read -p "Нажмите Enter..."
+                else
+                    manage_alert_module; read -p "Нажмите Enter..."
+                fi
+                ;;
+            8)
+                if [ "$IS_NODE" == "yes" ]; then
+                    toggle_agent_monitoring; read -p "Нажмите Enter..."
+                fi
+                ;;
+            9)
+                if [ "$IS_NODE" != "yes" ]; then
+                    manage_alert_module; read -p "Нажмите Enter..."
+                fi
+                ;;
             0) break ;;
         esac
     done
@@ -2188,7 +2392,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
     echo "  2) АГЕНТ (Systemd - Root)    [Полный доступ]"
     echo "  3) АГЕНТ (Docker - Secure)   [Изоляция]"
     echo "  4) АГЕНТ (Docker - Root)     [Docker + Host]"
-    echo -e "${C_GREEN}  7) НОДА (Клиент)${C_RESET}"
+    echo -e "${C_GREEN}  5) НОДА (Клиент)${C_RESET}"
     echo "  0) Выход"
     echo "--------------------------------------------------------"
     read -p "$(echo -e "${C_BOLD}Ваш выбор: ${C_RESET}")" ch
@@ -2197,7 +2401,7 @@ if [ "$INSTALL_TYPE" == "НЕТ" ]; then
         2) install_systemd_logic "root"; read -p "Нажмите Enter..." ;;
         3) install_docker_logic "secure"; read -p "Нажмите Enter..." ;;
         4) install_docker_logic "root"; read -p "Нажмите Enter..." ;;
-        7) install_node_logic; read -p "Нажмите Enter..." ;;
+        5|7) install_node_logic; read -p "Нажмите Enter..." ;;
         0) exit 0 ;;
         *) msg_error "Неверный выбор."; sleep 2 ;;
     esac

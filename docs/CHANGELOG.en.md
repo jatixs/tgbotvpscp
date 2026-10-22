@@ -4,11 +4,34 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/>
-    <img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/>
-    <img src="https://img.shields.io/badge/date-Oct%2014%202026-green?style=flat-square" alt="Date Oct 14 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.26.2-blue?style=flat-square" alt="Version 1.26.2"/>
+    <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
+    <img src="https://img.shields.io/badge/date-Oct%2022%202026-green?style=flat-square" alt="Date Oct 22 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.26.2] - 2026-10-22
+
+### 🚀 New Features
+* **Web Push Notifications for Browsers and PWA.** Implemented a comprehensive background Web Push notification system (VAPID / RFC 8291 aes128gcm + Service Worker) for the web panel and PWA on smartphones (Android, iOS 16.4+ PWA) and desktop. Notifications arrive even when the browser or app is closed, seamlessly sync with user alert preferences (CPU/RAM/disk thresholds, SSH logins, Fail2ban bans, node status), and include an instant toggle, test notification button, and revoke subscriptions across all devices in Settings.
+* **One-Click IP Copying.** Quickly copy server IP addresses across the dashboard, server cards, nodes monitor, settings, and VNC dialogs with smooth animated feedback (icon smoothly switches to a green checkmark).
+* **Touch-Friendly Mobile Experience.** On smartphones and tablets, simply tap the dotted IP address text to copy it instantly to your clipboard.
+
+### ✨ Improved
+* **Cleaner Resource Charts.** The timeline on agent graphs is now evenly spaced without awkward trailing whitespace, and 45°-angled time labels are easy to read on both mobile and desktop screens.
+* **Clear Password Visibility Toggle.** Replaced the cluttered strikethrough eye icon with an intuitive closed-eyelids symbol for clear visual feedback.
+* **Snappier Web Terminal Loading.** Terminal styles and scripts are now split into dedicated static files with automatic cache busting on updates.
+* **Compact Screen Layout.** The chart range dropdown opens neatly centered over its button, and network badges adapt fluidly to narrow displays.
+
+### 🐛 Fixed
+* **Web Terminal & VNC Connectivity.** Resolved an issue that prevented the terminal console and quick VNC dialog from launching properly.
+* **Encrypted SSH Key Login.** Passphrase dialogs now open reliably when connecting with protected private keys, including full support for modern OpenSSH keys.
+* **Mobile Text Wrapping.** Fixed layout issues on narrow screens (down to 320px) where long IP addresses could get clipped or wrap awkwardly.
+
+### 🔒 Security
+* **Encrypted Credential Storage.** All saved terminal passwords, private keys, and passphrases are now securely encrypted at rest on the server using Fernet (AES-128).
+* **Zero Browser Leakage.** The server never sends raw private keys or passwords back to the client (displaying safe placeholders instead), and unchecking "Remember" immediately purges saved credentials from the server.
+
 
 ## [1.26.1] - 2026-10-14
 

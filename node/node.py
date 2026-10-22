@@ -1,6 +1,6 @@
 """
-Агент сбора метрик (Node Agent).
-Скрипт, работающий на удаленном сервере (ноде). Собирает системные метрики и передает их мастер-боту по HTTP.
+Metrics Collection Agent (Node Agent).
+Script running on remote servers (nodes). Collects system metrics and reports them to the master bot via HTTP.
 """
 import collections
 import hashlib

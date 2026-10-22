@@ -1,6 +1,6 @@
 """
-REST API контроллеры для управления нодами.
-Обрабатывают запросы веб-интерфейса, связанные с метриками, логами и конфигурацией удаленных серверов.
+REST API controllers for node management.
+Handles WebUI requests related to metrics, logs, and remote server configuration.
 """
 from __future__ import annotations
 

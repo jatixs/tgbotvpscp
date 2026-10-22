@@ -1,6 +1,6 @@
 """
-Система фоновых задач (Background Tasks).
-Обеспечивает периодическое выполнение задач (например, биллинг-уведомления, мониторинг) в асинхронном цикле.
+Background Tasks system.
+Provides periodic background execution (e.g., billing notifications, system monitoring) inside the asyncio event loop.
 """
 from __future__ import annotations
 

@@ -1,19 +1,19 @@
 """
 modules/client_alerts.py — Gateway Bot / Alert System (optional module).
 
-Архитектура:
-  • alert_bot  — второй Telegram-бот (шлюз для клиентов).
-    Клиенты пишут ему → сообщения пересылаются администратору через main bot.
-  • main bot   — получает тикеты; администратор управляет через inline-меню:
-      ↳ кнопка «📣 Написать алерт» (cat_tools) → открывает панель управления
-      ↳ «📣 Рассылка» → FSM рассылки
-      ↳ «👥 Подписчики» → список подписчиков
-      ↳ «💬 Ответить» под тикетом → FSM ответа
+Architecture:
+  • alert_bot  — Secondary Telegram bot (gateway for clients).
+    Clients send messages to it → messages are forwarded to the administrator via main bot.
+  • main bot   — Receives incoming tickets; administrator manages via inline menu:
+      ↳ "📣 Write alert" button (cat_tools) → opens control panel
+      ↳ "📣 Broadcast" → FSM broadcast flow
+      ↳ "👥 Subscribers" → subscriber list
+      ↳ "💬 Reply" under ticket → FSM reply flow
 
-Активация: задать переменную окружения ALERT_BOT_TOKEN=<токен>.
-Если токен не задан — модуль загружается, но alert_bot не стартует.
+Activation: Set ALERT_BOT_TOKEN=<token> environment variable.
+If the token is not set, the module loads, but alert_bot does not start.
 
-Subscribers Storage: config/alert_subscribers.json (простой JSON-файл).
+Subscribers Storage: config/alert_subscribers.json (simple JSON file).
 """
 
 import asyncio
@@ -127,9 +127,9 @@ def is_node_muted_for_user(user_id: int, node_token: str) -> bool:
 
 def _extract_message_payload(message: types.Message) -> dict:
     """
-    Извлекает из сообщения сериализуемый payload для хранения в FSM state.
-    Использует file_id — они глобальны в Telegram и работают между ботами.
-    Сохраняет raw entities для поддержки расширенного форматирования.
+    Extracts serializable payload from message for storage in FSM state.
+    Uses file_id — globally unique across Telegram and works between bots.
+    Stores raw entities for rich text formatting support.
     """
     def dump_entity(e):
         return e.model_dump(exclude_none=True) if hasattr(e, "model_dump") else e.dict(exclude_none=True)
@@ -182,8 +182,8 @@ def _extract_message_payload(message: types.Message) -> dict:
 
 async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_message_id: int = None) -> None:
     """
-    Отправляет payload через alert_bot в указанный chat_id.
-    Если указан reply_to_message_id — отправляет ответом на конкретное сообщение.
+    Sends payload via alert_bot to specified chat_id.
+    If reply_to_message_id is provided — sends as reply to specific message.
     """
     if alert_bot is None:
         raise RuntimeError("Alert Bot не инициализирован")
@@ -224,8 +224,8 @@ async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_mess
 
 async def broadcast_system_alert(text: str) -> None:
     """
-    Публичная функция для отправки системных алертов (например, падение ноды)
-    всем подписчикам Gateway-бота.
+    Public function to broadcast system alerts (e.g., node downtime)
+    to all Gateway bot subscribers.
     """
     if alert_bot is None:
         return
@@ -260,8 +260,8 @@ else:
 
 def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
     """
-    Панель управления Alert Module для администратора.
-    Открывается при нажатии кнопки «📣 Написать алерт» в главном боте.
+    Alert Module management panel for administrators.
+    Opens when clicking "📣 Write alert" button in the main bot.
     """
     subscribers = _load_subscribers()
     count_label = f"({len(subscribers)} чел.)" if subscribers else "(пусто)"
@@ -374,7 +374,7 @@ if alert_dp is not None:
     @alert_dp.message(Command("start"))
     async def alert_start_handler(message: types.Message) -> None:
         """
-        Клиент нажимает /start в Alert Bot → подписывается на рассылки.
+        Client clicks /start in Alert Bot → subscribes to broadcast alerts.
         """
         user_id = message.from_user.id
         lang = get_user_lang(user_id)
@@ -429,8 +429,8 @@ if alert_dp is not None:
     @alert_dp.message()
     async def alert_message_handler(message: types.Message) -> None:
         """
-        Любое сообщение клиента в Alert Bot → пересылается администратору через main bot.
-        Администратор видит сообщение с inline-кнопкой 'Ответить'.
+        Any client message in Alert Bot → forwarded to administrator via main bot.
+        Administrator sees message with inline 'Reply' button.
         """
         if alert_bot is None:
             return
@@ -537,8 +537,8 @@ if alert_dp is not None:
 
 async def _alert_panel_open(message: types.Message, state: FSMContext) -> None:
     """
-    Нажата кнопка «📣 Написать алерт» в главном боте → показываем панель управления.
-    Доступно только администратору; обычным пользователям — заглушка.
+    Button '📣 Write alert' clicked in main bot → show control panel.
+    Available only to admin; regular users receive informational message.
     """
     user_id = message.from_user.id
 
@@ -565,7 +565,7 @@ async def _alert_panel_open(message: types.Message, state: FSMContext) -> None:
 
 async def _cq_panel_broadcast(callback: types.CallbackQuery, state: FSMContext) -> None:
     """
-    Кнопка «📣 Рассылка» в панели → переходим в FSM ожидания сообщения для рассылки.
+    Button '📣 Broadcast' in panel → switch to FSM waiting for broadcast message.
     """
     if callback.from_user.id != config.ADMIN_USER_ID:
         await callback.answer("⛔ Нет доступа", show_alert=True)
@@ -593,7 +593,7 @@ async def _cq_panel_broadcast(callback: types.CallbackQuery, state: FSMContext) 
 
 async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
     """
-    Кнопка «👥 Подписчики» → показываем список подписчиков прямо в inline-сообщении.
+    Button '👥 Subscribers' → display subscribers list directly in inline message.
     """
     if callback.from_user.id != config.ADMIN_USER_ID:
         await callback.answer("⛔ Нет доступа", show_alert=True)
@@ -674,8 +674,7 @@ async def _broadcast_message_received(
     message: types.Message, state: FSMContext
 ) -> None:
     """
-    Получили сообщение для рассылки → сохраняем payload в FSM state,
-    запрашиваем подтверждение.
+    Received message for broadcast → save payload in FSM state and request confirmation.
     """
     payload = _extract_message_payload(message)
     subscribers = _load_subscribers()
@@ -770,7 +769,7 @@ async def _alert_reply_callback(
     callback: types.CallbackQuery, state: FSMContext
 ) -> None:
     """
-    Кнопка «💬 Ответить» под входящим тикетом → FSM ReplyStates.
+    Button '💬 Reply' under incoming ticket → switch to FSM ReplyStates.
     """
     if callback.from_user.id != config.ADMIN_USER_ID:
         await callback.answer("⛔ Нет доступа", show_alert=True)
@@ -801,8 +800,8 @@ async def _alert_reply_callback(
 
 async def _reply_text_received(message: types.Message, state: FSMContext) -> None:
     """
-    Получили ответ от администратора → пересылаем клиенту через alert_bot
-    используя file_id / текст напрямую (без copy_message).
+    Received administrator reply → forward to client via alert_bot
+    using file_id / text directly.
     """
     data = await state.get_data()
     client_user_id = data.get("reply_to_user_id")
@@ -851,8 +850,8 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
 
 async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> None:
     """
-    Кнопка «❌ Отмена» во время любого FSM-ввода (рассылка, ответ).
-    Сбрасывает состояние и возвращает панель управления.
+    Button '❌ Cancel' during any FSM input (broadcast, reply).
+    Resets state and returns to control panel.
     """
     await state.clear()
     subscribers = _load_subscribers()
@@ -873,8 +872,8 @@ async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> No
 
 def register_handlers(dp: Dispatcher) -> None:
     """
-    Регистрируем обработчики в ГЛАВНОМ боте.
-    Вызывается оркестратором при загрузке модуля (tier=ALWAYS_ON).
+    Registers handlers in the MAIN bot.
+    Called by orchestrator when module is loaded (tier=ALWAYS_ON).
     """
     if not ALERT_BOT_TOKEN:
         logging.info(
@@ -915,14 +914,14 @@ def register_handlers(dp: Dispatcher) -> None:
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     """
-    Запускает поллинг Alert Bot как фоновую asyncio-задачу.
-    Вызывается оркестратором для ALWAYS_ON модулей.
+    Starts Alert Bot polling as a background asyncio task.
+    Called by orchestrator for ALWAYS_ON modules.
 
     Args:
-        bot: Экземпляр ГЛАВНОГО бота (сигнатура требуется оркестратором).
+        bot: MAIN bot instance (signature required by orchestrator).
 
     Returns:
-        Список asyncio.Task. Пустой если ALERT_BOT_TOKEN не задан.
+        List of asyncio.Task. Empty if ALERT_BOT_TOKEN is not set.
     """
     if alert_bot is None or alert_dp is None:
         logging.info("[client_alerts] Alert Bot not started (token not set).")
