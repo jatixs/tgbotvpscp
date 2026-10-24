@@ -16,6 +16,6 @@ PyYAML==6.0.3
 qrcode==8.2
 requests==2.34.2
 sentry-sdk==2.62.0
-setuptools>=83.0.0
+setuptools>=84.1.0
 tortoise-orm==0.25.4
 urllib3==2.8.0
