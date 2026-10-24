@@ -1073,7 +1073,6 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_notifications_cleared": _("web_notifications_cleared", lang),
         "web_node_delete_confirm": _("web_node_delete_confirm", lang),
         "modal_title_info": _("modal_title_info", lang),
-        "modal_title_confirm": _("modal_title_confirm", lang),
         "notif_node_settings_title": _("web_notif_node_settings_title", lang),
         "web_billing_modal_title": _("web_billing_modal_title", lang),
         "web_billing_amount": _("web_billing_amount", lang),

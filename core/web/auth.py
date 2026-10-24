@@ -358,37 +358,37 @@ async def verify_telegram_id_token(
             pub_key = ed25519.Ed25519PublicKey.from_public_bytes(x_bytes)
             pub_key.verify(signature_bytes, signing_input)
         else:
-            logging.warning("Unsupported Telegram auth algorithm: %s (%s)", alg, key_data.get("kty"))
+            logging.warning("Unsupported Telegram algorithm: %s (%s)", alg, key_data.get("kty"))
             return None
 
         payload_bytes = _b64url_decode(parts[1])
         claims = json.loads(payload_bytes.decode("utf-8"))
 
         if claims.get("iss") != "https://oauth.telegram.org":
-            logging.warning("Invalid Telegram auth issuer: %s", claims.get("iss"))
+            logging.warning("Invalid Telegram issuer: %s", claims.get("iss"))
             return None
 
         client_id_to_check = expected_client_id or current_config.get_telegram_client_id()
         if client_id_to_check:
             claim_aud = str(claims.get("aud", ""))
             if claim_aud != str(client_id_to_check):
-                logging.warning("Telegram auth audience mismatch: %s != %s", claim_aud, client_id_to_check)
+                logging.warning("Telegram audience mismatch: %s != %s", claim_aud, client_id_to_check)
                 return None
 
         now = time.time()
         exp = claims.get("exp", 0)
         if now > exp + 60:
-            logging.warning("Telegram auth claims expired (exp: %s, now: %s)", exp, now)
+            logging.warning("Telegram claims expired (exp: %s, now: %s)", exp, now)
             return None
 
         iat = claims.get("iat", 0)
         if iat > now + 60:
-            logging.warning("Telegram auth claims issued in the future (iat: %s, now: %s)", iat, now)
+            logging.warning("Telegram claims issued in the future (iat: %s, now: %s)", iat, now)
             return None
 
         return claims
     except Exception as exc:
-        logging.warning("Failed to verify Telegram auth credentials: %s", exc)
+        logging.warning("Telegram signature verification failed: %s", exc)
         return None
 
 
