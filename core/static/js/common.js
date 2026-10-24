@@ -792,18 +792,47 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function initHapticsFeedback() {
+    let pressedControl = null;
+    const rangeFeedback = new WeakMap();
+    const releaseControl = () => {
+        if (pressedControl) pressedControl.classList.remove('is-control-pressed');
+        pressedControl = null;
+    };
+    document.addEventListener('pointerdown', (e) => {
+        if (!(e.target instanceof Element) || !e.isPrimary || e.button !== 0) return;
+        releaseControl();
+        const label = e.target.closest('label');
+        const control = e.target.matches('input') ? e.target : label?.control;
+        if (!control || control.disabled || !control.matches('input[type="range"], input[type="checkbox"].peer')) return;
+        pressedControl = control;
+        control.classList.add('is-control-pressed');
+    }, { capture: true, passive: true });
+    document.addEventListener('pointerup', releaseControl, { capture: true, passive: true });
+    document.addEventListener('pointercancel', releaseControl, { capture: true, passive: true });
+    window.addEventListener('blur', releaseControl);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) releaseControl();
+    });
     document.addEventListener('input', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
-            playHaptic(5);
+            const control = e.target;
+            const value = control.valueAsNumber;
+            const previous = rangeFeedback.get(control);
+            if (previous?.value === value) return;
+            const now = performance.now();
+            const atEdge = value === Number(control.min || 0) || value === Number(control.max || 100);
+            if (!atEdge && previous && now - previous.time < 40) return;
+            rangeFeedback.set(control, { value, time: now });
+            playHaptic(atEdge ? 'rangeEdge' : 'range');
         }
     });
 
     document.addEventListener('change', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
             if (e.target.checked) {
-                playHaptic([10, 30, 10]); 
+                playHaptic('toggleOn');
             } else {
-                playHaptic(10); 
+                playHaptic('toggleOff');
             }
         }
     });
@@ -815,12 +844,28 @@ function initHapticsFeedback() {
         if (!control || control.closest('[data-haptics-toggle]') ||
             control.matches(':disabled, [aria-disabled="true"]') ||
             control.matches('input, label')) return;
-        playHaptic(10);
+        playHaptic('press');
     }, { capture: true, passive: true });
 }
 
 function playHaptic(pattern = [10, 30, 10]) {
     if (typeof navigator.vibrate !== 'function' || localStorage.getItem('haptics_enabled') === 'false') return;
+    const profiles = {
+        press: 10,
+        toggleOn: [10, 30, 10],
+        toggleOff: 10,
+        range: 5,
+        rangeEdge: 14,
+        modalOpen: [18, 35, 8],
+        modalClose: 8
+    };
+    if (typeof pattern === 'string') {
+        if (!Object.prototype.hasOwnProperty.call(profiles, pattern)) {
+            console.warn('Unknown haptic feedback profile:', pattern);
+            return;
+        }
+        pattern = profiles[pattern];
+    }
     try {
         if (!navigator.vibrate(pattern)) {
             console.debug('Haptic feedback was rejected by the browser.');
@@ -2203,8 +2248,7 @@ function handleModalInputClick(e) {
 function animateModalOpen(modal, isInput = false) {
     if (!modal) return;
 
-    // Taptic engine pop-in simulation for modals/hints
-    if (window.playHaptic) playHaptic([8, 40, 10]);
+    if (!openModalSet.has(modal)) playHaptic('modalOpen');
 
     if (modalCloseTimer) {
         clearTimeout(modalCloseTimer);
@@ -2322,6 +2366,7 @@ function animateModalClose(modal) {
     // Only decrement once per modal — guards against double-close calls (overlay click +
     // explicit close button both firing) desyncing the shared lock counter.
     if (openModalSet.has(modal)) {
+        playHaptic('modalClose');
         openModalSet.delete(modal);
         openModalStackCount = Math.max(0, openModalStackCount - 1);
     }

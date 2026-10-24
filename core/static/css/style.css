@@ -147,6 +147,67 @@ nav {
 	}
 }
 
+input[type="range"] {
+	color: #3b82f6;
+}
+
+input[type="range"].accent-purple-500 {
+	color: #a855f7;
+}
+
+input[type="range"].accent-green-500 {
+	color: #22c55e;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 16px;
+	height: 16px;
+	border: 0;
+	border-radius: 50%;
+	background: currentColor;
+	transition: scale 160ms ease-out;
+}
+
+input[type="range"]::-moz-range-thumb {
+	width: 16px;
+	height: 16px;
+	border: 0;
+	border-radius: 50%;
+	background: currentColor;
+	transition: scale 160ms ease-out;
+}
+
+input[type="range"].is-control-pressed::-webkit-slider-thumb {
+	scale: 1.35;
+}
+
+input[type="range"].is-control-pressed::-moz-range-thumb {
+	scale: 1.35;
+}
+
+input[type="checkbox"].peer + div::after {
+	transition: transform 160ms ease-out, scale 160ms ease-out;
+}
+
+input[type="checkbox"].peer.is-control-pressed + div::after {
+	scale: 1.15;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	input[type="range"]::-webkit-slider-thumb {
+		transition: none;
+	}
+
+	input[type="range"]::-moz-range-thumb {
+		transition: none;
+	}
+
+	input[type="checkbox"].peer + div::after {
+		transition: none;
+	}
+}
+
 /* --- Brand Easter Egg: emoji fireworks --- */
 .brand-egg-overlay {
 	position: fixed;
@@ -2190,4 +2251,3 @@ html.dark .dark\:text-yellow-300 {
 html.dark .dark\:text-yellow-400 {
     color: #facc15 !important;
 }
-
