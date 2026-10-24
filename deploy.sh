@@ -5,12 +5,22 @@ AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
 AUTO_MODE=false
 MIGRATE_ARGS=""
+CLI_LANG=""
+ORIGINAL_ARGS=("$@")
 
-for arg in "$@"; do
-    case $arg in
+for ((i=1; i<=$#; i++)); do
+    arg="${!i}"
+    case "$arg" in
         --agent=*) AUTO_AGENT_URL="${arg#*=}"; AUTO_MODE=true ;;
         --token=*) AUTO_NODE_TOKEN="${arg#*=}"; AUTO_MODE=true ;;
         --branch=*) GIT_BRANCH="${arg#*=}" ;;
+        --lang=*) CLI_LANG="${arg#*=}" ;;
+        --lang|-l)
+            next_idx=$((i+1))
+            if [ $next_idx -le $# ]; then
+                CLI_LANG="${!next_idx}"
+            fi
+            ;;
         main|develop) GIT_BRANCH="$arg" ;;
     esac
 done
@@ -50,6 +60,120 @@ GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
 
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; };
+
+# --- Language Selection and Dispatch ---
+TARGET_LANG=""
+
+# 1. Check CLI parameter --lang
+if [ -n "$CLI_LANG" ]; then
+    case "${CLI_LANG,,}" in
+        ru|russian) TARGET_LANG="ru" ;;
+        en|english) TARGET_LANG="en" ;;
+    esac
+fi
+
+# 2. Check environment variables
+if [ -z "$TARGET_LANG" ]; then
+    for env_val in "$DEFAULT_LANGUAGE" "$DEPLOY_LANG" "$TG_DEFAULT_LANGUAGE"; do
+        if [ -n "$env_val" ]; then
+            case "${env_val,,}" in
+                ru|russian) TARGET_LANG="ru"; break ;;
+                en|english) TARGET_LANG="en"; break ;;
+            esac
+        fi
+    done
+fi
+
+# 3. Check active .env file
+if [ -z "$TARGET_LANG" ] && [ -f "${ENV_FILE}" ]; then
+    val=$( (sudo grep -E '^[[:space:]]*DEFAULT_LANGUAGE=' "${ENV_FILE}" 2>/dev/null || grep -E '^[[:space:]]*DEFAULT_LANGUAGE=' "${ENV_FILE}" 2>/dev/null) | tail -n 1 | cut -d'=' -f2- | tr -d '"'\'' ' | tr -d '\r\n')
+    case "${val,,}" in
+        ru|russian) TARGET_LANG="ru" ;;
+        en|english) TARGET_LANG="en" ;;
+    esac
+fi
+
+# 4. Check backup .env file
+if [ -z "$TARGET_LANG" ] && [ -f "${ENV_BACKUP_FILE}" ]; then
+    val=$( (sudo grep -E '^[[:space:]]*DEFAULT_LANGUAGE=' "${ENV_BACKUP_FILE}" 2>/dev/null || grep -E '^[[:space:]]*DEFAULT_LANGUAGE=' "${ENV_BACKUP_FILE}" 2>/dev/null) | tail -n 1 | cut -d'=' -f2- | tr -d '"'\'' ' | tr -d '\r\n')
+    case "${val,,}" in
+        ru|russian) TARGET_LANG="ru" ;;
+        en|english) TARGET_LANG="en" ;;
+    esac
+fi
+
+# 5. Interactive prompt if not detected in ENV
+if [ -z "$TARGET_LANG" ]; then
+    if [ "$AUTO_MODE" = true ] || [ ! -t 0 ]; then
+        TARGET_LANG="ru"
+    else
+        clear 2>/dev/null || true
+        echo -e "${C_CYAN}╔═══════════════════════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║         VPS Manager Bot — Deployment Wizard           ║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_BOLD}Выберите язык установки / Select language:${C_RESET}"
+        echo "--------------------------------------------------------"
+        echo -e "  1) ${C_GREEN}Русский${C_RESET} (Russian) [По умолчанию / Default]"
+        echo -e "  2) ${C_GREEN}English${C_RESET}"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Ваш выбор / Your choice [1-2] (default: 1): ${C_RESET}")" lang_choice
+        case "$lang_choice" in
+            2|[eE][nN]|[eE][nN][gG]*) TARGET_LANG="en" ;;
+            *) TARGET_LANG="ru" ;;
+        esac
+    fi
+fi
+
+export DEFAULT_LANGUAGE="$TARGET_LANG"
+
+# If English is selected in deploy.sh, switch to deploy_en.sh
+if [ "$TARGET_LANG" = "en" ]; then
+    FORWARD_ARGS=()
+    skip_next=false
+    for arg in "${ORIGINAL_ARGS[@]}"; do
+        if [ "$skip_next" = true ]; then
+            skip_next=false
+            continue
+        fi
+        case "$arg" in
+            --lang=*) ;;
+            --lang|-l) skip_next=true ;;
+            *) FORWARD_ARGS+=("$arg") ;;
+        esac
+    done
+    FORWARD_ARGS=("--lang=en" "${FORWARD_ARGS[@]}")
+
+    local_script=""
+    if [ -n "${BASH_SOURCE[0]}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+        if [ -f "${script_dir}/deploy_en.sh" ]; then
+            local_script="${script_dir}/deploy_en.sh"
+        fi
+    fi
+    if [ -z "$local_script" ] && [ -f "./deploy_en.sh" ]; then
+        local_script="./deploy_en.sh"
+    elif [ -z "$local_script" ] && [ -f "${BOT_INSTALL_PATH}/deploy_en.sh" ]; then
+        local_script="${BOT_INSTALL_PATH}/deploy_en.sh"
+    fi
+
+    if [ -n "$local_script" ]; then
+        exec bash "$local_script" "${FORWARD_ARGS[@]}"
+    else
+        raw_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/deploy_en.sh"
+        tmp_script=$(mktemp /tmp/tgbot_deploy_XXXXXX.sh 2>/dev/null || echo "/tmp/tgbot_deploy_en.sh")
+        if command -v wget >/dev/null 2>&1; then
+            wget -qO "$tmp_script" "$raw_url"
+        elif command -v curl >/dev/null 2>&1; then
+            curl -fsSL -o "$tmp_script" "$raw_url"
+        else
+            msg_error "Neither wget nor curl found to download deploy_en.sh."
+            exit 1
+        fi
+        chmod +x "$tmp_script"
+        exec bash "$tmp_script" "${FORWARD_ARGS[@]}"
+    fi
+fi
+# --- End Language Selection ---
 
 msg_question() {
     local prompt="$1"
@@ -1415,7 +1539,7 @@ DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
 COMPOSE_PROFILES="${compose_profile}"
-DEFAULT_LANGUAGE="ru"
+DEFAULT_LANGUAGE="${TARGET_LANG:-ru}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 
@@ -1456,7 +1580,7 @@ ensure_env_variables() {
         "ENABLE_WEB_UI|true|Включить веб-интерфейс"
         "DEBUG|false|Режим отладки"
         "TG_BOT_NAME|VPS Bot|Имя бота"
-        "DEFAULT_LANGUAGE|ru|Язык по умолчанию"
+        "DEFAULT_LANGUAGE|${TARGET_LANG:-ru}|Язык по умолчанию"
     )
 
     if ! is_node_context; then
@@ -1796,6 +1920,7 @@ NODE_NAME="${initial_node_name}"
 NODE_NAME_SYNC_MODE="${initial_node_name_sync_mode:-agent}"
 NODE_UPDATE_INTERVAL=5
 INSTALLED_VERSION="${ver}"
+DEFAULT_LANGUAGE="${TARGET_LANG:-ru}"
 EOF
     
     # Check and restore/configure agent monitoring variables if settings were restored

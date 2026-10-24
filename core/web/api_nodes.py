@@ -506,7 +506,7 @@ async def handle_node_add(request: web.Request) -> web.StreamResponse:
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
         command = (
             f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) "
-            f"--agent={shlex.quote(public_base_url)} --token={shlex.quote(token)}"
+            f"--lang={lang} --agent={shlex.quote(public_base_url)} --token={shlex.quote(token)}"
         )
 
         return encrypted_json_response(
