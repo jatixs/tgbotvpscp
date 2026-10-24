@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import gzip
 import hashlib
 import hmac
 import html
@@ -10,10 +12,18 @@ import time
 from typing import Any, Final
 from urllib.parse import parse_qsl, urlsplit
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+import aiohttp
 from aiohttp import web
 from argon2 import PasswordHasher
 from argon2 import exceptions as argon2_exceptions
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import (
+    ec,
+    ed25519,
+    padding,
+    rsa,
+    utils as crypto_utils,
+)
 
 from .. import config as current_config
 from ..auth import save_users_async
@@ -53,6 +63,8 @@ AGENT_FLAG: Final[str] = "🏳️"
 BOT_USERNAME_CACHE: str | None = None
 SERVER_SESSIONS: dict[str, dict[str, Any]] = {}
 RESET_TOKENS: dict[str, dict[str, Any]] = {}
+TELEGRAM_JWKS_CACHE: dict[str, Any] = {"keys": {}, "fetched_at": 0.0}
+TELEGRAM_JWKS_URL: Final[str] = "https://oauth.telegram.org/.well-known/jwks.json"
 CSRF_TOKENS: dict[str, float] = {}
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 PASSWORD_HASHER = PasswordHasher()
@@ -243,6 +255,138 @@ def get_current_user(request: web.Request) -> dict[str, Any] | None:
         "first_name": USER_NAMES.get(str(user_id), f"ID: {user_id}"),
         "photo_url": session.get("photo_url", AGENT_FLAG),
     }
+
+
+def _b64url_decode(val: str) -> bytes:
+    """Decode base64url-encoded string with padding correction."""
+    val += "=" * ((4 - len(val) % 4) % 4)
+    return base64.urlsafe_b64decode(val.encode("ascii"))
+
+
+def _int_from_b64(val: str) -> int:
+    """Convert base64url-encoded big-endian integer into Python int."""
+    return int.from_bytes(_b64url_decode(val), "big")
+
+
+async def fetch_telegram_jwks(force_refresh: bool = False) -> dict[str, dict[str, Any]]:
+    """Fetch and cache Telegram's OpenID Connect JWKS public keys."""
+    now = time.time()
+    if not force_refresh and TELEGRAM_JWKS_CACHE["keys"] and (now - TELEGRAM_JWKS_CACHE["fetched_at"] < 86400):
+        return TELEGRAM_JWKS_CACHE["keys"]
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(TELEGRAM_JWKS_URL, headers={"Accept-Encoding": "gzip, deflate"}) as resp:
+                if resp.status != 200:
+                    logging.error("Failed to fetch Telegram JWKS: HTTP %s", resp.status)
+                    return TELEGRAM_JWKS_CACHE.get("keys", {})
+                raw = await resp.read()
+                if raw.startswith(b"\x1f\x8b"):
+                    raw = gzip.decompress(raw)
+                data = json.loads(raw.decode("utf-8"))
+                keys_by_kid = {k["kid"]: k for k in data.get("keys", []) if "kid" in k}
+                TELEGRAM_JWKS_CACHE["keys"] = keys_by_kid
+                TELEGRAM_JWKS_CACHE["fetched_at"] = now
+                return keys_by_kid
+    except Exception as exc:
+        logging.warning("Error fetching Telegram JWKS: %s", exc)
+        return TELEGRAM_JWKS_CACHE.get("keys", {})
+
+
+async def verify_telegram_id_token(
+    id_token: str,
+    expected_client_id: str | None = None,
+) -> dict[str, Any] | None:
+    """
+    Validate a Telegram Login OIDC ID token (JWT).
+    Verifies signature against Telegram's JWKS and validates claims (iss, aud, exp, iat).
+    """
+    try:
+        parts = id_token.strip().split(".")
+        if len(parts) != 3:
+            return None
+
+        header_bytes = _b64url_decode(parts[0])
+        header = json.loads(header_bytes.decode("utf-8"))
+        kid = header.get("kid")
+        alg = header.get("alg")
+        if not kid or not alg:
+            return None
+
+        jwks = await fetch_telegram_jwks()
+        if kid not in jwks:
+            jwks = await fetch_telegram_jwks(force_refresh=True)
+
+        if kid not in jwks:
+            logging.warning("Telegram JWKS missing key with kid: %s", kid)
+            return None
+
+        key_data = jwks[kid]
+        signing_input = f"{parts[0]}.{parts[1]}".encode("ascii")
+        signature_bytes = _b64url_decode(parts[2])
+
+        if alg == "RS256" and key_data.get("kty") == "RSA":
+            n = _int_from_b64(key_data["n"])
+            e = _int_from_b64(key_data["e"])
+            pub_key = rsa.RSAPublicNumbers(e=e, n=n).public_key()
+            pub_key.verify(
+                signature_bytes,
+                signing_input,
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        elif alg == "ES256" and key_data.get("kty") == "EC":
+            x = _int_from_b64(key_data["x"])
+            y = _int_from_b64(key_data["y"])
+            pub_key = ec.EllipticCurvePublicNumbers(
+                x=x,
+                y=y,
+                curve=ec.SECP256R1(),
+            ).public_key()
+            if len(signature_bytes) != 64:
+                return None
+            r = int.from_bytes(signature_bytes[:32], "big")
+            s = int.from_bytes(signature_bytes[32:], "big")
+            der_sig = crypto_utils.encode_dss_signature(r, s)
+            pub_key.verify(der_sig, signing_input, ec.ECDSA(hashes.SHA256()))
+        elif alg == "EdDSA" and key_data.get("kty") == "OKP":
+            x_bytes = _b64url_decode(key_data["x"])
+            pub_key = ed25519.Ed25519PublicKey.from_public_bytes(x_bytes)
+            pub_key.verify(signature_bytes, signing_input)
+        else:
+            logging.warning("Unsupported Telegram ID token algorithm: %s (%s)", alg, key_data.get("kty"))
+            return None
+
+        payload_bytes = _b64url_decode(parts[1])
+        claims = json.loads(payload_bytes.decode("utf-8"))
+
+        if claims.get("iss") != "https://oauth.telegram.org":
+            logging.warning("Invalid Telegram ID token issuer: %s", claims.get("iss"))
+            return None
+
+        client_id_to_check = expected_client_id or current_config.get_telegram_client_id()
+        if client_id_to_check:
+            claim_aud = str(claims.get("aud", ""))
+            if claim_aud != str(client_id_to_check):
+                logging.warning("Telegram ID token audience mismatch: %s != %s", claim_aud, client_id_to_check)
+                return None
+
+        now = time.time()
+        exp = claims.get("exp", 0)
+        if now > exp + 60:
+            logging.warning("Telegram ID token expired (exp: %s, now: %s)", exp, now)
+            return None
+
+        iat = claims.get("iat", 0)
+        if iat > now + 60:
+            logging.warning("Telegram ID token issued in the future (iat: %s, now: %s)", iat, now)
+            return None
+
+        return claims
+    except Exception as exc:
+        logging.warning("Failed to verify Telegram ID token: %s", exc)
+        return None
 
 
 def check_telegram_auth(data: dict[str, Any], bot_token: str) -> bool:
@@ -501,13 +645,30 @@ async def handle_magic_login(request: web.Request) -> web.StreamResponse:
 
 @routes.post("/api/auth/telegram")
 async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
-    """Authenticate a user through Telegram Login Widget payload."""
+    """Authenticate a user through Telegram Login Widget payload (OIDC or legacy HMAC)."""
     try:
         data = await decrypt_request_payload(request)
-        if not check_telegram_auth(data, TOKEN):
+        user_id: int | None = None
+        photo_url: str | None = None
+
+        if "id_token" in data and isinstance(data["id_token"], str):
+            claims = await verify_telegram_id_token(data["id_token"])
+            if not claims:
+                return encrypted_json_response({"error": "Invalid ID token or expired"}, status=403)
+            raw_id = claims.get("id") or claims.get("sub")
+            if not raw_id:
+                return encrypted_json_response({"error": "Missing user ID in token"}, status=403)
+            user_id = int(raw_id)
+            photo_url = claims.get("picture") or (data.get("user") or {}).get("picture")
+            uname = claims.get("name") or claims.get("preferred_username")
+            if uname:
+                USER_NAMES[str(user_id)] = uname
+        elif check_telegram_auth(data, TOKEN):
+            user_id = int(data.get("id"))
+            photo_url = data.get("photo_url")
+        else:
             return encrypted_json_response({"error": "Invalid hash or expired"}, status=403)
 
-        user_id = int(data.get("id"))
         if user_id not in ALLOWED_USERS:
             return encrypted_json_response({"error": "User not allowed"}, status=403)
 
@@ -515,7 +676,7 @@ async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
             request=request,
             user_id=user_id,
             max_age=SESSION_TTL_MAGIC,
-            photo_url=data.get("photo_url"),
+            photo_url=photo_url,
         )
         csrf_token = generate_csrf_token()
         response = encrypted_json_response({"status": "ok", "csrf_token": csrf_token})

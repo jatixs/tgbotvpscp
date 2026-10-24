@@ -211,7 +211,22 @@ except (ValueError, TypeError):
 if not TOKEN:
     print("Error: TG_BOT_TOKEN env var is not set.")
     sys.exit(1)
-DEFAULT_LANGUAGE = "ru"
+TG_CLIENT_ID = os.environ.get("TG_CLIENT_ID", "").strip()
+TG_CLIENT_SECRET = os.environ.get("TG_CLIENT_SECRET", "").strip()
+
+
+def get_telegram_client_id() -> str:
+    """Return configured Telegram Client ID or default to Bot ID extracted from TOKEN."""
+    if TG_CLIENT_ID:
+        return TG_CLIENT_ID
+    if TOKEN and ":" in TOKEN:
+        return TOKEN.split(":", 1)[0]
+    return ""
+
+
+DEFAULT_LANGUAGE = os.environ.get("DEFAULT_LANGUAGE", "ru").lower().strip()
+if DEFAULT_LANGUAGE not in ("ru", "en"):
+    DEFAULT_LANGUAGE = "ru"
 DEFAULT_CONFIG = {
     "TRAFFIC_INTERVAL": 5,
     "BACKUP_INTERVAL": 300,

@@ -701,7 +701,7 @@ common_install_steps() {
     echo "" > /tmp/${SERVICE_NAME}_install.log
     msg_info "1. Обновление системы..."
     
-    run_with_spinner "Apt update" sudo apt-get update -y -q
+    run_with_spinner "Обновление списков пакетов (apt update)" sudo apt-get update -y -q
     run_with_spinner "Установка пакетов" sudo apt-get install -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3 python3-pip python3-venv git curl wget sudo
 }
 
@@ -1292,9 +1292,16 @@ install_ookla_speedtest() {
 
 ask_env_details() {
     msg_info "Ввод данных .env..."
-    msg_question "Токен Ботa: " T; msg_question "ID Админа: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
-    msg_question "Внутренний Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
-    msg_question "Sentry DSN (opt): " SENTRY_DSN
+    msg_question "Токен бота: " T; msg_question "ID администратора: " A; msg_question "Имя пользователя (необязательно): " U; msg_question "Имя бота (необязательно): " N
+    local default_cid=""
+    if [ -n "$T" ] && [[ "$T" =~ ^([0-9]+): ]]; then
+        default_cid="${BASH_REMATCH[1]}"
+    fi
+    msg_question "Telegram Client ID (@BotFather -> Login Widget) [${default_cid}]: " CID_INPUT
+    TG_CLIENT_ID="${CID_INPUT:-$default_cid}"
+    msg_question "Telegram Client Secret (необязательно): " TG_CLIENT_SECRET
+    msg_question "Внутренний веб-порт [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
+    msg_question "Sentry DSN (необязательно): " SENTRY_DSN
 
     msg_question "Включить Web-UI? (y/n) [y]: " W
     if [[ "$W" =~ ^[Nn]$ ]]; then
@@ -1357,7 +1364,7 @@ ask_env_details() {
         }
     fi
     ensure_data_encryption_key
-    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PUBLIC_URL WEB_TLS_MODE GEN_PASS SENTRY_DSN
+    export T A U N TG_CLIENT_ID TG_CLIENT_SECRET WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PUBLIC_URL WEB_TLS_MODE GEN_PASS SENTRY_DSN
 }
 
 write_env_file() {
@@ -1388,6 +1395,8 @@ TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
 TG_ADMIN_USERNAME="${U}"
 TG_BOT_NAME="${N}"
+TG_CLIENT_ID="${TG_CLIENT_ID}"
+TG_CLIENT_SECRET="${TG_CLIENT_SECRET}"
 DATA_ENCRYPTION_KEY="${DATA_ENCRYPTION_KEY}"
 WEB_SERVER_HOST="${web_server_host}"
 WEB_SERVER_PORT="${WEB_PORT}"
@@ -1406,6 +1415,7 @@ DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
 COMPOSE_PROFILES="${compose_profile}"
+DEFAULT_LANGUAGE="ru"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 
@@ -1446,6 +1456,7 @@ ensure_env_variables() {
         "ENABLE_WEB_UI|true|Включить веб-интерфейс"
         "DEBUG|false|Режим отладки"
         "TG_BOT_NAME|VPS Bot|Имя бота"
+        "DEFAULT_LANGUAGE|ru|Язык по умолчанию"
     )
 
     if ! is_node_context; then
@@ -1473,6 +1484,36 @@ ensure_env_variables() {
         fi
     done
     
+    if ! grep -q "^TG_CLIENT_ID=" "${ENV_FILE}"; then
+        local current_tok=$(grep '^TG_BOT_TOKEN=' "${ENV_FILE}" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        local default_cid=""
+        if [ -n "$current_tok" ] && [[ "$current_tok" =~ ^([0-9]+): ]]; then
+            default_cid="${BASH_REMATCH[1]}"
+        fi
+        local cid_val="$default_cid"
+        if [ -t 0 ] && [ "$AUTO_MODE" != "true" ]; then
+            echo ""
+            msg_info "Новый метод авторизации Telegram Login (OIDC)!"
+            echo -e "${C_CYAN}В @BotFather выберите бота -> Bot Settings -> Login Widget, укажите Allowed URLs.${C_RESET}"
+            read -p "$(echo -e "${C_BOLD}Введите Telegram Client ID [${default_cid}]: ${C_RESET}")" cid_in
+            cid_val="${cid_in:-$default_cid}"
+        fi
+        sudo bash -c "echo 'TG_CLIENT_ID=\"${cid_val}\"' >> ${ENV_FILE}"
+        echo -e "${C_YELLOW}  + Добавлена переменная TG_CLIENT_ID=${cid_val}${C_RESET}"
+        changes_made=true
+    fi
+
+    if ! grep -q "^TG_CLIENT_SECRET=" "${ENV_FILE}"; then
+        local csecret_val=""
+        if [ -t 0 ] && [ "$AUTO_MODE" != "true" ]; then
+            read -p "$(echo -e "${C_BOLD}Введите Telegram Client Secret (необязательно, Enter для пропуска): ${C_RESET}")" csecret_in
+            csecret_val="${csecret_in}"
+        fi
+        sudo bash -c "echo 'TG_CLIENT_SECRET=\"${csecret_val}\"' >> ${ENV_FILE}"
+        echo -e "${C_YELLOW}  + Добавлена переменная TG_CLIENT_SECRET=\"${csecret_val}\"${C_RESET}"
+        changes_made=true
+    fi
+
     # Add optional variables if not present (with empty defaults)
     local OPTIONAL_VARS=(
         "SENTRY_DSN"
@@ -1485,6 +1526,8 @@ ensure_env_variables() {
         "HTTPS_EMAIL"
         "WEB_TLS_MODE"
         "LEGACY_NODE_BRIDGE"
+        "TG_CLIENT_ID"
+        "TG_CLIENT_SECRET"
     )
     
     for var_name in "${OPTIONAL_VARS[@]}"; do
@@ -1508,14 +1551,14 @@ check_docker_deps() {
 
 create_dockerfile() {
     if [ ! -f "${BOT_INSTALL_PATH}/Dockerfile" ]; then
-        msg_error "Dockerfile is missing from the cloned repository."
+        msg_error "Dockerfile отсутствует в клонированном репозитории."
         return 1
     fi
 }
 
 create_docker_compose_yml() {
         if [ ! -f "${DOCKER_COMPOSE_FILE}" ]; then
-                msg_error "docker-compose.yml is missing from the cloned repository."
+                msg_error "docker-compose.yml отсутствует в клонированном репозитории."
                 return 1
         fi
 }
@@ -1733,8 +1776,8 @@ install_node_logic() {
         run_with_spinner "Установка iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
     fi
     load_cached_env
-    msg_question "Agent URL (http://IP:8080): " AGENT_URL
-    msg_question "Token: " NODE_TOKEN
+    msg_question "URL агента (http://IP:8080): " AGENT_URL
+    msg_question "Токен: " NODE_TOKEN
     local saved_node_name=""
     local saved_node_name_sync_mode=""
     if [ -f "${ENV_BACKUP_FILE}" ]; then
@@ -1861,7 +1904,7 @@ update_bot() {
     if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
 
     cd "${BOT_INSTALL_PATH}"
-    if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
+    if ! run_with_spinner "Получение обновлений Git (fetch)" $exec_cmd git fetch origin; then return 1; fi
 
     if ensure_integrity_tools_available; then
         local json_report=$(run_integrity_cmd check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
@@ -1896,7 +1939,7 @@ update_bot() {
         fi
     fi
 
-    if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
+    if ! run_with_spinner "Сброс изменений Git (reset)" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
     local new_ver=""
     
@@ -1923,7 +1966,7 @@ update_bot() {
     # Check and add missing environment variables
     ensure_env_variables
     if ! migrate_web_https; then
-        msg_error "HTTPS migration failed; the current service has not been switched."
+        msg_error "Миграция на HTTPS завершилась ошибкой; текущий сервис не был переключён."
         return 1
     fi
 
@@ -1937,7 +1980,7 @@ update_bot() {
     if [ "$current_mode" == "docker" ]; then
         if [ -f "docker-compose.yml" ]; then
             local dc_cmd=""; if sudo docker compose version &>/dev/null; then dc_cmd="docker compose"; else dc_cmd="docker-compose"; fi
-            if ! run_with_spinner "Docker Up" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
+            if ! run_with_spinner "Запуск контейнеров Docker (up)" sudo $dc_cmd up -d --build; then msg_error "Ошибка Docker."; return 1; fi
             sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
 #!/bin/bash
 cd ${BOT_INSTALL_PATH}
@@ -2325,7 +2368,7 @@ main_menu() {
         fi
         echo -e "  Ветка: ${GIT_BRANCH} | Версия: ${local_version}"
         echo -e "  Тип: ${INSTALL_TYPE} | Статус: ${STATUS_MESSAGE}"
-        if [ -n "$INTEGRITY_STATUS" ]; then echo -e "  Интегритет: ${INTEGRITY_STATUS}"; fi
+        if [ -n "$INTEGRITY_STATUS" ]; then echo -e "  Целостность: ${INTEGRITY_STATUS}"; fi
         echo "--------------------------------------------------------"
         echo "  1) Обновить ${item_type}"
         echo "  2) Удалить ${item_type}"
@@ -2343,6 +2386,7 @@ main_menu() {
                 alert_status="${C_GREEN}активен${C_RESET}"
             fi
             echo -e "  7) Управление Alert-модулем (${alert_status})"
+            echo -e "  8) Кастомные модули и аудит целостности SHA-256"
         fi
 
         echo "  0) Выход"
@@ -2365,11 +2409,8 @@ main_menu() {
             8)
                 if [ "$IS_NODE" == "yes" ]; then
                     toggle_agent_monitoring; read -p "Нажмите Enter..."
-                fi
-                ;;
-            9)
-                if [ "$IS_NODE" != "yes" ]; then
-                    manage_alert_module; read -p "Нажмите Enter..."
+                else
+                    manage_custom_modules
                 fi
                 ;;
             0) break ;;

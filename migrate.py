@@ -131,6 +131,8 @@ def ensure_env_variables():
         "HTTPS_EMAIL",
         "WEB_TLS_MODE",
         "LEGACY_NODE_BRIDGE",
+        "TG_CLIENT_ID",
+        "TG_CLIENT_SECRET",
     ]
     
     try:

@@ -23,9 +23,13 @@
         <script>
         const I18N = {{ i18n_json | safe }};
         const BOT_USERNAME = "{{ bot_username }}";
+        const TG_CLIENT_ID = "{{ tg_client_id }}";
         const CURRENT_LANG = "{{ current_lang }}";
         {{ web_key_js | safe }}
         </script>
+        {% if tg_client_id %}
+        <script async src="https://oauth.telegram.org/js/telegram-login.js?6" data-client-id="{{ tg_client_id }}" data-onauth="onTelegramAuth(data)" data-request-access="write"></script>
+        {% endif %}
         <link rel="stylesheet" href="/static/css/style.css?v={{ asset_ver }}">
     <link rel="stylesheet" href="/static/css/icons.css?v={{ asset_ver }}">
         <link rel="stylesheet" href="/static/css/login.css?v={{ asset_ver }}">
@@ -113,11 +117,18 @@
                 <div id="forms-container">
                     <div id="magic-form">
                         <div id="telegram-widget-container"
-                             class="hidden mb-6 flex justify-center"></div>
+                             class="{% if not tg_client_id %}hidden{% endif %} mb-6 flex flex-col items-center justify-center">
+                            <button type="button" class="tg-auth-button shadow-lg shadow-blue-500/20" data-i18n="login_via_telegram_btn">
+                                {{ login_via_telegram_btn }}
+                            </button>
+                            <button type="button" id="switch-to-id-btn" onclick="toggleTelegramLoginMode('id')" class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mt-3 transition" data-i18n="login_or_id_link">
+                                {{ login_or_id_link }}
+                            </button>
+                        </div>
                         <form id="magic-link-form"
                               action="/api/login/request"
                               method="POST"
-                              class="space-y-5">
+                              class="{% if tg_client_id %}hidden{% endif %} space-y-5">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 ml-1" data-i18n="login_telegram_id_label">
                                     {{ login_telegram_id_label }}
@@ -146,6 +157,11 @@
                                     data-i18n="login_via_telegram_btn">
                                 {{ login_via_telegram_btn }}
                             </button>
+                            <div id="switch-to-widget-btn-container" class="{% if not tg_client_id %}hidden{% endif %} text-center pt-2">
+                                <button type="button" onclick="toggleTelegramLoginMode('widget')" class="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition" data-i18n="login_or_tg_button">
+                                    {{ login_or_tg_button }}
+                                </button>
+                            </div>
                         </form>
                         <div id="login-or-separator" class="relative flex py-6 items-center">
                             <div class="flex-grow border-t border-gray-200 dark:border-white/10"></div>

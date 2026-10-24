@@ -7,30 +7,45 @@ function acceptCookies() {
     if (banner) banner.classList.add('translate-y-full');
 }
 
-// --- Telegram Auth Widget ---
-async function onTelegramAuth(user) {
-    console.log("Telegram Auth", user);
+// --- Telegram Auth Widget (OIDC / Legacy) ---
+async function onTelegramAuth(data) {
+    if (!data) return;
+    if (data.error) {
+        if (data.error === 'popup_closed') {
+            console.log("Telegram login popup closed by user.");
+            return;
+        }
+        console.error("Telegram Auth error:", data.error);
+        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Auth Error";
+        if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, errTitle);
+        else alert(errTitle + ": " + data.error);
+        return;
+    }
+    console.log("Telegram Auth", data);
     acceptCookies();
     try {
+        const payload = data.id_token ? { id_token: data.id_token, user: data.user } : data;
         const response = await fetch('/api/auth/telegram', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(user)
+            body: JSON.stringify(payload)
         });
         
         if (response.ok) {
             window.location.reload();
         } else {
             const d = await response.json();
+            const userObj = (data && data.user) ? data.user : (data || {});
+            const uid = userObj.id || userObj.sub || "";
+            const uname = userObj.preferred_username || userObj.username || uid;
             
             if (response.status === 403) {
                 const title = (typeof I18N !== 'undefined' && I18N.login_access_denied) ? I18N.login_access_denied : "Access Denied";
                 let msgTemplate = (typeof I18N !== 'undefined' && I18N.login_unauthorized) ? I18N.login_unauthorized : "User <b>@{username}</b> is not authorized.<br><br>Please ask the administrator to add your ID: <b>{id}</b>";
                 
-                const username = user.username || user.id;
-                const msg = msgTemplate.replace('{username}', username).replace('{id}', user.id);
+                const msg = msgTemplate.replace('{username}', uname).replace('{id}', uid);
                 
                 if (window.showModalAlert) {
                     await window.showModalAlert(msg, title);
@@ -49,6 +64,22 @@ async function onTelegramAuth(user) {
         if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 }
+window.onTelegramAuth = onTelegramAuth;
+
+function toggleTelegramLoginMode(mode) {
+    const container = document.getElementById('telegram-widget-container');
+    const magicForm = document.getElementById('magic-link-form');
+    if (!container || !magicForm) return;
+
+    if (mode === 'id') {
+        container.classList.add('hidden');
+        magicForm.classList.remove('hidden');
+    } else {
+        magicForm.classList.add('hidden');
+        container.classList.remove('hidden');
+    }
+}
+window.toggleTelegramLoginMode = toggleTelegramLoginMode;
 
 // --- UI Logic: Language & Slider ---
 
@@ -481,7 +512,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 1000);
     }
 
-    // 6. Init Telegram Widget
+    // 6. Init Telegram Login
+    const tgClientId = (typeof TG_CLIENT_ID !== 'undefined' && TG_CLIENT_ID) ? TG_CLIENT_ID : "";
     const botUsername = (typeof BOT_USERNAME !== 'undefined') ? BOT_USERNAME : "";
     const container = document.getElementById('telegram-widget-container');
     const magicForm = document.getElementById('magic-link-form');
@@ -490,7 +522,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const isLocalhost = window.location.hostname === 'localhost';
     const isHttps = window.location.protocol === 'https:';
 
-    if (botUsername && !isIp && !isLocalhost && isHttps && container && magicForm) {
+    if (tgClientId && container && magicForm) {
+        container.classList.remove('hidden');
+        magicForm.classList.add('hidden');
+    } else if (botUsername && !isIp && !isLocalhost && isHttps && container && magicForm) {
         const script = document.createElement('script');
         script.async = true;
         script.src = "https://telegram.org/js/telegram-widget.js?22";

@@ -1295,9 +1295,16 @@ install_ookla_speedtest() {
 
 ask_env_details() {
     msg_info "Entering .env data..."
-    msg_question "Bot Token: " T; msg_question "Admin ID: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
+    msg_question "Bot Token: " T; msg_question "Admin ID: " A; msg_question "Username (optional): " U; msg_question "Bot Name (optional): " N
+    local default_cid=""
+    if [ -n "$T" ] && [[ "$T" =~ ^([0-9]+): ]]; then
+        default_cid="${BASH_REMATCH[1]}"
+    fi
+    msg_question "Telegram Client ID (@BotFather -> Login Widget) [${default_cid}]: " CID_INPUT
+    TG_CLIENT_ID="${CID_INPUT:-$default_cid}"
+    msg_question "Telegram Client Secret (optional): " TG_CLIENT_SECRET
     msg_question "Internal Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
-    msg_question "Sentry DSN (opt): " SENTRY_DSN
+    msg_question "Sentry DSN (optional): " SENTRY_DSN
 
     msg_question "Enable Web-UI? (y/n) [y]: " W
     if [[ "$W" =~ ^[Nn]$ ]]; then
@@ -1360,7 +1367,7 @@ ask_env_details() {
         }
     fi
     ensure_data_encryption_key
-    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PUBLIC_URL WEB_TLS_MODE GEN_PASS SENTRY_DSN
+    export T A U N TG_CLIENT_ID TG_CLIENT_SECRET WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PUBLIC_URL WEB_TLS_MODE GEN_PASS SENTRY_DSN
 }
 
 write_env_file() {
@@ -1391,6 +1398,8 @@ TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
 TG_ADMIN_USERNAME="${U}"
 TG_BOT_NAME="${N}"
+TG_CLIENT_ID="${TG_CLIENT_ID}"
+TG_CLIENT_SECRET="${TG_CLIENT_SECRET}"
 DATA_ENCRYPTION_KEY="${DATA_ENCRYPTION_KEY}"
 WEB_SERVER_HOST="${web_server_host}"
 WEB_SERVER_PORT="${WEB_PORT}"
@@ -1409,6 +1418,7 @@ DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
 COMPOSE_PROFILES="${compose_profile}"
+DEFAULT_LANGUAGE="en"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 
@@ -1449,17 +1459,13 @@ ensure_env_variables() {
         "ENABLE_WEB_UI|true|Enable web interface"
         "DEBUG|false|Debug mode"
         "TG_BOT_NAME|VPS Bot|Bot name"
+        "DEFAULT_LANGUAGE|en|Default language"
     )
 
     if ! is_node_context; then
         ENV_VARS=("DATA_ENCRYPTION_KEY||Data encryption key" "${ENV_VARS[@]}")
     fi
 
-    if grep -q '^WEB_SERVER_HOST=' "${ENV_FILE}"; then
-        sudo sed -i "s|^WEB_SERVER_HOST=.*|WEB_SERVER_HOST=\"${default_web_host}\"|" "${ENV_FILE}"
-        changes_made=true
-    fi
-    
     for var_entry in "${ENV_VARS[@]}"; do
         local var_name=$(echo "$var_entry" | cut -d'|' -f1)
         local default_val=$(echo "$var_entry" | cut -d'|' -f2)
@@ -1481,6 +1487,36 @@ ensure_env_variables() {
         fi
     done
     
+    if ! grep -q "^TG_CLIENT_ID=" "${ENV_FILE}"; then
+        local current_tok=$(grep '^TG_BOT_TOKEN=' "${ENV_FILE}" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        local default_cid=""
+        if [ -n "$current_tok" ] && [[ "$current_tok" =~ ^([0-9]+): ]]; then
+            default_cid="${BASH_REMATCH[1]}"
+        fi
+        local cid_val="$default_cid"
+        if [ -t 0 ] && [ "$AUTO_MODE" != "true" ]; then
+            echo ""
+            msg_info "New authentication method: Telegram Login (OIDC)!"
+            echo -e "${C_CYAN}In @BotFather select your bot -> Bot Settings -> Login Widget, specify Allowed URLs.${C_RESET}"
+            read -p "$(echo -e "${C_BOLD}Enter Telegram Client ID [${default_cid}]: ${C_RESET}")" cid_in
+            cid_val="${cid_in:-$default_cid}"
+        fi
+        sudo bash -c "echo 'TG_CLIENT_ID=\"${cid_val}\"' >> ${ENV_FILE}"
+        echo -e "${C_YELLOW}  + Added variable TG_CLIENT_ID=${cid_val}${C_RESET}"
+        changes_made=true
+    fi
+
+    if ! grep -q "^TG_CLIENT_SECRET=" "${ENV_FILE}"; then
+        local csecret_val=""
+        if [ -t 0 ] && [ "$AUTO_MODE" != "true" ]; then
+            read -p "$(echo -e "${C_BOLD}Enter Telegram Client Secret (optional, press Enter to skip): ${C_RESET}")" csecret_in
+            csecret_val="${csecret_in}"
+        fi
+        sudo bash -c "echo 'TG_CLIENT_SECRET=\"${csecret_val}\"' >> ${ENV_FILE}"
+        echo -e "${C_YELLOW}  + Added variable TG_CLIENT_SECRET=\"${csecret_val}\"${C_RESET}"
+        changes_made=true
+    fi
+
     # Add optional variables if not present (with empty defaults)
     local OPTIONAL_VARS=(
         "SENTRY_DSN"
@@ -1493,6 +1529,8 @@ ensure_env_variables() {
         "HTTPS_EMAIL"
         "WEB_TLS_MODE"
         "LEGACY_NODE_BRIDGE"
+        "TG_CLIENT_ID"
+        "TG_CLIENT_SECRET"
     )
     
     for var_name in "${OPTIONAL_VARS[@]}"; do
@@ -1720,11 +1758,25 @@ install_node_logic() {
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
-    run_with_spinner "Installing iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
     setup_repo_and_dirs "root"
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
-    run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests PyYAML
+    run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
+
+    # Detect node location and install appropriate speedtest tool
+    # (must run after setup_repo_and_dirs so config/ directory exists for .speedtest_mode)
+    msg_info "Detecting node geolocation..."
+    NODE_COUNTRY=$(get_country_code_by_ip)
+    
+    if [ "$NODE_COUNTRY" == "RU" ]; then
+        msg_info "Node is located in Russia - using iperf3"
+        run_with_spinner "Installing iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
+    else
+        msg_info "Node is outside Russia - installing Ookla Speedtest CLI"
+        install_ookla_speedtest
+        # Also install iperf3 as fallback
+        run_with_spinner "Installing iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
+    fi
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
@@ -1891,15 +1943,26 @@ update_bot() {
 
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
-    if [ -f "$README_FILE" ]; then
-        local new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
-        if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
-             if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
-                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
-             else
-                 sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
-             fi
-        fi
+    local new_ver=""
+    
+    if echo "$GIT_BRANCH" | grep -q "release/"; then
+        new_ver=$(echo "$GIT_BRANCH" | grep -oP 'release/\K[\d\.]+')
+    fi
+    
+    if [ -z "$new_ver" ] && [ -f "${BOT_INSTALL_PATH}/CHANGELOG.md" ]; then
+        new_ver=$(grep -oP '^## \[\K[\d\.]+' "${BOT_INSTALL_PATH}/CHANGELOG.md" | head -n 1)
+    fi
+    
+    if [ -z "$new_ver" ] && [ -f "$README_FILE" ]; then
+        new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+
+    if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
+         if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
+             sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
+         else
+             sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
+         fi
     fi
 
     # Check and add missing environment variables
@@ -2328,6 +2391,7 @@ main_menu() {
                 alert_status="${C_GREEN}active${C_RESET}"
             fi
             echo -e "  7) Manage Alert Module (${alert_status})"
+            echo -e "  8) Custom Modules & SHA-256 Integrity Audit"
         fi
 
         echo "  0) Exit"
@@ -2350,11 +2414,8 @@ main_menu() {
             8)
                 if [ "$IS_NODE" == "yes" ]; then
                     toggle_agent_monitoring; read -p "Press Enter..."
-                fi
-                ;;
-            9)
-                if [ "$IS_NODE" != "yes" ]; then
-                    manage_alert_module; read -p "Press Enter..."
+                else
+                    manage_custom_modules
                 fi
                 ;;
             0) break ;;
