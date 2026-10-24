@@ -767,6 +767,8 @@ function initGlobalLazyLoad() {
     });
 }
 document.addEventListener("DOMContentLoaded", () => {
+    initHapticsFeedback();
+    initHapticsToggle();
     applyThemeUI(currentTheme);
     if (typeof window.parsePageEmojis === 'function') {
         window.parsePageEmojis();
@@ -778,7 +780,6 @@ document.addEventListener("DOMContentLoaded", () => {
     initSSE();
     initSessionSync();
     initHolidayMood();
-    initHapticsToggle();
     initAddNodeLogic();
     initBrandEasterEgg();
     if (document.getElementById('logsContainer')) {
@@ -787,31 +788,17 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Unlock Vibration API on first interaction
-    const unlockHaptics = () => {
-        try { if (navigator.vibrate) navigator.vibrate(0); } catch {}
-        document.body.removeEventListener('touchstart', unlockHaptics);
-        document.body.removeEventListener('click', unlockHaptics);
-    };
-    document.body.addEventListener('touchstart', unlockHaptics, { once: true, passive: true });
-    document.body.addEventListener('click', unlockHaptics, { once: true, passive: true });
+    pageCache.set(window.location.href, document.documentElement.outerHTML);
+});
 
-    window.playHaptic = function(pattern) {
-        if (!pattern) pattern = [10, 30, 10];
-        try {
-            if (navigator.vibrate && localStorage.getItem('haptics_enabled') !== 'false') {
-                navigator.vibrate(pattern);
-            }
-        } catch (_e) {}
-    };
-
-    document.body.addEventListener('input', (e) => {
+function initHapticsFeedback() {
+    document.addEventListener('input', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
             playHaptic(5);
         }
     });
 
-    document.body.addEventListener('change', (e) => {
+    document.addEventListener('change', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
             if (e.target.checked) {
                 playHaptic([10, 30, 10]); 
@@ -821,20 +808,25 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Tactile feedback on interactive button clicks
+    // Capture clicks before local handlers stop propagation or replace the clicked element.
     document.addEventListener('click', (e) => {
-        const btn = e.target.closest('button, [role="button"], .ip-copy-btn, .btn');
-        if (btn && !btn.closest('#mHapticsCheckbox, .mHapticsCheckbox')) {
-            playHaptic(10);
+        if (!(e.target instanceof Element)) return;
+        const control = e.target.closest('input, label, button, a[href], [role="button"], .ip-copy-btn, .btn, [data-action], [onclick]');
+        if (!control || control.closest('[data-haptics-toggle]') ||
+            control.matches(':disabled, [aria-disabled="true"]') ||
+            control.matches('input, label')) return;
+        playHaptic(10);
+    }, { capture: true, passive: true });
+}
+
+function playHaptic(pattern = [10, 30, 10]) {
+    if (typeof navigator.vibrate !== 'function' || localStorage.getItem('haptics_enabled') === 'false') return;
+    try {
+        if (!navigator.vibrate(pattern)) {
+            console.debug('Haptic feedback was rejected by the browser.');
         }
-    }, { passive: true });
-
-    pageCache.set(window.location.href, document.documentElement.outerHTML);
-});
-
-function playHaptic(pattern) {
-    if (window.playHaptic) {
-        window.playHaptic(pattern);
+    } catch (error) {
+        console.warn('Haptic feedback failed:', error);
     }
 }
 
@@ -843,11 +835,16 @@ function initHapticsToggle() {
 }
 
 function toggleHaptics() {
+    if (typeof navigator.vibrate !== 'function') {
+        updateHapticsUI();
+        if (window.showToast) window.showToast(I18N.web_haptics_unsupported);
+        return;
+    }
     const currentState = localStorage.getItem('haptics_enabled') !== 'false';
     localStorage.setItem('haptics_enabled', currentState ? 'false' : 'true');
     updateHapticsUI();
     if (!currentState) {
-        if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+        playHaptic();
         const msgOn = (typeof I18N !== 'undefined' && I18N.web_haptics_on) ? I18N.web_haptics_on : "Haptics: ON";
         if (window.showToast) window.showToast(msgOn);
     } else {
@@ -857,10 +854,22 @@ function toggleHaptics() {
 }
 
 function updateHapticsUI() {
-    const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
+    const isSupported = typeof navigator.vibrate === 'function';
+    const isEnabled = isSupported && localStorage.getItem('haptics_enabled') !== 'false';
     
     document.querySelectorAll('#mHapticsCheckbox, .mHapticsCheckbox').forEach(checkbox => {
         checkbox.checked = isEnabled;
+        checkbox.disabled = !isSupported;
+    });
+
+    document.querySelectorAll('[data-haptics-toggle]').forEach(row => {
+        row.setAttribute('aria-disabled', String(!isSupported));
+        row.style.opacity = isSupported ? '' : '0.5';
+        row.style.cursor = isSupported ? '' : 'not-allowed';
+        row.querySelector('label').style.cursor = 'inherit';
+        const status = row.querySelector('[data-haptics-unsupported]');
+        status.hidden = isSupported;
+        status.textContent = I18N.web_haptics_unsupported;
     });
     
     const track = document.getElementById('mHapticsTrack');
@@ -879,7 +888,7 @@ function updateHapticsUI() {
 
     const statusText = document.getElementById('mobileHapticsStatus');
     if (statusText) {
-        statusText.innerText = isEnabled ? (I18N?.web_on || 'Вкл') : (I18N?.web_off || 'Выкл');
+        statusText.innerText = !isSupported ? I18N.web_haptics_unsupported : isEnabled ? (I18N?.web_on || 'Вкл') : (I18N?.web_off || 'Выкл');
         statusText.className = isEnabled ? 'text-xs font-bold uppercase text-green-500' : 'text-xs font-bold uppercase text-gray-500';
     }
 }
@@ -2995,4 +3004,3 @@ window.closeDynamicModal = function(id) {
         });
     }
 })();
-

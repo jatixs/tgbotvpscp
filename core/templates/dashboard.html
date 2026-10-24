@@ -202,9 +202,12 @@
                                     </button>
                                 </div>
                             </div>
-                            <div onclick="toggleHaptics()"
+                            <div data-haptics-toggle onclick="toggleHaptics()"
                                 class="w-full cursor-pointer px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-gray-800 dark:text-gray-200 transition">
-                                <span class="font-medium">{{ web_vibration_label|default("Вибрация") }}</span>
+                                <span class="flex flex-col">
+                                    <span class="font-medium">{{ web_vibration_label|default("Вибрация") }}</span>
+                                    <span data-haptics-unsupported hidden class="text-xs">{{ web_haptics_unsupported }}</span>
+                                </span>
                                 <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); event.preventDefault(); toggleHaptics()">
                                     <input type="checkbox" id="mHapticsCheckbox" class="sr-only peer mHapticsCheckbox">
                                     <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>

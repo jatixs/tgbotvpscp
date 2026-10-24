@@ -135,8 +135,11 @@
                                         <button onclick="setThemeDirect('amoled', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeAmoled"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg></button>
                                     </div>
                                 </div>
-                                <div onclick="toggleHaptics()" class="w-full cursor-pointer px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-gray-800 dark:text-gray-200 transition">
-                                    <span class="font-medium">Вибрация</span>
+                                <div data-haptics-toggle onclick="toggleHaptics()" class="w-full cursor-pointer px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-gray-800 dark:text-gray-200 transition">
+                                    <span class="flex flex-col">
+                                        <span class="font-medium">{{ web_vibration_label }}</span>
+                                        <span data-haptics-unsupported hidden class="text-xs">{{ web_haptics_unsupported }}</span>
+                                    </span>
                                     <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); event.preventDefault(); toggleHaptics()">
                                         <input type="checkbox" id="mHapticsCheckbox3" class="sr-only peer mHapticsCheckbox">
                                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
