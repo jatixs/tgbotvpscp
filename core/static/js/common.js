@@ -1980,7 +1980,8 @@ function updateNotifUI(list, count) {
             if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted' && list && list.length > 0) {
                 try {
                     const rawText = list[0].text || '';
-                    const cleanBody = rawText.replace(/<[^>]*>/g, '').trim();
+                    const parsedDoc = new DOMParser().parseFromString(rawText, 'text/html');
+                    const cleanBody = (parsedDoc.body.textContent || '').trim();
                     if (window.swRegistration && window.swRegistration.showNotification) {
                         window.swRegistration.showNotification(document.title || 'VPS Control Panel', {
                             body: cleanBody,
@@ -2374,8 +2375,16 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '', 
 
         const t = (typeof I18N !== 'undefined' && I18N['modal_title_' + type]) ? I18N['modal_title_' + type] : (title || 'Alert');
         document.getElementById('sysModalTitle').innerText = t;
-        const safeMsg = message ? escapeHtml(String(message)).replace(/\n/g, '<br>') : "";
-        document.getElementById('sysModalMessage').innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(safeMsg) : safeMsg;
+        const msgEl = document.getElementById('sysModalMessage');
+        if (msgEl) {
+            const lines = String(message || '').split('\n');
+            const nodes = [];
+            lines.forEach((line, idx) => {
+                if (idx > 0) nodes.push(document.createElement('br'));
+                nodes.push(document.createTextNode(line));
+            });
+            msgEl.replaceChildren(...nodes);
+        }
 
         const input = document.getElementById('sysModalInput');
         const cancel = document.getElementById('sysModalCancel');
