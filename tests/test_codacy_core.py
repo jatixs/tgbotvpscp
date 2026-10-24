@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import manage
 from core.web.avatar import get_avatar_html
-from node.input_validation import (
+from network_validation import (
     is_valid_iperf_server,
     is_valid_network_host,
     parse_public_ip,
@@ -47,7 +47,7 @@ class CodacyCoreRegressionTests(unittest.TestCase):
         self.assertFalse(is_valid_network_host("127.0.0.1"))
         self.assertEqual(resolve_public_host("8.8.8.8"), "8.8.8.8")
         with patch(
-            "node.input_validation.socket.getaddrinfo",
+            "network_validation.socket.getaddrinfo",
             return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))],
         ):
             self.assertIsNone(resolve_public_host("iperf.example.net"))

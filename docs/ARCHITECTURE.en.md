@@ -29,6 +29,8 @@ Browser pages use numeric node IDs. Agent tokens are never placed in URLs or bro
 
 ### 🔹 Root Level
 
+`network_validation.py` provides shared public-address validation for agent and node speed tests. It is retained in both installation modes; agent modules must not depend on `node/`, which is removed during systemd installation.
+
 ```
 /opt/tg-bot/
 ├── bot.py                    # Entry point, application initialization

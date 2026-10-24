@@ -22,20 +22,19 @@ from urllib.parse import urlsplit
 import psutil
 import requests
 
+if not __package__:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from network_validation import (
+    is_valid_iperf_server,
+    parse_public_ip,
+    resolve_public_host,
+)
+
 try:
     from .endpoint_migration import validate_https_migration_url
-    from .input_validation import (
-        is_valid_iperf_server,
-        parse_public_ip,
-        resolve_public_host,
-    )
 except ImportError:
     from endpoint_migration import validate_https_migration_url
-    from input_validation import (
-        is_valid_iperf_server,
-        parse_public_ip,
-        resolve_public_host,
-    )
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')

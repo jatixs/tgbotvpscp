@@ -429,7 +429,7 @@ check_integrity() {
             fi
         else
             git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
-            local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
+            local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py network_validation.py"
             local EXISTING_FILES=""
             for f in $FILES_TO_CHECK; do
                 if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi

@@ -34,6 +34,7 @@ CORE_SYSTEM_PATTERNS = [
     "watchdog.py",
     "manage.py",
     "migrate.py",
+    "network_validation.py",
     "requirements.txt",
     "aerich.ini",
     "Dockerfile",

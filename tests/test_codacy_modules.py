@@ -22,7 +22,7 @@ def load_functions(filename, names, **dependencies):
             "aiohttp", "yaml", "psutil", "aiogram", "aiogram.types",
             "aiogram.exceptions", "core", "core.auth", "core.config",
             "core.i18n", "core.keyboards", "core.messaging", "core.rbac",
-            "core.shared_state", "core.utils", "node", "node.input_validation",
+            "core.shared_state", "core.utils",
         )
     }
     imports["core"].config.CONFIG_DIR = "config"
@@ -43,6 +43,14 @@ def load_functions(filename, names, **dependencies):
 
 
 class ModuleFallbackTests(unittest.TestCase):
+    def test_speedtest_loads_without_node_installation(self):
+        with patch.dict(sys.modules, {"node": None, "node.input_validation": None}):
+            subject = load_functions(
+                "speedtest.py", ["speedtest_handler", "get_speedtest_mode"],
+            )
+        self.assertEqual(subject.resolve_public_host("8.8.8.8"), "8.8.8.8")
+        self.assertIsNone(subject.resolve_public_host("127.0.0.1"))
+
     def test_changed_modules_have_no_silent_broad_exception_handlers(self):
         filenames = (
             "backups.py", "client_alerts.py", "nodes.py", "notifications.py",
@@ -116,6 +124,42 @@ class ModuleFallbackTests(unittest.TestCase):
 
 
 class ModuleAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_agent_handler_starts_selected_speedtest_without_node_installation(self):
+        for mode in ("OOKLA", "IPERF3"):
+            with self.subTest(mode=mode), patch.dict(
+                sys.modules, {"node": None, "node.input_validation": None},
+            ):
+                ookla = AsyncMock(return_value="Speedtest results")
+                iperf = AsyncMock()
+                message = SimpleNamespace(
+                    from_user=SimpleNamespace(id=1),
+                    chat=SimpleNamespace(id=2),
+                    bot=SimpleNamespace(edit_message_text=AsyncMock()),
+                    answer=AsyncMock(return_value=SimpleNamespace(message_id=3)),
+                )
+                subject = load_functions(
+                    "speedtest.py", ["speedtest_handler"],
+                    get_user_lang=lambda user_id: "en",
+                    is_allowed=lambda *args: True,
+                    delete_previous_message=AsyncMock(),
+                    get_speedtest_mode=lambda: mode,
+                    run_ookla_speedtest=ookla,
+                    speedtest_iperf3_handler=iperf,
+                    LAST_MESSAGE_IDS={},
+                    _=lambda key, lang: key,
+                )
+                await subject.speedtest_handler(message)
+                if mode == "OOKLA":
+                    ookla.assert_awaited_once_with(message.bot, 2, 3, "en")
+                    iperf.assert_not_awaited()
+                    message.bot.edit_message_text.assert_awaited_once_with(
+                        "Speedtest results", chat_id=2, message_id=3,
+                        parse_mode="HTML", disable_web_page_preview=True,
+                    )
+                else:
+                    iperf.assert_awaited_once_with(message)
+                    ookla.assert_not_awaited()
+
     async def test_ping_uses_only_pinned_public_targets(self):
         for resolved in (None, "8.8.8.8"):
             with self.subTest(resolved=resolved):

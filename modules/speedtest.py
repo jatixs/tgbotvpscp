@@ -22,7 +22,7 @@ from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import escape_html
-from node.input_validation import is_valid_iperf_server, resolve_public_host
+from network_validation import is_valid_iperf_server, resolve_public_host
 
 BUTTON_KEY = "btn_speedtest"
 SERVER_LIST_URL = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
