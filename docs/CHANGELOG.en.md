@@ -13,32 +13,31 @@
 ## [1.27.0] - 2026-10-22
 
 ### 🚀 New Features
-* **Telegram Login via OpenID Connect (OIDC).** Upgraded web panel authentication to the latest Telegram Login standard (`oauth.telegram.org/js/telegram-login.js?6`). Implemented cryptographically secure Telegram ID Token verification (JWT RS256 via Telegram JWKS) with backward compatibility for legacy bot token auth. Added `TG_CLIENT_ID` and `TG_CLIENT_SECRET` configuration prompts in deploy scripts.
-* **Web Push Notifications for Browsers and PWA.** Implemented a comprehensive background Web Push notification system (VAPID / RFC 8291 aes128gcm + Service Worker) for the web panel and PWA on smartphones (Android, iOS 16.4+ PWA) and desktop. Notifications arrive even when the browser or app is closed, seamlessly sync with user alert preferences (CPU/RAM/disk thresholds, SSH logins, Fail2ban bans, node status), and include an instant toggle, test notification button, and revoke subscriptions across all devices in Settings.
-* **One-Click IP Copying.** Quickly copy server IP addresses across the dashboard, server cards, nodes monitor, settings, and VNC dialogs with smooth animated feedback (icon smoothly switches to a green checkmark).
-* **Touch-Friendly Mobile Experience.** On smartphones and tablets, simply tap the dotted IP address text to copy it instantly to your clipboard.
+* **One-Click Telegram Sign-In (OIDC).** Switched the web panel to the modern and secure Telegram Login widget. Sign-ins are instant, smooth, and cryptographically verified directly by Telegram.
+* **Web Push Notifications on Mobile & Desktop.** The dashboard can now deliver background push notifications to smartphones (Android & iOS) and computers even when the browser or PWA is closed. Alerts for high server load, downtime, and SSH logins arrive in real time. Settings include an instant test alert and one-click subscription management.
+* **Instant IP Copying.** Quickly copy server IP addresses across any section of the panel with a single click. A clean animated checkmark confirms when the address is copied to your clipboard.
+* **Effortless Mobile Experience.** On smartphones, you no longer need to aim at tiny buttons — simply tap the dotted IP text anywhere on screen to copy it.
 
 ### ✨ Improved
-* **Deploy Scripts Localization & Feature Parity.** Fully localized `deploy.sh` into natural Russian (spinners, prompts, errors), cleaned up `deploy_en.sh` prompts (`(optional)` instead of `(opt)`), synchronized menu items for custom modules / SHA-256 integrity audits, and aligned node geolocation speedtest selection.
-* **Configurable Default Language.** `DEFAULT_LANGUAGE` (`ru`/`en`) is now configurable via `.env` and set automatically by the respective installer.
-* **Cleaner Resource Charts.** The timeline on agent graphs is now evenly spaced without awkward trailing whitespace, and 45°-angled time labels are easy to read on both mobile and desktop screens.
-* **Clear Password Visibility Toggle.** Replaced the cluttered strikethrough eye icon with an intuitive closed-eyelids symbol for clear visual feedback.
-* **Snappier Web Terminal Loading.** Terminal styles and scripts are now split into dedicated static files with automatic cache busting on updates.
-* **Compact Screen Layout.** The chart range dropdown opens neatly centered over its button, and network badges adapt fluidly to narrow displays.
-* **Responsive Web Push Action Buttons.** In the Settings tab, action buttons for push notifications (test, subscribe, revoke) now adapt dynamically: neatly aligned in a single row on desktop and tablet viewports, and stacked vertically with generous touch targets on smartphones to prevent text truncation on narrow displays.
+* **Friendly and Clear Installation Scripts.** Cleaned up all messages, prompts, and spinners in `deploy.sh` and `deploy_en.sh` into natural language with helpful step-by-step guidance.
+* **Out-of-the-Box Language Preference.** Default panel language (`ru` or `en`) is now configured directly via `.env` and automatically selected by your installer.
+* **Readable Resource Charts.** Graph timelines are now evenly spaced without empty gaps on the right, and angled timestamps are crisp and easy to read on any device.
+* **Responsive Action Buttons.** In Settings, notification action buttons neatly align in a row on desktops and tablets, and stack into comfortable touch targets on mobile screens.
+* **Intuitive Password Visibility Icon.** Replaced confusing eye icons with clear closed-eyelid symbols that instantly convey hidden password fields.
+* **Faster Terminal Response.** Web console scripts and styles load faster and automatically refresh on new panel updates.
 
 ### 🐛 Fixed
-* **Web Terminal & VNC Connectivity.** Resolved an issue that prevented the terminal console and quick VNC dialog from launching properly.
-* **Encrypted SSH Key Login.** Passphrase dialogs now open reliably when connecting with protected private keys, including full support for modern OpenSSH keys.
-* **Mobile Text Wrapping.** Fixed layout issues on narrow screens (down to 320px) where long IP addresses could get clipped or wrap awkwardly.
+* **Fixed Login Loop with Telegram Widget.** Resolved an issue where successfully signing in via Telegram could reload and return back to the login page.
+* **Smooth Web Terminal & VNC Launch.** Fixed an issue where the web console or VNC quick-connect dialog could hang on first opening.
+* **Protected SSH Key Connections.** The passphrase prompt now appears reliably, allowing encrypted modern OpenSSH keys to connect without errors.
+* **Compact Screen Layout.** Long server names and IP addresses wrap cleanly on small screens (down to 320px) without overflowing cards.
 
 ### 🔒 Security
-* **Encrypted Credential Storage.** All saved terminal passwords, private keys, and passphrases are now securely encrypted at rest on the server using Fernet (AES-128).
-* **Zero Browser Leakage.** The server never sends raw private keys or passwords back to the client (displaying safe placeholders instead), and unchecking "Remember" immediately purges saved credentials from the server.
-* **CodeQL, Bandit & Codacy Hardening.** Hardened subprocess execution in system integrity auditing (`integrity.py`), eliminated potential command injection vectors, and resolved static analysis warnings across streaming and management modules.
-* **XSS Remediation & Safe DOM Manipulation.** Dynamic UI assignments (`chart_range.js`, `reset_password.js`, modals and notifications in `common.js`) refactored to use safe direct DOM node APIs (`createElement`, `replaceChildren`) alongside `DOMPurify` sanitization. Notification body extraction refactored to native browser `DOMParser` instead of error-prone multi-character regex.
-* **Vulnerable Dependency Upgrades.** Bumped `Pillow` to `13.0.0` (resolving 20+ CVEs across DoS, Out-of-bounds read, and Memory disclosure) and `setuptools` to `>=84.1.0` (mitigating Windows path escape vulnerability `GHSA-xmj3-9gf7-h52w`). Upgraded CI workflows and official Dockerfile to Python 3.11 for full runtime compatibility.
-* **Session Cookie Hardening.** Explicitly set `Path=/` and `SameSite=Lax` for session and CSRF cookies, fixing loop redirects to `/login` after Telegram widget authorization and ensuring safe cross-origin navigations from `oauth.telegram.org`. Added `Cache-Control: no-store` headers to prevent caching of login forms.
+* **XSS Remediation & Safe DOM Rendering.** Dynamic dialogs, notification cards, and graphs now use safe direct DOM APIs without vulnerable `innerHTML` constructs.
+* **Upgraded Vulnerable Libraries.** Updated `Pillow` to version `13.0.0` (closing 20+ memory disclosure and buffer overflow CVEs) and `setuptools` to `>=84.1.0`. Upgraded build images and CI environments to Python 3.11.
+* **Session Cookie Hardening.** Session and CSRF cookies now carry strict `Path=/` and `SameSite=Lax` flags, preventing session hijacking and ensuring reliable cross-site authentication from Telegram.
+* **Encrypted Credential Storage.** All saved terminal credentials, keys, and passphrases are encrypted at rest with Fernet (AES-128). Passwords are never sent back to the browser, and unchecking "Remember" immediately deletes them.
+* **Clean Logs & Security Audits.** Service log messages have been cleaned up to prevent technical secret leakage and eliminate static security scanner false positives.
 
 
 ## [1.26.1] - 2026-10-14
