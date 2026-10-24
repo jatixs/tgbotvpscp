@@ -3,7 +3,6 @@ import asyncio
 import importlib.util
 import json
 import re
-import subprocess
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -70,12 +69,13 @@ class ModuleFallbackTests(unittest.TestCase):
                     _SPEEDTEST_MODE_CACHE=None,
                     SPEEDTEST_MODE_FILE="mode",
                     os=SimpleNamespace(path=SimpleNamespace(exists=lambda path: True)),
-                    subprocess=SimpleNamespace(
-                        run=runner, SubprocessError=subprocess.SubprocessError,
-                    ),
                     shutil=SimpleNamespace(which=lambda name: installed),
                 )
-                with patch("builtins.open", side_effect=PermissionError("mode")), self.assertLogs(level="DEBUG"):
+                with (
+                    patch.object(subject.subprocess, "run", runner),
+                    patch("builtins.open", side_effect=PermissionError("mode")),
+                    self.assertLogs(level="DEBUG"),
+                ):
                     self.assertEqual(subject.get_speedtest_mode(), expected)
                 runner.assert_called_once_with(
                     ["speedtest", "--version"], capture_output=True, timeout=5,
@@ -88,9 +88,11 @@ class ModuleFallbackTests(unittest.TestCase):
             _SPEEDTEST_MODE_CACHE=None,
             SPEEDTEST_MODE_FILE="mode",
             os=SimpleNamespace(path=SimpleNamespace(exists=lambda path: True)),
-            subprocess=SimpleNamespace(run=runner),
         )
-        with patch("builtins.open", mock_open(read_data="ru\n")):
+        with (
+            patch.object(subject.subprocess, "run", runner),
+            patch("builtins.open", mock_open(read_data="ru\n")),
+        ):
             self.assertEqual(subject.get_speedtest_mode(), "IPERF3")
         runner.assert_not_called()
 
@@ -102,15 +104,15 @@ class ModuleFallbackTests(unittest.TestCase):
         subject = load_functions(
             "services.py", ["_validate_name", "get_systemd_status"],
             _VALID_NAME_RE=re.compile(r"^[a-zA-Z0-9._@/:-]+$"),
-            subprocess=SimpleNamespace(run=runner, PIPE=subprocess.PIPE),
         )
-        self.assertEqual(subject.get_systemd_status("nginx.service"), "running")
-        self.assertEqual(runner.call_args.args[0][-2:], ["--", "nginx.service"])
-        self.assertNotIn("shell", runner.call_args.kwargs)
-        runner.reset_mock()
-        with self.assertLogs(level="ERROR"):
-            self.assertEqual(subject.get_systemd_status("nginx; touch marker"), "error")
-        runner.assert_not_called()
+        with patch.object(subject.subprocess, "run", runner):
+            self.assertEqual(subject.get_systemd_status("nginx.service"), "running")
+            self.assertEqual(runner.call_args.args[0][-2:], ["--", "nginx.service"])
+            self.assertNotIn("shell", runner.call_args.kwargs)
+            runner.reset_mock()
+            with self.assertLogs(level="ERROR"):
+                self.assertEqual(subject.get_systemd_status("nginx; touch marker"), "error")
+            runner.assert_not_called()
 
 
 class ModuleAsyncTests(unittest.IsolatedAsyncioTestCase):
