@@ -787,59 +787,56 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Unlock Vibration API on first interaction
+    const unlockHaptics = () => {
+        try { if (navigator.vibrate) navigator.vibrate(0); } catch {}
+        document.body.removeEventListener('touchstart', unlockHaptics);
+        document.body.removeEventListener('click', unlockHaptics);
+    };
+    document.body.addEventListener('touchstart', unlockHaptics, { once: true, passive: true });
+    document.body.addEventListener('click', unlockHaptics, { once: true, passive: true });
+
+    window.playHaptic = function(pattern) {
+        if (!pattern) pattern = [10, 30, 10];
+        try {
+            if (navigator.vibrate && localStorage.getItem('haptics_enabled') !== 'false') {
+                navigator.vibrate(pattern);
+            }
+        } catch (_e) {}
+    };
+
     document.body.addEventListener('input', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
-            playHaptic(10, 'light');
+            playHaptic(5);
         }
     });
 
     document.body.addEventListener('change', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
             if (e.target.checked) {
-                playHaptic([15, 35, 15], 'medium'); 
+                playHaptic([10, 30, 10]); 
             } else {
-                playHaptic(12, 'light'); 
+                playHaptic(10); 
             }
         }
     });
 
-    // Tactile feedback on interactive button and action clicks
+    // Tactile feedback on interactive button clicks
     document.addEventListener('click', (e) => {
-        const btn = e.target.closest('button, [role="button"], .ip-copy-btn, .ip-copy-container, .btn, a.monitor-link-btn, .nav-tab-btn, [data-action]');
+        const btn = e.target.closest('button, [role="button"], .ip-copy-btn, .btn');
         if (btn && !btn.closest('#mHapticsCheckbox, .mHapticsCheckbox')) {
-            playHaptic(12, 'light');
+            playHaptic(10);
         }
     }, { passive: true });
 
     pageCache.set(window.location.href, document.documentElement.outerHTML);
 });
 
-// Haptic feedback engine (supports both HTML5 Vibration API and Telegram WebApp)
-function playHaptic(pattern = 15, type = 'light') {
-    try {
-        if (typeof localStorage !== 'undefined' && localStorage.getItem('haptics_enabled') === 'false') {
-            return;
-        }
-
-        // 1. Telegram WebApp HapticFeedback (for iOS & Android inside Telegram)
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-            const hf = window.Telegram.WebApp.HapticFeedback;
-            if (Array.isArray(pattern)) {
-                hf.notificationOccurred('success');
-            } else if (typeof type === 'string' && ['light', 'medium', 'heavy', 'rigid', 'soft'].includes(type)) {
-                hf.impactOccurred(type);
-            } else {
-                hf.impactOccurred('light');
-            }
-        }
-
-        // 2. Standard Web Vibration API (Android Chrome, PWA, Edge)
-        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-            navigator.vibrate(pattern);
-        }
-    } catch (_e) { }
+function playHaptic(pattern) {
+    if (window.playHaptic) {
+        window.playHaptic(pattern);
+    }
 }
-window.playHaptic = playHaptic;
 
 function initHapticsToggle() {
     updateHapticsUI();
@@ -847,11 +844,10 @@ function initHapticsToggle() {
 
 function toggleHaptics() {
     const currentState = localStorage.getItem('haptics_enabled') !== 'false';
-    const newState = !currentState;
-    localStorage.setItem('haptics_enabled', newState ? 'true' : 'false');
+    localStorage.setItem('haptics_enabled', currentState ? 'false' : 'true');
     updateHapticsUI();
-    if (newState) {
-        playHaptic([20, 45, 20], 'medium');
+    if (!currentState) {
+        if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
         const msgOn = (typeof I18N !== 'undefined' && I18N.web_haptics_on) ? I18N.web_haptics_on : "Haptics: ON";
         if (window.showToast) window.showToast(msgOn);
     } else {
@@ -1120,7 +1116,7 @@ function copyToken(el) {
 
 function copyTextToClipboard(text) {
     if (typeof playHaptic === 'function') {
-        playHaptic([15, 35, 15], 'medium');
+        playHaptic([10, 30, 10]);
     }
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(showCopyFeedback);
