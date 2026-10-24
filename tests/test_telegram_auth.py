@@ -195,6 +195,69 @@ class TelegramAuthTests(unittest.IsolatedAsyncioTestCase):
             result = await verify_telegram_id_token(tampered_token, expected_client_id="123456789")
             self.assertIsNone(result)
 
+    def test_login_template_hides_id_link_in_telegram_only_mode(self):
+        try:
+            from jinja2 import Environment, FileSystemLoader
+        except ImportError:
+            with open("core/templates/login.html", "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("{% if telegram_only_mode %}hidden{% endif %}", content)
+            self.assertIn("TELEGRAM_ONLY_MODE = {{ 'true' if telegram_only_mode else 'false' }};", content)
+            return
+
+        env = Environment(loader=FileSystemLoader("core/templates"))
+        template = env.get_template("login.html")
+
+        # When telegram_only_mode is True:
+        rendered_true = template.render(
+            current_lang="ru",
+            web_title="Title",
+            cache_ver="1",
+            pwa_version="1",
+            asset_ver="1",
+            i18n_json="{}",
+            bot_username="testbot",
+            tg_client_id="123456789",
+            telegram_only_mode=True,
+            web_key_js="",
+            web_toggle_perf_mode="",
+            web_toggle_a11y_mode="",
+            login_via_telegram_btn="Telegram",
+            login_or_id_link="Или войти по ID (Magic Link)",
+            login_telegram_id_label="ID",
+            login_or_tg_button="",
+            web_brand_name="Brand",
+            is_default_pass=False,
+            web_default_pass_alert="",
+        )
+        self.assertIn('id="switch-to-id-btn" onclick="toggleTelegramLoginMode(\'id\')" class="hidden', rendered_true)
+        self.assertIn('const TELEGRAM_ONLY_MODE = true;', rendered_true)
+
+        # When telegram_only_mode is False:
+        rendered_false = template.render(
+            current_lang="ru",
+            web_title="Title",
+            cache_ver="1",
+            pwa_version="1",
+            asset_ver="1",
+            i18n_json="{}",
+            bot_username="testbot",
+            tg_client_id="123456789",
+            telegram_only_mode=False,
+            web_key_js="",
+            web_toggle_perf_mode="",
+            web_toggle_a11y_mode="",
+            login_via_telegram_btn="Telegram",
+            login_or_id_link="Или войти по ID (Magic Link)",
+            login_telegram_id_label="ID",
+            login_or_tg_button="",
+            web_brand_name="Brand",
+            is_default_pass=False,
+            web_default_pass_alert="",
+        )
+        self.assertNotIn('id="switch-to-id-btn" onclick="toggleTelegramLoginMode(\'id\')" class="hidden', rendered_false)
+        self.assertIn('const TELEGRAM_ONLY_MODE = false;', rendered_false)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1356,6 +1356,9 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
     injection = f"{json.dumps(current_data)};\n        const I18N_ALL = {json.dumps(i18n_all)}"
     is_default_pass = web_auth.is_default_password_active(ADMIN_USER_ID)
 
+    security_settings = await current_config.get_bot_config("security_settings", {})
+    telegram_only_mode = bool(security_settings.get("telegram_only_mode", False))
+
     context = {
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
@@ -1366,6 +1369,7 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "error_block": "",
         "bot_username": web_auth.BOT_USERNAME_CACHE or "",
         "tg_client_id": current_config.get_telegram_client_id(),
+        "telegram_only_mode": telegram_only_mode,
         "web_version": CACHE_VER,
         "current_lang": lang,
         "i18n_json": injection,

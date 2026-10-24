@@ -67,6 +67,9 @@ async function onTelegramAuth(data) {
 window.onTelegramAuth = onTelegramAuth;
 
 function toggleTelegramLoginMode(mode) {
+    if (localStorage.getItem('telegram_only_mode') === '1' || (typeof TELEGRAM_ONLY_MODE !== 'undefined' && TELEGRAM_ONLY_MODE)) {
+        return;
+    }
     const container = document.getElementById('telegram-widget-container');
     const magicForm = document.getElementById('magic-link-form');
     if (!container || !magicForm) return;
@@ -425,6 +428,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const loginOrSeparator = document.getElementById('login-or-separator');
     const passwordLoginToggleBtn = document.getElementById('password-login-toggle-btn');
+    const switchToIdBtn = document.getElementById('switch-to-id-btn');
+    const switchToWidgetBtnContainer = document.getElementById('switch-to-widget-btn-container');
 
     const applyTelegramOnlyMode = (enabled) => {
         if (loginOrSeparator) {
@@ -432,6 +437,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (passwordLoginToggleBtn) {
             passwordLoginToggleBtn.classList.toggle('hidden', enabled);
+        }
+        if (switchToIdBtn) {
+            switchToIdBtn.classList.toggle('hidden', enabled);
+        }
+        if (switchToWidgetBtnContainer) {
+            switchToWidgetBtnContainer.classList.toggle('hidden', enabled);
+        }
+        if (enabled) {
+            const cont = document.getElementById('telegram-widget-container');
+            const mForm = document.getElementById('magic-link-form');
+            if (mForm) mForm.classList.add('hidden');
+            if (cont) cont.classList.remove('hidden');
         }
     };
 
@@ -539,8 +556,12 @@ document.addEventListener("DOMContentLoaded", () => {
         magicForm.classList.add('hidden');
     }
 
+    const serverTelegramOnly = (typeof TELEGRAM_ONLY_MODE !== 'undefined') ? Boolean(TELEGRAM_ONLY_MODE) : false;
     const storedMode = localStorage.getItem('telegram_only_mode');
-    if (storedMode === '1' || storedMode === '0') {
+    if (serverTelegramOnly) {
+        applyTelegramOnlyMode(true);
+        localStorage.setItem('telegram_only_mode', '1');
+    } else if (storedMode === '1' || storedMode === '0') {
         applyTelegramOnlyMode(storedMode === '1');
     }
 
