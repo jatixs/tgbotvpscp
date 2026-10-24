@@ -10,8 +10,8 @@ We strongly encourage all users to run the latest version of the bot to ensure s
 
 | Version  | Supported          | Note                       |
 | -------- | ------------------ | -------------------------- |
-| 1.25.x   | :white_check_mark: | Latest Stable Branch       |
-| < 1.25.x | :x:                | End of Life (Unsupported)  |
+| 1.27.x   | :white_check_mark: | Latest Stable Branch       |
+| < 1.27.x | :x:                | End of Life (Unsupported)  |
 
 ## Reporting a Vulnerability
 

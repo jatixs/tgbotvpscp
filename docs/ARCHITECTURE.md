@@ -106,6 +106,7 @@ core/
 │   ├── api_nodes.py        # API управления нодами
 │   ├── api_system.py       # API системных настроек
 │   ├── streaming.py        # Server-Sent Events (SSE)
+│   ├── webpush.py          # Web Push уведомления (VAPID / RFC 8291)
 │   └── views.py            # HTML-представления (Jinja2)
 ├── static/                 # CSS, JS, изображения
 │   ├── css/
@@ -128,7 +129,6 @@ core/
     ├── reset_password.html # Сброс пароля
     ├── settings.html       # Настройки
     └── terminal.html       # Веб-терминал SSH
-    └── terminal.html       # Web SSH terminal
 ```
 
 ---
@@ -140,6 +140,8 @@ core/
 - `TOKEN` — Токен Telegram бота
 - `ALERT_BOT_TOKEN` — Токен Gateway-бота (опционально)
 - `ADMIN_USER_ID` — ID главного администратора
+- `TG_CLIENT_ID` — Telegram OAuth Client ID для WebUI Login Widget (OIDC)
+- `TG_CLIENT_SECRET` — Telegram OAuth Client Secret для валидации OpenID Connect
 - `WEB_SERVER_HOST/PORT` — Настройки веб-сервера
 - `DEPLOY_MODE` — Режим установки (root/secure)
 - `DEFAULT_LANGUAGE` — Язык по умолчанию
@@ -406,11 +408,12 @@ STRINGS = {
 ```
 core/web/
 ├── app.py              # Инициализация, маршрутизация, lifecycle
-├── auth.py             # Аутентификация (пароль, magic link, Telegram widget)
+├── auth.py             # Аутентификация (OIDC, Telegram Widget, пароль, magic link)
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
 ├── api_nodes.py        # API на базе aiohttp для нод (heartbeat, CRUD, команды)
-├── api_system.py       # API на базе aiohttp для настроек, логов, пользователей
+├── api_system.py       # API на базе aiohttp для настроек, логов, пользователей, Web Push
 ├── streaming.py        # Server-Sent Events (5 потоков, включая историю графиков)
+├── webpush.py          # Модуль Web Push (RFC 8291 aes128gcm, VAPID, доставка)
 └── views.py            # HTML-страницы (Jinja2 рендеринг)
 ```
 
@@ -429,39 +432,55 @@ core/web/
 view_routes      → HTML-страницы
 auth_routes      → Аутентификация
 node_routes      → API нод
-system_routes    → Системные API
+system_routes    → Системные API (включая Web Push)
 streaming_routes → SSE потоки
 ```
 
 ---
 
 #### **auth.py** (web) — Аутентификация веб-панели
-**Назначение:** Множественные методы входа с разным TTL сессий
+**Назначение:** Множественные методы входа с разным TTL сессий и поддержка OpenID Connect
 
 **Методы аутентификации:**
 
 | Метод | TTL сессии | Кому доступен |
 |-------|-----------|---------------|
+| Telegram Login (OIDC) | 30 дней | Все пользователи бота |
+| Telegram Widget (legacy HMAC) | 30 дней | Все пользователи бота |
 | Пароль (Argon2) | 7 дней | Только главный админ |
 | Magic Link | 30 дней (сессия) / 5 мин (ссылка) | Все пользователи бота |
-| Telegram Widget | 30 дней | Все пользователи бота |
 
 **Эндпоинты:**
+- `POST /api/auth/telegram` — Авторизация через Telegram (OIDC ID-токен через JWT RS256 или обратная совместимость с HMAC)
+- `POST /api/auth/webapp` — Авторизация через Telegram WebApp
 - `POST /api/login/password` — Вход по паролю (только ADMIN)
 - `POST /api/login/request` — Запрос magic link (отправка в Telegram)
 - `GET /api/login/magic?token=...` — Активация magic link
-- `POST /api/auth/telegram` — Вход через Telegram Widget (HMAC validation)
 - `POST /api/logout` — Выход и удаление сессии
 - `POST /api/request_reset` — Запрос сброса пароля
 - `POST /api/reset_password` — Сброс пароля по токену
+- `GET /api/security/telegram_only_mode` — Текущее состояние режима Telegram-only
+- `POST /api/security/telegram_only_mode` — Включение/выключение режима Telegram-only
 
 **Защита:**
+- Валидация Telegram ID Token: загрузка и кэширование JWKS с `https://oauth.telegram.org/.well-known/jwks.json`, проверка RS256 подписи, issuer (`https://oauth.telegram.org`), audience (`TG_CLIENT_ID`) и времени жизни (exp).
+- Режим `telegram_only_mode`: скрывает форму ввода пароля и вход по ID, исключая вектор атак на перебор паролей.
 - Rate limiting: 5 попыток за 5 минут (по IP)
 - Constant-time comparison (Argon2)
-- HMAC validation для Telegram Widget
+- HMAC validation для Telegram Widget (при отсутствии Client Secret)
 - CSRF-токены на каждый запрос (TTL 1 час)
 
 ---
+
+#### **webpush.py** (web) — Web Push уведомления
+**Назначение:** Фоновые Push-уведомления для PWA и браузеров (RFC 8291, RFC 8292)
+
+**Функции:**
+- Управление ключами VAPID (генерация пары EC secp256r1, безопасное хранение в `webpush_vapid`)
+- Шифрование полезной нагрузки по стандарту `aes128gcm` с использованием HKDF
+- Асинхронная доставка push-сообщений в push-сервисы браузеров (Google FCM, Apple APNs, Mozilla Autopush)
+- Обработка устаревших подписок (HTTP 404 / 410 Gone) с автоматическим удалением из БД
+- Рассылка уведомлений по системным триггерам: превышение порогов CPU/RAM/Disk, недоступность серверов, входы по SSH, блокировки Fail2ban
 
 #### **middlewares.py** (web) — 3 слоя защиты
 **Назначение:** Безопасность на уровне HTTP-запросов

@@ -81,6 +81,7 @@
 
 ### 🛡️ Безопасность Enterprise-класса
 - **Web-защита** — заголовки безопасности, CSRF, ограничение частоты запросов и фильтрация подозрительных запросов
+- **Telegram Login (OIDC)** — беспарольная авторизация OpenID Connect через официальный виджет с валидацией JWT RS256 (JWKS Telegram) и поддержкой режима Telegram-only
 - **Защита от DDoS и перебора паролей (Rate Limiting & Brute-force)** 
 - **Журналирование аудита (Audit Logging)** — детальные логи всех событий
 - **Шифрование данных** — Fernet (AES-128) для паролей и SSH-ключей терминала + AES-256-CBC + Argon2 для паролей
@@ -177,7 +178,15 @@
 
 1. Получите токен бота в [@BotFather](https://t.me/BotFather)
 2. Узнайте свой Telegram ID через [@userinfobot](https://t.me/userinfobot)
-3. Убедитесь, что установлены `curl` и `git`:
+3. Настройте **Telegram Login Widget (OIDC)** в [@BotFather](https://t.me/BotFather) для входа в веб-панель:
+   - Отправьте команду `/mybots` и выберите вашего бота.
+   - Перейдите в **Bot Settings** ➔ **Login Widget** (или откройте веб-интерфейс BotFather через кнопку в меню).
+   - **Client ID**: числовой идентификатор вашего бота (совпадает с цифрами токена до двоеточия `:`, например `1234567890`).
+   - **Client Secret**: нажмите **Generate Secret** (или **View Secret**) в настройках Login Widget и скопируйте сгенерированный секретный ключ.
+   - В разделе **Allowed URLs** добавьте точный адрес страницы входа вашей панели:
+     `https://<ваш_домен_или_ip>/login` (например: `https://dashboard.example.com/login`), а также корень `https://<ваш_домен_или_ip>/`.
+     > ⚠️ **Важно:** Telegram OIDC строго проверяет `redirect_uri`. Если точный адрес со страницей `/login` не добавлен в Allowed URLs, при попытке входа Telegram вернет ошибку `redirect_uri required`.
+4. Убедитесь, что установлены `curl` и `git`:
    ```bash
    sudo apt update && sudo apt install -y curl git
    ```
@@ -208,6 +217,23 @@ Managed TLS принимает домен или глобальный публи
 ### 🔑 Доступ к WebUI
 
 Открывайте HTTPS origin, указанный при установке, например `https://panel.example.com/`. Установщик создает случайный initial password и показывает его в конце установки; общего пароля `admin` нет. Сменить пароль можно командой `sudo tgcp-bot webpass`.
+
+#### 📲 Вход через Telegram (Telegram Login / OIDC)
+Веб-панель поддерживает авторизацию в один клик через официальный виджет Telegram Login (OIDC):
+- **Client ID** и **Client Secret** запрашиваются при установке/обновлении скриптом `deploy.sh` или настраиваются вручную в файле `.env` (`TG_CLIENT_ID` и `TG_CLIENT_SECRET`).
+- Если `TG_CLIENT_SECRET` не задан, используется обратная совместимость со старым алгоритмом проверки хеша через токен бота.
+- При включённом режиме **Telegram-only** (`telegram_only_mode`) форма ввода пароля и вход по одноразовым ссылкам скрываются, обеспечивая максимальный уровень безопасности.
+
+##### 📋 Пошаговое получение Client ID и Client Secret в @BotFather:
+1. Откройте [@BotFather](https://t.me/BotFather) в Telegram и отправьте команду `/mybots`.
+2. Выберите вашего бота для панели.
+3. Перейдите в **Bot Settings** ➔ **Login Widget**.
+4. **Client ID**: это числовой ID вашего бота. Он виден в окне Login Widget, а также совпадает с числовой частью вашего токена бота до двоеточия `:` (например, если токен `1234567890:AAFn...`, то Client ID равен `1234567890`).
+5. **Client Secret**: нажмите **Generate Secret** (или **View/Reset Secret**) в меню Login Widget. Скопируйте полученную строку секрета.
+6. **Allowed URLs (Разрешённые URL)**: нажмите **Allowed URLs** (или **Link Domain**) и укажите:
+   - `https://<домен_панели>/login` (например: `https://dashboard.example.com/login`)
+   - `https://<домен_панели>/`
+   *(Если URL со страницей `/login` не указан, при входе Telegram вернёт ошибку `redirect_uri required`)*.
 
 Agent routes: `GET /api/agent/https` публикует HTTPS origin без токена; `GET /api/node/bootstrap` принимает token через `X-Node-Token`; `POST /api/heartbeat` принимает HMAC-подписанный heartbeat.
 
@@ -305,6 +331,14 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 - `GET /api/services/info/{name}` — информация о сервисе
 - `POST /api/services/{action}` — действие над сервисом (`start|stop|restart`)
 - `POST /api/services/manage` — добавить или удалить сервис из мониторинга
+
+**Web Push API:**
+- `GET /api/push/vapid-key` — получение публичного VAPID-ключа для браузера
+- `GET /api/push/status` — статус активности и количество подписок пользователя
+- `POST /api/push/subscribe` — сохранение подписки браузера на Web Push (endpoint, p256dh, auth)
+- `POST /api/push/unsubscribe` — отписка текущего браузера
+- `POST /api/push/revoke-all` — отзыв всех Web Push подписок пользователя на всех устройствах
+- `POST /api/push/test` — отправка тестового Push-уведомления
 
 **Streaming / Internal API:**
 - `GET /api/events` — основной SSE поток dashboard

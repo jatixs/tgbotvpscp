@@ -13,15 +13,19 @@
 ## [1.27.0] - 2026-10-22
 
 ### 🚀 New Features
+* **Telegram Login via OpenID Connect (OIDC).** Upgraded web panel authentication to the latest Telegram Login standard (`oauth.telegram.org/js/telegram-login.js?6`). Implemented cryptographically secure Telegram ID Token verification (JWT RS256 via Telegram JWKS) with backward compatibility for legacy bot token auth. Added `TG_CLIENT_ID` and `TG_CLIENT_SECRET` configuration prompts in deploy scripts.
 * **Web Push Notifications for Browsers and PWA.** Implemented a comprehensive background Web Push notification system (VAPID / RFC 8291 aes128gcm + Service Worker) for the web panel and PWA on smartphones (Android, iOS 16.4+ PWA) and desktop. Notifications arrive even when the browser or app is closed, seamlessly sync with user alert preferences (CPU/RAM/disk thresholds, SSH logins, Fail2ban bans, node status), and include an instant toggle, test notification button, and revoke subscriptions across all devices in Settings.
 * **One-Click IP Copying.** Quickly copy server IP addresses across the dashboard, server cards, nodes monitor, settings, and VNC dialogs with smooth animated feedback (icon smoothly switches to a green checkmark).
 * **Touch-Friendly Mobile Experience.** On smartphones and tablets, simply tap the dotted IP address text to copy it instantly to your clipboard.
 
 ### ✨ Improved
+* **Deploy Scripts Localization & Feature Parity.** Fully localized `deploy.sh` into natural Russian (spinners, prompts, errors), cleaned up `deploy_en.sh` prompts (`(optional)` instead of `(opt)`), synchronized menu items for custom modules / SHA-256 integrity audits, and aligned node geolocation speedtest selection.
+* **Configurable Default Language.** `DEFAULT_LANGUAGE` (`ru`/`en`) is now configurable via `.env` and set automatically by the respective installer.
 * **Cleaner Resource Charts.** The timeline on agent graphs is now evenly spaced without awkward trailing whitespace, and 45°-angled time labels are easy to read on both mobile and desktop screens.
 * **Clear Password Visibility Toggle.** Replaced the cluttered strikethrough eye icon with an intuitive closed-eyelids symbol for clear visual feedback.
 * **Snappier Web Terminal Loading.** Terminal styles and scripts are now split into dedicated static files with automatic cache busting on updates.
 * **Compact Screen Layout.** The chart range dropdown opens neatly centered over its button, and network badges adapt fluidly to narrow displays.
+* **Responsive Web Push Action Buttons.** In the Settings tab, action buttons for push notifications (test, subscribe, revoke) now adapt dynamically: neatly aligned in a single row on desktop and tablet viewports, and stacked vertically with generous touch targets on smartphones to prevent text truncation on narrow displays.
 
 ### 🐛 Fixed
 * **Web Terminal & VNC Connectivity.** Resolved an issue that prevented the terminal console and quick VNC dialog from launching properly.
@@ -31,6 +35,7 @@
 ### 🔒 Security
 * **Encrypted Credential Storage.** All saved terminal passwords, private keys, and passphrases are now securely encrypted at rest on the server using Fernet (AES-128).
 * **Zero Browser Leakage.** The server never sends raw private keys or passwords back to the client (displaying safe placeholders instead), and unchecking "Remember" immediately purges saved credentials from the server.
+* **CodeQL & Bandit Hardening.** Hardened subprocess execution in system integrity auditing (`integrity.py`), eliminated potential command injection vectors, and resolved static analysis warnings across streaming and management modules.
 
 
 ## [1.26.1] - 2026-10-14
