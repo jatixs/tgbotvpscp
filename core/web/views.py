@@ -1383,6 +1383,8 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
 
     template = JINJA_ENV.get_template("login.html")
     response = web.Response(text=template.render(**context), content_type="text/html")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
     if hasattr(web_auth, "_set_csrf_cookie"):
         web_auth._set_csrf_cookie(response, request)
     return response

@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.asymmetric import (
     rsa,
     utils as crypto_utils,
 )
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .. import config as current_config
 from ..auth import save_users_async
@@ -92,8 +93,10 @@ def _get_public_base_url() -> str | None:
 
 
 def _is_secure_request(request: web.Request) -> bool:
-    return request.scheme == "https" or bool(
-        _get_public_base_url() and urlsplit(WEB_PUBLIC_URL).scheme == "https"
+    return (
+        request.scheme == "https"
+        or request.headers.get("X-Forwarded-Proto") == "https"
+        or bool(_get_public_base_url() and urlsplit(WEB_PUBLIC_URL).scheme == "https")
     )
 
 
@@ -355,37 +358,37 @@ async def verify_telegram_id_token(
             pub_key = ed25519.Ed25519PublicKey.from_public_bytes(x_bytes)
             pub_key.verify(signature_bytes, signing_input)
         else:
-            logging.warning("Unsupported Telegram ID token algorithm: %s (%s)", alg, key_data.get("kty"))
+            logging.warning("Unsupported Telegram auth algorithm: %s (%s)", alg, key_data.get("kty"))
             return None
 
         payload_bytes = _b64url_decode(parts[1])
         claims = json.loads(payload_bytes.decode("utf-8"))
 
         if claims.get("iss") != "https://oauth.telegram.org":
-            logging.warning("Invalid Telegram ID token issuer: %s", claims.get("iss"))
+            logging.warning("Invalid Telegram auth issuer: %s", claims.get("iss"))
             return None
 
         client_id_to_check = expected_client_id or current_config.get_telegram_client_id()
         if client_id_to_check:
             claim_aud = str(claims.get("aud", ""))
             if claim_aud != str(client_id_to_check):
-                logging.warning("Telegram ID token audience mismatch: %s != %s", claim_aud, client_id_to_check)
+                logging.warning("Telegram auth audience mismatch: %s != %s", claim_aud, client_id_to_check)
                 return None
 
         now = time.time()
         exp = claims.get("exp", 0)
         if now > exp + 60:
-            logging.warning("Telegram ID token expired (exp: %s, now: %s)", exp, now)
+            logging.warning("Telegram auth claims expired (exp: %s, now: %s)", exp, now)
             return None
 
         iat = claims.get("iat", 0)
         if iat > now + 60:
-            logging.warning("Telegram ID token issued in the future (iat: %s, now: %s)", iat, now)
+            logging.warning("Telegram auth claims issued in the future (iat: %s, now: %s)", iat, now)
             return None
 
         return claims
     except Exception as exc:
-        logging.warning("Failed to verify Telegram ID token: %s", exc)
+        logging.warning("Failed to verify Telegram auth credentials: %s", exc)
         return None
 
 
@@ -464,9 +467,10 @@ def _set_csrf_cookie(
         CSRF_TOKEN_COOKIE,
         token,
         max_age=CSRF_TOKEN_TTL,
+        path="/",
         secure=is_secure,
         httponly=False,
-        samesite="Strict" if is_secure else "Lax",
+        samesite="Lax",
     )
     response.headers["X-CSRF-Token"] = token
     return token
@@ -510,9 +514,10 @@ def _set_session_cookie(
         COOKIE_NAME,
         session_token,
         max_age=max_age,
+        path="/",
         httponly=True,
         secure=is_secure,
-        samesite="Strict" if is_secure else "Lax",
+        samesite="Lax",
     )
 
 
@@ -740,8 +745,8 @@ async def handle_logout(request: web.Request) -> web.StreamResponse:
 
     is_secure = _is_secure_request(request)
     response = web.HTTPFound("/login")
-    response.del_cookie(COOKIE_NAME, secure=is_secure, httponly=True, samesite="Strict" if is_secure else "Lax")
-    response.del_cookie(CSRF_TOKEN_COOKIE, secure=is_secure, samesite="Strict" if is_secure else "Lax")
+    response.del_cookie(COOKIE_NAME, path="/", secure=is_secure, httponly=True, samesite="Lax")
+    response.del_cookie(CSRF_TOKEN_COOKIE, path="/", secure=is_secure, samesite="Lax")
     return response
 
 

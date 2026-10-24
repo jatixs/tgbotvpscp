@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import json
 import os
@@ -197,7 +196,7 @@ class TelegramAuthTests(unittest.IsolatedAsyncioTestCase):
 
     def test_login_template_hides_id_link_in_telegram_only_mode(self):
         try:
-            from jinja2 import Environment, FileSystemLoader
+            from jinja2 import Environment, FileSystemLoader, select_autoescape
         except ImportError:
             with open("core/templates/login.html", "r", encoding="utf-8") as f:
                 content = f.read()
@@ -205,7 +204,10 @@ class TelegramAuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("TELEGRAM_ONLY_MODE = {{ 'true' if telegram_only_mode else 'false' }};", content)
             return
 
-        env = Environment(loader=FileSystemLoader("core/templates"))
+        env = Environment(
+            loader=FileSystemLoader("core/templates"),
+            autoescape=select_autoescape(["html", "xml"]),
+        )
         template = env.get_template("login.html")
 
         # When telegram_only_mode is True:
@@ -257,6 +259,36 @@ class TelegramAuthTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn('id="switch-to-id-btn" onclick="toggleTelegramLoginMode(\'id\')" class="hidden', rendered_false)
         self.assertIn('const TELEGRAM_ONLY_MODE = false;', rendered_false)
+
+    def test_cookie_path_and_samesite(self):
+        from core.web.auth import _set_session_cookie, _set_csrf_cookie, COOKIE_NAME, CSRF_TOKEN_COOKIE
+
+        mock_resp = MagicMock()
+        mock_req = MagicMock()
+        mock_req.scheme = "https"
+        mock_req.headers = {}
+
+        _set_session_cookie(mock_resp, request=mock_req, session_token="test_tok", max_age=3600)
+        mock_resp.set_cookie.assert_called_with(
+            COOKIE_NAME,
+            "test_tok",
+            max_age=3600,
+            path="/",
+            httponly=True,
+            secure=True,
+            samesite="Lax",
+        )
+
+        _set_csrf_cookie(mock_resp, mock_req, token="test_csrf")
+        mock_resp.set_cookie.assert_called_with(
+            CSRF_TOKEN_COOKIE,
+            "test_csrf",
+            max_age=3600,
+            path="/",
+            secure=True,
+            httponly=False,
+            samesite="Lax",
+        )
 
 
 if __name__ == "__main__":

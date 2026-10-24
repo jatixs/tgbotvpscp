@@ -34,7 +34,7 @@ async function onTelegramAuth(data) {
         });
         
         if (response.ok) {
-            window.location.reload();
+            window.location.replace('/');
         } else {
             const d = await response.json();
             const userObj = (data && data.user) ? data.user : (data || {});
@@ -411,7 +411,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }).then(res => res.json().then(data => ({ status: res.status, ok: res.ok, body: data })))
           .then(res => {
             if (res.ok) {
-                window.location.reload();
+                window.location.replace('/');
             } else {
                 const failMsg = (typeof I18N !== 'undefined' && I18N.login_webapp_auth_failed) ? I18N.login_webapp_auth_failed : "Web App auth failed";
                 throw new Error(res.body.error || failMsg);
