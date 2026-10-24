@@ -173,11 +173,6 @@ function setLoginLanguage(lang) {
 }
 window.setLoginLanguage = setLoginLanguage;
 
-function toggleLoginLanguage(checkbox) {
-    const lang = checkbox.checked ? 'en' : 'ru';
-    setLoginLanguage(lang);
-}
-
 // --- UI Logic: Modals ---
 function openSupportModal() {
     const modal = document.getElementById('support-modal');
@@ -208,7 +203,7 @@ function toggleForms(target) {
     const errorBlock = document.getElementById('reset-error-block');
     const backArrow = document.getElementById('back-arrow');
 
-    [magic, password, reset, setPass].forEach(el => el?.classList.add('hidden'));
+    [magic, password, reset, setPass].forEach(el => { el?.classList.add('hidden'); });
     if (errorBlock) errorBlock.classList.add('hidden');
 
     const show = (el) => {

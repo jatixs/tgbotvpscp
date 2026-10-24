@@ -2502,7 +2502,7 @@ document.addEventListener('app:action:revoke-session', e => {
 document.addEventListener('app:change:trigger-auto-save', e => {
     triggerAutoSave(e.detail.target.getAttribute('data-view'));
 });
-document.addEventListener('app:change:trigger-keyboard-save', e => {
+document.addEventListener('app:change:trigger-keyboard-save', () => {
     triggerKeyboardSave();
 });
 

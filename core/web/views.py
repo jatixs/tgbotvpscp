@@ -375,34 +375,6 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
 
     clean_version = APP_VERSION.lstrip("v")
     display_version = f"v{clean_version}"
-    users_json = "null"
-    nodes_json = "null"
-    if is_admin:
-        ulist = [
-            {
-                "id": uid,
-                "name": shared_state.USER_NAMES.get(str(uid), f"ID: {uid}"),
-                "role": (
-                    shared_state.ALLOWED_USERS[uid].get("group", "users")
-                    if isinstance(shared_state.ALLOWED_USERS[uid], dict)
-                    else shared_state.ALLOWED_USERS[uid]
-                ),
-            }
-            for uid in shared_state.ALLOWED_USERS
-            if uid != ADMIN_USER_ID
-        ]
-        nlist = [
-            {
-                "id": node["id"],
-                "name": node.get("name", "Unknown"),
-                "ip": encrypt_for_web(node.get("ip", "Unknown")),
-                "billing_amount": node.get("billing_amount"),
-                "currency": node.get("currency", "$"),
-                "next_payment_date": node.get("next_payment_date").isoformat() if hasattr(node.get("next_payment_date"), "isoformat") else str(node.get("next_payment_date")) if node.get("next_payment_date") else None,
-                "provider_name": node.get("provider_name", "Unknown")
-            }
-            for token, node in all_nodes.items()
-        ]
 
     vnc_nodes = [{"name": _("web_notif_global_group_agent", lang), "ip": _agent_ip()}]
     for node_token, node in all_nodes.items():

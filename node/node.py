@@ -390,7 +390,7 @@ def migrate_agent_to_https() -> bool:
             allow_redirects=False,
         )
         if verification.status_code != 200 or verification.json().get("status") != "ok":
-            logging.warning("HTTPS token verification failed (HTTP %s)", verification.status_code)
+            logging.warning("HTTPS endpoint verification failed (HTTP %s)", verification.status_code)
             return False
 
         upsert_env_value("AGENT_BASE_URL", https_base_url)

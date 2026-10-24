@@ -121,7 +121,7 @@ document.addEventListener('keydown', e => {
 
 // Security: Safe HTML helpers
 window.getSecureRandom = function() {
-    return window.crypto.getRandomValues(new Uint32Array(1))[0] / 4294967295;
+    return window.crypto.getRandomValues(new Uint32Array(1))[0] / 0xFFFFFFFF;
 }
 
 function escapeHtml(text) {
@@ -2369,7 +2369,8 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '', 
 
         const t = (typeof I18N !== 'undefined' && I18N['modal_title_' + type]) ? I18N['modal_title_' + type] : (title || 'Alert');
         document.getElementById('sysModalTitle').innerText = t;
-        document.getElementById('sysModalMessage').innerHTML = message ? String(message).replace(/\n/g, '<br>') : "";
+        const safeMsg = message ? escapeHtml(String(message)).replace(/\n/g, '<br>') : "";
+        document.getElementById('sysModalMessage').innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(safeMsg) : safeMsg;
 
         const input = document.getElementById('sysModalInput');
         const cancel = document.getElementById('sysModalCancel');
@@ -2526,7 +2527,7 @@ document.addEventListener('click', async (e) => {
 
                 try {
                     if (typeof parsePageEmojis === 'function') parsePageEmojis();
-                } catch (e) { }
+                } catch (_e) { }
                 initHolidayMood();
                 initGlobalLazyLoad();
                 initNodeModalScaling();
@@ -2543,7 +2544,7 @@ document.addEventListener('click', async (e) => {
                         else window.location.reload();
                     }
                     initNotifications();
-                } catch (e) {
+                } catch (_e) {
                     window.location.reload();
                 }
 

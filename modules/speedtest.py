@@ -491,7 +491,6 @@ async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str
                 ping_latency = data.get("ping", {}).get("latency", 0)
                 server_name = data.get("server", {}).get("name", "N/A")
                 server_location = data.get("server", {}).get("location", "N/A")
-                server_country = data.get("server", {}).get("country", "")
                 result_url = data.get("result", {}).get("url", "")
                 
                 return _(

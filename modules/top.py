@@ -40,29 +40,6 @@ async def top_handler(message: types.Message):
     if process.returncode == 0:
         raw_output = stdout.decode("utf-8", errors="ignore").strip()
         lines = raw_output.split('\n')
-        formatted_lines = []
-        
-        # Skip header line, process up to 10 lines
-        for line in lines[1:]:
-            parts = line.split(None, 10)
-            if len(parts) >= 11:
-                user, pid, cpu, mem, vsz, rss, tty, stat, start, time, command = parts
-                
-                # Format memory (VSZ and RSS are in KB)
-                try:
-                    vsz_mb = f"{int(vsz) / 1024:.1f}M"
-                    rss_mb = f"{int(rss) / 1024:.1f}M"
-                except ValueError:
-                    vsz_mb = vsz
-                    rss_mb = rss
-
-                # Keep command name short and clean
-                short_cmd = command.split()[0].split('/')[-1]
-                if len(short_cmd) > 15:
-                    short_cmd = short_cmd[:12] + "..."
-                    
-                line1 = f"🖥 <b>{escape_html(short_cmd)}</b> (<code>{pid}</code>)"
-                line2 = f"👤 <b>{user}</b> | ⏳ <b>{time}</b> | 🔄 <b>{stat}</b>"
         if not lines[1:]:
             output_str = "No processes found."
             response_text = _("top_header", lang, output=output_str)

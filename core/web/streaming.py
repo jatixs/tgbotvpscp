@@ -20,7 +20,6 @@ from ..i18n import get_user_lang, _
 from ..rbac import is_admin as _is_admin
 from ..utils import (
     decrypt_data,
-    decrypt_for_web,
     encrypt_data,
     encrypt_for_web,
     get_host_path,

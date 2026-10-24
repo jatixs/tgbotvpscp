@@ -136,13 +136,14 @@
         function buildButton() {
             if (!mount) return;
             mount.classList.add('chart-range');
-            mount.innerHTML = `
+            const btnHtml = `
                 <button type="button" class="chart-range-btn" aria-haspopup="listbox" aria-expanded="false" title="${t('web_chart_range_title', 'Chart period')}">
                     <span class="chart-range-live" aria-hidden="true"></span>
                     ${CLOCK_ICON}
                     <span class="chart-range-label"></span>
                     ${CHEVRON_ICON}
                 </button>`;
+            mount.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(btnHtml) : btnHtml;
             ctl.button = mount.querySelector('.chart-range-btn');
             ctl.button.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -164,7 +165,7 @@
                     chip.setAttribute('aria-selected', chip.dataset.range === ctl.range.key ? 'true' : 'false');
                 });
                 const foot = ctl.pop.querySelector('.chart-range-foot');
-                if (foot) foot.innerHTML = footHtml();
+            if (foot) foot.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(footHtml()) : footHtml();
             }
         }
 
@@ -187,7 +188,8 @@
                 ).join('');
                 return `<div class="chart-range-group"><span class="chart-range-group-label">${groupLabel(group)}</span><div class="chart-range-chips">${chips}</div></div>`;
             }).join('');
-            pop.innerHTML = `<div class="chart-range-pop-title">${t('web_chart_range_title', 'Chart period')}</div>${groups}<div class="chart-range-foot"></div>`;
+            const popHtml = `<div class="chart-range-pop-title">${t('web_chart_range_title', 'Chart period')}</div>${groups}<div class="chart-range-foot"></div>`;
+            pop.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(popHtml) : popHtml;
             pop.addEventListener('click', (e) => {
                 const chip = e.target.closest('.chart-range-chip');
                 if (!chip) return;

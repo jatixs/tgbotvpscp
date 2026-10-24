@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from aiogram import Bot, Dispatcher, F, types
+from aiogram import Dispatcher, F, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
 
 from core import config, shared_state
@@ -67,7 +67,6 @@ async def reboot_execute_handler(callback: types.CallbackQuery):
     if not is_allowed(user_id, "reboot"):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
-    bot: Bot = callback.bot
     await callback.message.edit_text(_("reboot_confirmed", lang), parse_mode="HTML")
     try:
         # Audit logging

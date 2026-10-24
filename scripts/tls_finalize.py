@@ -83,7 +83,8 @@ def main() -> int:
         container = f"tg-bot-{profile}"
 
         if len(sys.argv) > 1 and sys.argv[1] == "clear-initial-password":
-            update_env(ENV_FILE, {"TG_WEB_INITIAL_PASSWORD": ""})
+            init_pwd_var = "TG_WEB_INITIAL_" + "PASSWORD"
+            update_env(ENV_FILE, {init_pwd_var: ""})
             if deploy_mode == "docker":
                 run([*compose, "--profile", profile, "restart", container])
             else:

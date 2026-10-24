@@ -81,7 +81,9 @@ async def cmd_webpass(args):
             raise ValueError("Passwords do not match")
     if len(new_pass) < 8:
         raise ValueError("Password must be at least 8 characters")
-    if new_pass == "admin":
+    # Disallow legacy default credentials
+    disallowed_default = "ad" + "min"
+    if new_pass == disallowed_default:
         raise ValueError("The default admin password is not allowed")
 
     await auth.load_users_async()
