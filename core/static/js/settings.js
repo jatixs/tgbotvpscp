@@ -720,13 +720,13 @@ function renderUsers() {
                 </td>
             </tr>`;
         }).join('');
-        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>');
-        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
+        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>', { RETURN_DOM_FRAGMENT: true });
+        tbody.replaceChildren(...safeTable.querySelector('tbody').childNodes);
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
         const noUsers = (typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users";
-        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + noUsers + '</td></tr></tbody></table>');
-        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
+        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + noUsers + '</td></tr></tbody></table>', { RETURN_DOM_FRAGMENT: true });
+        tbody.replaceChildren(...safeTable.querySelector('tbody').childNodes);
     }
 }
 
@@ -849,12 +849,12 @@ function renderNodes() {
             </td>
         </tr>`;
         }).join('');
-        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>');
-        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
+        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>', { RETURN_DOM_FRAGMENT: true });
+        tbody.replaceChildren(...safeTable.querySelector('tbody').childNodes);
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
-        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + I18N.web_no_nodes + '</td></tr></tbody></table>');
-        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
+        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + I18N.web_no_nodes + '</td></tr></tbody></table>', { RETURN_DOM_FRAGMENT: true });
+        tbody.replaceChildren(...safeTable.querySelector('tbody').childNodes);
     }
 }
 window.startNodeRename = function (token) {

@@ -109,8 +109,8 @@ def format_time_watchdog(seconds: int, lang_id: int) -> str:
     try:
         from core.i18n import get_user_lang
         lang = get_user_lang(lang_id)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Could not resolve language for watchdog timing message: %s", exc)
         
     days = seconds // 86400
     hours = (seconds % 86400) // 3600

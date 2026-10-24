@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import secrets
 import socket
 import time
@@ -27,7 +28,7 @@ from ..rbac import is_root as _is_root
 from ..utils import encrypt_for_web, generate_favicons, get_app_version
 
 # Lazy import traffic_module when needed
-from . import auth as web_auth
+from .avatar import get_avatar_html as _get_avatar_html
 
 routes = web.RouteTableDef()
 
@@ -65,13 +66,6 @@ ASSET_VER: Final[str] = _compute_asset_version()
 JINJA_ENV.globals["asset_ver"] = ASSET_VER
 
 
-def _get_avatar_html(user: dict[str, Any]) -> str:
-    raw = str(user.get("photo_url", ""))
-    if raw.startswith("http"):
-        return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
-    return f'<span class="text-lg leading-none select-none">{raw}</span>'
-
-
 def _collect_raw_ipv4_addresses() -> list[str]:
     ips: list[str] = []
 
@@ -86,17 +80,19 @@ def _collect_raw_ipv4_addresses() -> list[str]:
                         ip = str(addr_info.get("addr", "")).strip()
                         if ip and ip != "127.0.0.1" and not ip.startswith("169.254.") and not ip.startswith("172.17.0.1"):
                             ips.append(ip)
-            except Exception:
+            except Exception as exc:
+                logging.debug("Could not collect interface addresses for %s: %s", iface, exc)
                 continue
-    except Exception:
+    except Exception as exc:
+        logging.debug("Could not enumerate network interfaces: %s", exc)
         try:
             hostname = socket.gethostname()
             for addr in socket.getaddrinfo(hostname, None, socket.AF_INET):
                 ip = str(addr[4][0]).strip()
                 if ip and ip != "127.0.0.1" and not ip.startswith("169.254."):
                     ips.append(ip)
-        except Exception:
-            pass
+        except OSError as fallback_exc:
+            logging.debug("Could not resolve local IPv4 addresses: %s", fallback_exc)
 
     return list(dict.fromkeys(ips))
 

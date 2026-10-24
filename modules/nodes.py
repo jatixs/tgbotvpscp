@@ -389,8 +389,8 @@ async def cq_node_page(callback: types.CallbackQuery):
     keyboard = get_node_management_keyboard(token, lang, user_id, is_globally_muted, page)
     try:
         await callback.message.edit_reply_markup(reply_markup=keyboard)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to refresh node management keyboard: %s", exc)
     await callback.answer()
 
 
@@ -439,8 +439,8 @@ async def cq_node_global_mute(callback: types.CallbackQuery):
     keyboard = get_node_management_keyboard(token, lang, user_id, is_globally_muted, page=2)
     try:
         await callback.message.edit_reply_markup(reply_markup=keyboard)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to update node mute keyboard: %s", exc)
     await callback.answer("Изменено")
 
 
@@ -898,8 +898,8 @@ async def node_speedtest_progress_task(bot: Bot):
                     )
                 except TelegramRetryAfter as e:
                     await asyncio.sleep(e.retry_after)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug("Unable to update node speedtest progress: %s", exc)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -1298,13 +1298,16 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
         await state.clear()
         return
         
-    try: await message.delete()
-    except Exception: pass
+    try:
+        await message.delete()
+    except Exception as exc:
+        logging.debug("Unable to delete billing input message: %s", exc)
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except Exception: pass
+        except Exception as exc:
+            logging.debug("Unable to delete billing prompt message: %s", exc)
 
     import asyncio
     try:
@@ -1314,7 +1317,8 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
         async def del_temp(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except Exception: pass
+            except Exception as exc:
+                logging.debug("Unable to delete temporary billing message: %s", exc)
         asyncio.create_task(del_temp(temp))
         return
     
@@ -1345,10 +1349,11 @@ async def process_billing_amount(message: types.Message, state: FSMContext):
                 async def remove_toast(cid, mid, txt, kb):
                     await asyncio.sleep(3)
                     try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                    except Exception: pass
+                    except Exception as exc:
+                        logging.debug("Unable to clear billing confirmation: %s", exc)
                 asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
-        except OperationalError:
-            pass
+        except OperationalError as exc:
+            logging.warning("Unable to save node billing amount: %s", exc)
     await state.clear()
 
 async def cq_billing_shift_date(callback: types.CallbackQuery, state: FSMContext):
@@ -1370,12 +1375,14 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
         return
         
     try: await message.delete()
-    except Exception: pass
+    except Exception as exc:
+        logging.debug("Unable to delete billing input message: %s", exc)
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except Exception: pass
+        except Exception as exc:
+            logging.debug("Unable to delete billing prompt message: %s", exc)
 
     import asyncio
     import datetime
@@ -1408,7 +1415,8 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
             async def del_temp(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except Exception: pass
+                except Exception as exc:
+                    logging.debug("Unable to delete temporary billing message: %s", exc)
             asyncio.create_task(del_temp(temp))
             return
 
@@ -1418,7 +1426,8 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
         async def del_temp_date(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except Exception: pass
+            except Exception as exc:
+                logging.debug("Unable to delete temporary billing message: %s", exc)
         asyncio.create_task(del_temp_date(temp))
         return
             
@@ -1437,7 +1446,8 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
                     async def del_temp_r(m):
                         await asyncio.sleep(3)
                         try: await m.delete()
-                        except Exception: pass
+                        except Exception as exc:
+                            logging.debug("Unable to delete temporary billing message: %s", exc)
                     asyncio.create_task(del_temp_r(temp))
                     await state.clear()
                     return
@@ -1463,10 +1473,11 @@ async def process_billing_date_shift(message: types.Message, state: FSMContext):
                 async def remove_toast(cid, mid, txt, kb):
                     await asyncio.sleep(3)
                     try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                    except Exception: pass
+                    except Exception as exc:
+                        logging.debug("Unable to clear billing confirmation: %s", exc)
                 asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
-        except OperationalError:
-            pass
+        except OperationalError as exc:
+            logging.warning("Unable to save node billing date: %s", exc)
     await state.clear()
 
 async def cq_billing_toggle_reminder(callback: types.CallbackQuery):
@@ -1520,8 +1531,8 @@ async def cq_master_billing_menu(callback: types.CallbackQuery):
     keyboard = get_master_billing_keyboard(master_billing, lang)
     try:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to refresh master billing menu: %s", exc)
     await callback.answer()
 
 
@@ -1539,12 +1550,14 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
     data = await state.get_data()
     
     try: await message.delete()
-    except Exception: pass
+    except Exception as exc:
+        logging.debug("Unable to delete billing input message: %s", exc)
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except Exception: pass
+        except Exception as exc:
+            logging.debug("Unable to delete billing prompt message: %s", exc)
 
     import asyncio
     try:
@@ -1554,7 +1567,8 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
         async def del_temp(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except Exception: pass
+            except Exception as exc:
+                logging.debug("Unable to delete temporary billing message: %s", exc)
         asyncio.create_task(del_temp(temp))
         return
     
@@ -1589,10 +1603,11 @@ async def process_master_billing_amount(message: types.Message, state: FSMContex
             async def remove_toast(cid, mid, txt, kb):
                 await asyncio.sleep(3)
                 try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                except Exception: pass
+                except Exception as exc:
+                    logging.debug("Unable to clear master billing confirmation: %s", exc)
             asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.debug("Unable to refresh master billing amount: %s", exc)
             
     await state.clear()
 
@@ -1610,12 +1625,14 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
     data = await state.get_data()
     
     try: await message.delete()
-    except Exception: pass
+    except Exception as exc:
+        logging.debug("Unable to delete billing input message: %s", exc)
     
     prompt_msg_id = data.get("prompt_msg_id")
     if prompt_msg_id:
         try: await message.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
-        except Exception: pass
+        except Exception as exc:
+            logging.debug("Unable to delete billing prompt message: %s", exc)
 
     import asyncio
     import datetime
@@ -1648,7 +1665,8 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def del_temp(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except Exception: pass
+                except Exception as exc:
+                    logging.debug("Unable to delete temporary billing message: %s", exc)
             asyncio.create_task(del_temp(temp))
             return
 
@@ -1658,7 +1676,8 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
         async def del_temp_date(m):
             await asyncio.sleep(3)
             try: await m.delete()
-            except Exception: pass
+            except Exception as exc:
+                logging.debug("Unable to delete temporary billing message: %s", exc)
         asyncio.create_task(del_temp_date(temp))
         return
     
@@ -1681,7 +1700,8 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def del_temp_r(m):
                 await asyncio.sleep(3)
                 try: await m.delete()
-                except Exception: pass
+                except Exception as exc:
+                    logging.debug("Unable to delete temporary billing message: %s", exc)
             asyncio.create_task(del_temp_r(temp))
             await state.clear()
             return
@@ -1709,10 +1729,11 @@ async def process_master_billing_date_shift(message: types.Message, state: FSMCo
             async def remove_toast(cid, mid, txt, kb):
                 await asyncio.sleep(3)
                 try: await message.bot.edit_message_text(txt, chat_id=cid, message_id=mid, reply_markup=kb, parse_mode="HTML")
-                except Exception: pass
+                except Exception as exc:
+                    logging.debug("Unable to clear master billing confirmation: %s", exc)
             asyncio.create_task(remove_toast(message.chat.id, menu_msg_id, clean_text, keyboard))
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.debug("Unable to refresh master billing date: %s", exc)
 
     await state.clear()
 

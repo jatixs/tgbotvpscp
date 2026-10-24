@@ -79,6 +79,8 @@ def main() -> int:
         _lines, config = read_env()
         deploy_mode = config.get("DEPLOY_MODE", "systemd")
         profile = config.get("COMPOSE_PROFILES") or config.get("INSTALL_MODE", "secure")
+        if deploy_mode == "docker" and profile not in {"secure", "root"}:
+            raise RuntimeError(f"Unsupported Docker Compose profile: {profile!r}")
         compose = compose_command() if deploy_mode == "docker" else None
         container = f"tg-bot-{profile}"
 

@@ -16,15 +16,20 @@ async def delete_previous_message(user_id: int, command, chat_id: int, bot: Bot)
     try:
         if not isinstance(command, list):
             command = [command]
-            
+
         user_msgs = LAST_MESSAGE_IDS.get(user_id, {})
         for cmd in command:
             msg_id = user_msgs.get(cmd)
             if msg_id:
                 try:
                     await bot.delete_message(chat_id=chat_id, message_id=msg_id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug(
+                        "Could not delete previous message %s for user %s: %s",
+                        msg_id,
+                        user_id,
+                        exc,
+                    )
                 user_msgs.pop(cmd, None)
     except Exception as e:
         logging.error(f"Error deleting previous messages: {e}")
@@ -98,7 +103,7 @@ async def send_alert(
                     web_text_default = web_text_default.format(**kwargs)
                 except Exception:
                     pass
-            
+
         if web_text_default or text_map:
             source = "node" if node_token else "agent"
             shared_state.WEB_NOTIFICATIONS.appendleft(
@@ -139,4 +144,3 @@ async def send_alert(
         )
     except Exception as exc:
         logging.error(f"Error initiating web push alert: {exc}")
-

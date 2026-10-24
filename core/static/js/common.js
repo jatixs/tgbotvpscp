@@ -142,7 +142,7 @@ function setSafeText(element, text) {
 
 function setSafeHTML(element, html) {
     if (!element) return;
-    element.innerHTML = DOMPurify.sanitize(html);  // Only use with trusted HTML
+    element.replaceChildren(DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true }));
 }
 
 // Crypto Utilities
@@ -198,7 +198,7 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
     
     if ((uniqueId && window._animatedDecryptions.has(uniqueId)) || 
         element.dataset.decryptedValue === finalHtml) {
-        element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+        setSafeHTML(element, finalHtml);
         if (uniqueId) window._animatedDecryptions.add(uniqueId);
         element.dataset.decryptedValue = finalHtml;
         return;
@@ -218,11 +218,11 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
     }
     
     const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+    setSafeHTML(tempDiv, finalHtml);
     const finalText = tempDiv.textContent || '';
     
     if (!finalText) {
-        element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+        setSafeHTML(element, finalHtml);
         return;
     }
     
@@ -246,7 +246,7 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
         if (iterations > maxIterations) {
             clearInterval(element.decryptionInterval);
             element.decryptionInterval = null;
-            element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+            setSafeHTML(element, finalHtml);
         }
     }, frameTime);
 };
@@ -297,6 +297,12 @@ function decryptApiResponse(dataObj) {
 }
 
 async function secureFetch(url, options = {}) {
+    const parsedUrl = new URL(url, window.location.origin);
+    if (parsedUrl.origin !== window.location.origin ||
+        !['http:', 'https:'].includes(parsedUrl.protocol) ||
+        parsedUrl.username || parsedUrl.password) {
+        throw new TypeError('secureFetch only supports same-origin HTTP requests without URL credentials.');
+    }
     let reqOptions = { ...options };
     if (reqOptions.method && reqOptions.method.toUpperCase() !== 'GET' && reqOptions.body) {
         try {
@@ -307,7 +313,6 @@ async function secureFetch(url, options = {}) {
         }
     }
     
-    const parsedUrl = new URL(url, window.location.origin);
     const response = await fetch(parsedUrl.toString(), reqOptions);
     const originalJson = response.json.bind(response);
     

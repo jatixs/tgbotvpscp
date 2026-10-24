@@ -95,20 +95,21 @@ def _collect_local_ips() -> list[str]:
                         ip = str(addr_info.get("addr", "")).strip()
                         if ip and not ip.startswith("169.254."):
                             ips.append(ip)
-            except Exception:
+            except Exception as exc:
+                logging.debug("Could not collect interface addresses for %s: %s", iface, exc)
                 continue
-    except Exception:
-        pass
-    try:
-        import socket
+    except Exception as exc:
+        logging.debug("Could not enumerate local network interfaces: %s", exc)
+        try:
+            import socket
 
-        hostname = socket.gethostname()
-        for addr in socket.getaddrinfo(hostname, None, socket.AF_INET):
-            ip = str(addr[4][0]).strip()
-            if ip and not ip.startswith("169.254."):
-                ips.append(ip)
-    except Exception:
-        pass
+            hostname = socket.gethostname()
+            for addr in socket.getaddrinfo(hostname, None, socket.AF_INET):
+                ip = str(addr[4][0]).strip()
+                if ip and not ip.startswith("169.254."):
+                    ips.append(ip)
+        except OSError as fallback_exc:
+            logging.debug("Could not resolve local IPv4 addresses: %s", fallback_exc)
     return list(dict.fromkeys(ips))
 
 
@@ -295,15 +296,15 @@ def _get_top_processes(metric: str) -> list[str]:
                             "used": usage.used,
                             "percent": usage.percent
                         })
-                    except Exception:
-                        pass
+                    except OSError as exc:
+                        logging.debug("Could not read disk usage for %s: %s", part.mountpoint, exc)
             
             if not disk_info:
                 try:
                     usage = psutil.disk_usage(get_host_path("/"))
                     disk_info.append({"name": "/", "used": usage.used, "percent": usage.percent})
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logging.debug("Could not read disk usage for host root: %s", exc)
 
             sorted_disks = sorted(disk_info, key=lambda d: d["used"], reverse=True)[:5]
             return [
@@ -1274,7 +1275,8 @@ async def handle_terminal_ws(request: web.Request) -> web.StreamResponse:
             if ws_msg.type == aiohttp.WSMsgType.TEXT:
                 try:
                     payload = json.loads(ws_msg.data)
-                except Exception:
+                except json.JSONDecodeError as exc:
+                    logging.debug("Ignoring malformed terminal websocket message: %s", exc)
                     continue
 
                 if payload.get("type") == "data":

@@ -550,8 +550,8 @@ def convert_vless_to_json(vless_link):
             if "extra" in params:
                 try:
                     xhttp_settings["extra"] = json.loads(params["extra"])
-                except Exception:
-                    pass
+                except (TypeError, json.JSONDecodeError) as exc:
+                    logging.warning("Ignoring invalid XHTTP extra settings: %s", exc)
             json_template["outbounds"][0]["streamSettings"]["xhttpSettings"] = xhttp_settings
         elif net_type == "ws":
             json_template["outbounds"][0]["streamSettings"]["wsSettings"] = {

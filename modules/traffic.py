@@ -170,8 +170,8 @@ async def traffic_handler(message: types.Message):
         if msg_id:
             try:
                 await message.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.debug("Unable to delete previous traffic monitor message: %s", exc)
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
     try:
@@ -309,7 +309,7 @@ async def reset_stats_handler(callback: types.CallbackQuery):
         files = glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json"))
         for f in files:
             os.remove(f)
-    except Exception:
-        pass
+    except OSError as exc:
+        logging.warning("Unable to remove old traffic backups after reset: %s", exc)
     
     await callback.answer(get_text("traffic_reset_done", get_user_lang(callback.from_user.id)))

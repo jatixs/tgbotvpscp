@@ -207,8 +207,12 @@ async def process_node_result_background(
                         reply_markup=stop_kb,
                         parse_mode="HTML",
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug(
+                        "Could not update final traffic-monitor message for user %s: %s",
+                        user_id,
+                        exc,
+                    )
                 return
 
         if cmd == "speedtest":

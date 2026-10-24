@@ -747,5 +747,5 @@ async def close_menu_handler(callback: types.CallbackQuery):
     await callback.answer()
     try:
         await callback.message.delete()
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to delete backup menu message: %s", exc)

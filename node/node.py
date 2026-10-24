@@ -24,8 +24,20 @@ import requests
 
 try:
     from .endpoint_migration import validate_https_migration_url
+    from .input_validation import (
+        is_valid_iperf_server,
+        is_valid_network_host,
+        parse_public_ip,
+        resolve_public_host,
+    )
 except ImportError:
     from endpoint_migration import validate_https_migration_url
+    from input_validation import (
+        is_valid_iperf_server,
+        is_valid_network_host,
+        parse_public_ip,
+        resolve_public_host,
+    )
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
@@ -168,36 +180,38 @@ def ensure_env_variables():
             with open(ENV_FILE, 'a', encoding='utf-8') as f:
                 f.write('\n' + '\n'.join(lines_to_add) + '\n')
             
-    except Exception:
-        pass  # Silent fail for env check
+    except OSError as exc:
+        logging.warning("Unable to ensure environment file %s: %s", ENV_FILE, exc)
 
 
 def get_server_country():
     """Detect server country code using external IP geolocation."""
-    try:
-        # Get external IP first
-        ip = None
-        for url in ["https://api.ipify.org", "https://ipinfo.io/ip", "https://ifconfig.me/ip"]:
-            try:
-                resp = requests.get(url, timeout=3)
-                if resp.status_code == 200:
-                    ip = resp.text.strip()
+    ip = None
+    for url in ("https://api.ipify.org", "https://ipinfo.io/ip", "https://ifconfig.me/ip"):
+        try:
+            response = requests.get(url, timeout=3)
+            if response.status_code == 200:
+                candidate_ip = parse_public_ip(response.text)
+                if candidate_ip is not None:
+                    ip = candidate_ip
                     break
-            except Exception:
-                continue
-        
-        if ip:
-            # Get country from IP
-            try:
-                # nosemgrep: python.requests.security.insecure-requests.insecure-requests
-                resp = requests.get(f"http://ip-api.com/json/{ip}?fields=countryCode", timeout=3)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return data.get("countryCode", "")
-            except Exception:
-                pass
-    except Exception:
-        pass
+                logging.debug("Ignoring non-public IP returned by %s", url)
+        except (requests.RequestException, ValueError) as exc:
+            logging.debug("Could not get public IP from %s: %s", url, exc)
+
+    if ip is not None:
+        try:
+            response = requests.get(
+                f"https://ipwho.is/{ip}?fields=success,country_code", timeout=3
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, dict) and data.get("success"):
+                    country_code = data.get("country_code", "")
+                    if isinstance(country_code, str) and re.fullmatch(r"[A-Za-z]{2}", country_code):
+                        return country_code.upper()
+        except (requests.RequestException, ValueError) as exc:
+            logging.debug("Could not resolve country for public IP: %s", exc)
     return ""
 
 
@@ -912,6 +926,7 @@ def get_system_stats():
         logging.error(f"Error gathering stats: {e}")
         return {}
 
+
 def get_public_iperf_server(exclude_ru=True):
     """Get best iperf3 server by measuring ping to multiple servers"""
     try:
@@ -924,25 +939,42 @@ def get_public_iperf_server(exclude_ru=True):
                 if response.status_code == 200:
                     data = yaml.safe_load(response.text)
                     servers = []
-                    for s in data:
+                    for s in data if isinstance(data, list) else []:
+                        if not isinstance(s, dict):
+                            continue
                         if "address" in s and "port" in s:
-                            port = int(str(s["port"]).split("-")[0].strip())
-                            servers.append({
+                            try:
+                                port = int(str(s["port"]).split("-")[0].strip())
+                            except (TypeError, ValueError):
+                                logging.debug("Ignoring iperf server with invalid port: %r", s.get("port"))
+                                continue
+                            server = {
                                 "IP/HOST": s["address"],
                                 "PORT": port,
                                 "SITE": s.get("City", "Unknown"),
                                 "COUNTRY": "RU",
                                 "provider": s.get("Name", "")
-                            })
+                            }
+                            if is_valid_iperf_server(server):
+                                servers.append(server)
                     if servers:
                         sample_size = min(15, len(servers))
                         test_servers = random.sample(servers, sample_size)
                         
                         best_server = None
                         best_ping = float('inf')
+                        resolved_servers = []
                         
                         for server in test_servers:
-                            host = server.get("IP/HOST")
+                            host = resolve_public_host(server.get("IP/HOST"))
+                            if host is None:
+                                logging.debug(
+                                    "Ignoring iperf server with non-public address: %r",
+                                    server.get("IP/HOST"),
+                                )
+                                continue
+                            server["_resolved_host"] = host
+                            resolved_servers.append(server)
                             ping_ms = measure_ping(host)
                             if ping_ms is not None and ping_ms < best_ping:
                                 best_ping = ping_ms
@@ -952,7 +984,8 @@ def get_public_iperf_server(exclude_ru=True):
                         if best_server:
                             logging.info(f"Selected RU server: {best_server.get('IP/HOST')} ({best_ping:.2f} ms)")
                             return best_server
-                        return random.choice(servers)
+                        if resolved_servers:
+                            return random.choice(resolved_servers)
             except Exception as e:
                 logging.error(f"Error fetching RU iperf servers: {e}")
         
@@ -962,9 +995,12 @@ def get_public_iperf_server(exclude_ru=True):
         if response.status_code == 200:
             servers = response.json()
             if exclude_ru:
-                valid_servers = [s for s in servers if s.get("IP/HOST") and s.get("PORT") and s.get("COUNTRY") != "RU"]
+                valid_servers = [
+                    s for s in servers
+                    if is_valid_iperf_server(s) and s.get("COUNTRY") != "RU"
+                ]
             else:
-                valid_servers = [s for s in servers if s.get("IP/HOST") and s.get("PORT")]
+                valid_servers = [s for s in servers if is_valid_iperf_server(s)]
             if valid_servers:
                 # Test ping to up to 15 random servers and pick the best one
                 sample_size = min(15, len(valid_servers))
@@ -972,9 +1008,18 @@ def get_public_iperf_server(exclude_ru=True):
                 
                 best_server = None
                 best_ping = float('inf')
+                resolved_servers = []
                 
                 for server in test_servers:
-                    host = server.get("IP/HOST")
+                    host = resolve_public_host(server.get("IP/HOST"))
+                    if host is None:
+                        logging.debug(
+                            "Ignoring iperf server with non-public address: %r",
+                            server.get("IP/HOST"),
+                        )
+                        continue
+                    server["_resolved_host"] = host
+                    resolved_servers.append(server)
                     ping_ms = measure_ping(host)
                     if ping_ms is not None and ping_ms < best_ping:
                         best_ping = ping_ms
@@ -986,7 +1031,8 @@ def get_public_iperf_server(exclude_ru=True):
                     return best_server
                     
                 # Fallback to random if ping failed
-                return random.choice(valid_servers)
+                if resolved_servers:
+                    return random.choice(resolved_servers)
     except Exception as e:
         logging.error(f"Error fetching iperf servers: {e}")
     return None
@@ -994,6 +1040,9 @@ def get_public_iperf_server(exclude_ru=True):
 
 def measure_ping(host: str) -> float:
     """Measure ping to a host, returns average ping in ms or None on failure"""
+    if parse_public_ip(host) is None:
+        logging.warning("Skipping ping to invalid host from server list: %r", host)
+        return None
     try:
         # Linux ping command
         cmd = ["ping", "-c", "2", "-W", "2", host]
@@ -1290,8 +1339,8 @@ def execute_command(task):
                         continue
                     
                     # Try the selected server
-                    host = server.get("IP/HOST")
-                    port = server.get("PORT")
+                    host = server.get("_resolved_host")
+                    port = int(server["PORT"])
                     city = server.get("SITE", "Unknown")
                     country = server.get("COUNTRY", "")
                     ping_ms = server.get("_ping", 0)

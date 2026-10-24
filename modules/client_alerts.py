@@ -404,8 +404,8 @@ if alert_dp is not None:
             _save_subscribers(subscribers)
             try:
                 await callback.message.edit_reply_markup(reply_markup=await _get_client_settings_keyboard(user_id))
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.debug("Unable to refresh client alert settings keyboard: %s", exc)
         await callback.answer()
 
     @alert_dp.callback_query(F.data.startswith("cst_node_"))
@@ -422,8 +422,8 @@ if alert_dp is not None:
             _save_subscribers(subscribers)
             try:
                 await callback.message.edit_reply_markup(reply_markup=await _get_client_settings_keyboard(user_id))
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.debug("Unable to refresh client alert settings keyboard: %s", exc)
         await callback.answer()
 
     @alert_dp.message()
@@ -587,8 +587,8 @@ async def _cq_panel_broadcast(callback: types.CallbackQuery, state: FSMContext) 
     )
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard())
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to display broadcast prompt: %s", exc)
 
 
 async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
@@ -636,8 +636,8 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
                             subscribers[uid]["name"] = new_name
                             current_items[idx] = (uid, subscribers[uid])
                             updated = True
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logging.debug("Unable to refresh subscriber profile: %s", exc)
             if updated:
                 _save_subscribers(subscribers)
         
@@ -664,8 +664,8 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
 
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to refresh subscribers menu: %s", exc)
 
 
 # ─── Main Bot: FSM — Broadcast ─────────────────────────────────────────────────
@@ -691,8 +691,8 @@ async def _broadcast_message_received(
 
     try:
         await message.delete()
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to delete broadcast input message: %s", exc)
 
     try:
         import bot as main_bot_module
@@ -736,8 +736,8 @@ async def _broadcast_confirm(
     await callback.answer("📤 Рассылка запущена...")
     try:
         await callback.message.edit_text("⏳ <b>Рассылка запущена...</b>\nПожалуйста, подождите.", parse_mode="HTML", reply_markup=None)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to display broadcast progress: %s", exc)
 
     sent_ok = 0
     sent_fail = 0
@@ -759,8 +759,8 @@ async def _broadcast_confirm(
     )
     try:
         await callback.message.edit_text(result_text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to display broadcast result: %s", exc)
 
 
 # ─── Main Bot: FSM — Ticket Reply ──────────────────────────────────────────
@@ -794,8 +794,8 @@ async def _alert_reply_callback(
     )
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard())
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to display alert reply prompt: %s", exc)
 
 
 async def _reply_text_received(message: types.Message, state: FSMContext) -> None:
@@ -821,8 +821,8 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
     
     try:
         await message.delete()
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to delete alert reply input message: %s", exc)
 
     try:
         await _send_payload_via_alert_bot(client_user_id, payload, reply_to_message_id=client_message_id)
@@ -863,8 +863,8 @@ async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> No
     )
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to display cancelled alert menu: %s", exc)
     await callback.answer("Отменено.")
 
 
@@ -949,8 +949,8 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
                 session = getattr(alert_bot, "session", None)
                 if session:
                     await session.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.debug("Unable to close alert bot session: %s", exc)
             logging.info("[client_alerts] Alert Bot finished.")
 
     task = asyncio.create_task(_run_alert_polling(), name="AlertBotPolling")

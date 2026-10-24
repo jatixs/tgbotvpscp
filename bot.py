@@ -424,8 +424,8 @@ async def unrecognized_message_handler(message: types.Message):
                                         "text": prefix_part + full_text + suffix_part,
                                         "parse_mode": "HTML"
                                     })
-                                except Exception:
-                                    pass
+                                except Exception as exc:
+                                    logging.debug("Could not send Telegram typing draft: %s", exc)
                                 last_draft_ts = now
                             await asyncio.sleep(chunk_delay)
                             

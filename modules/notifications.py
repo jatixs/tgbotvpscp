@@ -57,7 +57,7 @@ def register_handlers(dp: Dispatcher):
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     tasks = [asyncio.create_task(resource_monitor(bot), name="ResourceMonitor")]
-    ssh_cmd = "journalctl -n 0 -f -o cat _COMM=sshd"
+    ssh_cmd = ("journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd")
     tasks.append(
         asyncio.create_task(
             reliable_command_monitor(bot, ssh_cmd, "logins", parse_ssh_log_line),
@@ -490,8 +490,8 @@ async def parse_ssh_log_line(line: str) -> dict | None:
                     ip_tz_label = f"GMT{sign}{off_h}"
                     
                     time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
-                except Exception:
-                    pass
+                except (TypeError, ValueError, OverflowError) as exc:
+                    logging.debug("Invalid SSH login timezone offset %r: %s", offset, exc)
 
             return {
                 "key": "alert_ssh_login_detected",
@@ -532,8 +532,8 @@ async def parse_f2b_log_line(line: str) -> dict | None:
                     ip_tz_label = f"GMT{sign}{off_h}"
                     
                     time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
-                except Exception:
-                    pass
+                except (TypeError, ValueError, OverflowError) as exc:
+                    logging.debug("Invalid fail2ban timezone offset %r: %s", offset, exc)
 
             return {
                 "key": "alert_f2b_ban_detected",
@@ -670,9 +670,8 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
     while True:
         proc = None
         try:
-            # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-shell-audit.dangerous-asyncio-create-shell-audit
-            proc = await asyncio.create_subprocess_shell(
-                cmd,
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 start_new_session=True,
@@ -713,8 +712,8 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
             if proc:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logging.debug("Unable to stop command monitor process: %s", exc)
             await asyncio.sleep(10)
             
         # Give shutdown sequence time to cancel us before respawning
@@ -728,9 +727,8 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
             continue
         proc = None
         try:
-            # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-shell-audit.dangerous-asyncio-create-shell-audit
-            proc = await asyncio.create_subprocess_shell(
-                f"tail -n 0 -f {path}",
+            proc = await asyncio.create_subprocess_exec(
+                "tail", "-n", "0", "-f", "--", path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 start_new_session=True,

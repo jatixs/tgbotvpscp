@@ -135,8 +135,8 @@ async def cmd_cleanlogs(args):
                     try:
                         os.unlink(full_path)
                         count += 1
-                    except Exception:
-                        pass
+                    except OSError as exc:
+                        logging.warning("Unable to remove log file %s: %s", full_path, exc)
     print(f"✅ Удалено файлов: {count}")
 
 
@@ -210,6 +210,13 @@ async def cmd_tls_finalize(args):
     await cmd_restart(args)
 
 
+def _docker_compose_profile() -> str:
+    profile = os.environ.get("COMPOSE_PROFILES") or os.environ.get("INSTALL_MODE", "secure")
+    if profile not in {"secure", "root"}:
+        raise ValueError(f"Unsupported Docker Compose profile: {profile!r}")
+    return profile
+
+
 async def cmd_restart(args):
     print("Restarting bot service...")
     is_docker = os.environ.get("DEPLOY_MODE") == "docker"
@@ -217,7 +224,7 @@ async def cmd_restart(args):
     try:
         if is_docker:
             compose = _docker_compose_command()
-            profile = os.environ.get("COMPOSE_PROFILES") or os.environ.get("INSTALL_MODE", "secure")
+            profile = _docker_compose_profile()
             container = f"tg-bot-{profile}"
             command = [*compose, "--profile", profile, "restart", container]
         else:
@@ -255,7 +262,7 @@ async def cmd_status(args):
     """Print service status and propagate operational failures to the shell."""
     if os.environ.get("DEPLOY_MODE") == "docker":
         compose = _docker_compose_command()
-        profile = os.environ.get("COMPOSE_PROFILES") or os.environ.get("INSTALL_MODE", "secure")
+        profile = _docker_compose_profile()
         result = subprocess.run(
             [*compose, "--profile", profile, "ps", "--format", "json"],
             cwd=base_dir,

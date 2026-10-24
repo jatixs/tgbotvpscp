@@ -128,8 +128,8 @@ async def optimize_toggle_callback(callback: types.CallbackQuery):
     keyboard = get_optimize_keyboard(user_id, lang)
     try:
         await callback.message.edit_reply_markup(reply_markup=keyboard)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to refresh optimization keyboard: %s", exc)
     await callback.answer()
 
 async def optimize_exec_all_callback(callback: types.CallbackQuery):
@@ -165,8 +165,8 @@ async def _execute_optimization(callback: types.CallbackQuery, selected_ids: lis
     try:
         await callback.message.delete()
         LAST_MESSAGE_IDS.get(user_id, {}).pop(command, None)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to delete optimization menu message: %s", exc)
         
     sent_message = await callback.message.answer(_("optimize_start", lang), parse_mode="HTML")
     LAST_MESSAGE_IDS.setdefault(user_id, {})[command] = sent_message.message_id
