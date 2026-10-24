@@ -146,7 +146,9 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query(F.data.startswith("node_services_"))(cq_node_services)
     dp.callback_query(F.data.startswith("nsd_"))(cq_node_service_detail)
     dp.callback_query(F.data.startswith("nsa_"))(cq_node_service_action)
+    dp.callback_query(F.data.startswith("nsc_"))(cq_node_service_confirm)
     dp.callback_query(F.data.startswith("node_cmd_"))(cq_node_command)
+    dp.callback_query(F.data.startswith("node_run_"))(cq_node_command_confirm)
     dp.callback_query(F.data.startswith("node_billing_"))(cq_node_billing)
     dp.callback_query(F.data.startswith("billing_change_amount_"))(cq_billing_change_amount)
     dp.callback_query(F.data.startswith("billing_change_currency_"))(cq_billing_change_currency)
@@ -514,6 +516,14 @@ async def cq_node_delete_confirm(callback: types.CallbackQuery):
 
 
 async def cq_node_command(callback: types.CallbackQuery):
+    await _handle_node_command(callback, confirmed=False)
+
+
+async def cq_node_command_confirm(callback: types.CallbackQuery):
+    await _handle_node_command(callback, confirmed=True)
+
+
+async def _handle_node_command(callback: types.CallbackQuery, *, confirmed: bool):
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     if not is_allowed(user_id, "nodes"):
@@ -523,6 +533,9 @@ async def cq_node_command(callback: types.CallbackQuery):
     token = data[:32]
     cmd = data[33:]
     if cmd not in {"uptime", "traffic", "selftest", "top", "speedtest", "update", "reboot", "resetuptime"}:
+        await callback.answer("Invalid command", show_alert=True)
+        return
+    if confirmed and cmd not in {"reboot", "update"}:
         await callback.answer("Invalid command", show_alert=True)
         return
     if cmd == "reboot" and user_id != config.ADMIN_USER_ID:
@@ -535,6 +548,29 @@ async def cq_node_command(callback: types.CallbackQuery):
     if not node:
         await callback.answer("Error: Node not found", show_alert=True)
         return
+    if cmd in {"reboot", "update"}:
+        if not confirmed:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text=_("btn_reboot_confirm" if cmd == "reboot" else "btn_confirm_update", lang),
+                    callback_data=f"node_run_{token}_{cmd}",
+                    style="success",
+                )],
+                [InlineKeyboardButton(
+                    text=_("btn_cancel", lang),
+                    callback_data=f"node_select_{token}",
+                    style="danger",
+                )],
+            ])
+            await callback.message.edit_text(
+                _("node_reboot_confirm" if cmd == "reboot" else "node_update_confirm", lang,
+                  name=html.escape(node.get("name", "Unknown"))),
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            await callback.answer()
+            return
+        await callback.message.edit_reply_markup(reply_markup=None)
     if cmd == "uptime":
         avail = node.get("availability", {})
         total_downtime = float(avail.get("total_downtime_seconds", 0))
@@ -621,6 +657,12 @@ async def cq_node_command(callback: types.CallbackQuery):
             "node_name": node_name,
         }
 
+    if confirmed:
+        await callback.message.edit_text(
+            _("node_cmd_sent", lang, cmd=cmd_name, name=node_name),
+            reply_markup=get_back_keyboard(lang, "nodes_list_refresh"),
+            parse_mode="HTML",
+        )
     await callback.answer(
         _("node_cmd_sent", lang, cmd=cmd_name, name=node_name), show_alert=False
     )
@@ -1023,14 +1065,14 @@ async def nodes_monitor(bot: Bot):
         await asyncio.sleep(20)
 
 
-async def cq_node_services(callback: types.CallbackQuery):
+async def cq_node_services(callback: types.CallbackQuery, node_token: str | None = None):
     """Show node services menu"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
     if not is_allowed(user_id, "nodes"):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
-    token = callback.data.replace("node_services_", "")
+    token = node_token if node_token is not None else callback.data.replace("node_services_", "")
     
     node = await nodes_db.get_node_by_token(token)
     if not node:
@@ -1117,6 +1159,14 @@ async def cq_node_service_detail(callback: types.CallbackQuery):
 
 
 async def cq_node_service_action(callback: types.CallbackQuery):
+    await _handle_node_service_action(callback, confirmed=False)
+
+
+async def cq_node_service_confirm(callback: types.CallbackQuery):
+    await _handle_node_service_action(callback, confirmed=True)
+
+
+async def _handle_node_service_action(callback: types.CallbackQuery, *, confirmed: bool):
     """Execute service action (start/stop/restart)"""
     user_id = callback.from_user.id
     lang = get_user_lang(user_id)
@@ -1125,8 +1175,10 @@ async def cq_node_service_action(callback: types.CallbackQuery):
         return
     
     # Parse: nsa_{token}_{service}_{t}_{action} (t: d=docker, s=systemd)
-    parts = callback.data.split("_")
-    if len(parts) < 5:
+    parts = callback.data.split("_", 2)
+    if len(parts) == 3:
+        parts = parts[:2] + parts[2].rsplit("_", 2)
+    if len(parts) != 5:
         await callback.answer("Invalid data", show_alert=True)
         return
     
@@ -1139,6 +1191,9 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     if action not in ["start", "stop", "restart"]:
         await callback.answer("Invalid action", show_alert=True)
         return
+    if confirmed and action != "restart":
+        await callback.answer("Invalid action", show_alert=True)
+        return
     
     node = await nodes_db.get_node_by_token(token)
     if not node:
@@ -1148,6 +1203,31 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     if not any(service.get("name") == service_name for service in node.get("services", [])):
         await callback.answer("Service not found", show_alert=True)
         return
+
+    if action == "restart":
+        if not confirmed:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text=_("btn_confirm", lang),
+                    callback_data=f"nsc_{token}_{service_name}_{t}_restart",
+                    style="success",
+                )],
+                [InlineKeyboardButton(
+                    text=_("btn_cancel", lang),
+                    callback_data=f"node_services_{token}",
+                    style="danger",
+                )],
+            ])
+            await callback.message.edit_text(
+                _("node_service_restart_confirm", lang,
+                  name=html.escape(node.get("name", "Unknown")),
+                  service=html.escape(service_name)),
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            await callback.answer()
+            return
+        await callback.message.edit_reply_markup(reply_markup=None)
     
     # Send service action task to node with type
     await nodes_db.update_node_task(token, {
@@ -1166,7 +1246,7 @@ async def cq_node_service_action(callback: types.CallbackQuery):
     
     # Wait a bit then refresh services list
     await asyncio.sleep(3)
-    await cq_node_services(callback)
+    await cq_node_services(callback, node_token=token)
 
 
 async def cq_node_billing(callback: types.CallbackQuery):
@@ -1811,4 +1891,3 @@ async def cq_master_billing_set_currency(callback: types.CallbackQuery, state: F
     text = _("billing_menu_text", lang, name=master_name, amount=amount_str, date=date_str)
     
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-

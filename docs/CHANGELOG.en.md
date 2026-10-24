@@ -10,6 +10,11 @@
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
+## Unreleased
+
+### 🐛 Fixed
+* **Telegram node action confirmations.** Rebooting a node, updating its system and restarting a service now require explicit confirmation with a cancel button, matching the agent workflow. Permissions and target existence are checked again before execution.
+
 ## [1.27.0] - 2026-10-22
 
 ### 🚀 New Features
