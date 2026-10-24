@@ -787,39 +787,59 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Unlock Vibration API on first interaction
-    const unlockHaptics = () => {
-        try { if (navigator.vibrate) navigator.vibrate(0); } catch {}
-        document.body.removeEventListener('touchstart', unlockHaptics);
-        document.body.removeEventListener('click', unlockHaptics);
-    };
-    document.body.addEventListener('touchstart', unlockHaptics, { once: true, passive: true });
-    document.body.addEventListener('click', unlockHaptics, { once: true, passive: true });
-
-    window.playHaptic = function(pattern) {
-        if (navigator.vibrate && localStorage.getItem('haptics_enabled') !== 'false') {
-            navigator.vibrate(pattern);
-        }
-    };
-
     document.body.addEventListener('input', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
-            playHaptic(5);
+            playHaptic(10, 'light');
         }
     });
 
     document.body.addEventListener('change', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
             if (e.target.checked) {
-                playHaptic([10, 30, 10]); 
+                playHaptic([15, 35, 15], 'medium'); 
             } else {
-                playHaptic(10); 
+                playHaptic(12, 'light'); 
             }
         }
     });
 
+    // Tactile feedback on interactive button and action clicks
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('button, [role="button"], .ip-copy-btn, .ip-copy-container, .btn, a.monitor-link-btn, .nav-tab-btn, [data-action]');
+        if (btn && !btn.closest('#mHapticsCheckbox, .mHapticsCheckbox')) {
+            playHaptic(12, 'light');
+        }
+    }, { passive: true });
+
     pageCache.set(window.location.href, document.documentElement.outerHTML);
 });
+
+// Haptic feedback engine (supports both HTML5 Vibration API and Telegram WebApp)
+function playHaptic(pattern = 15, type = 'light') {
+    try {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('haptics_enabled') === 'false') {
+            return;
+        }
+
+        // 1. Telegram WebApp HapticFeedback (for iOS & Android inside Telegram)
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+            const hf = window.Telegram.WebApp.HapticFeedback;
+            if (Array.isArray(pattern)) {
+                hf.notificationOccurred('success');
+            } else if (typeof type === 'string' && ['light', 'medium', 'heavy', 'rigid', 'soft'].includes(type)) {
+                hf.impactOccurred(type);
+            } else {
+                hf.impactOccurred('light');
+            }
+        }
+
+        // 2. Standard Web Vibration API (Android Chrome, PWA, Edge)
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            navigator.vibrate(pattern);
+        }
+    } catch (_e) { }
+}
+window.playHaptic = playHaptic;
 
 function initHapticsToggle() {
     updateHapticsUI();
@@ -827,10 +847,11 @@ function initHapticsToggle() {
 
 function toggleHaptics() {
     const currentState = localStorage.getItem('haptics_enabled') !== 'false';
-    localStorage.setItem('haptics_enabled', currentState ? 'false' : 'true');
+    const newState = !currentState;
+    localStorage.setItem('haptics_enabled', newState ? 'true' : 'false');
     updateHapticsUI();
-    if (!currentState) {
-        if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+    if (newState) {
+        playHaptic([20, 45, 20], 'medium');
         const msgOn = (typeof I18N !== 'undefined' && I18N.web_haptics_on) ? I18N.web_haptics_on : "Haptics: ON";
         if (window.showToast) window.showToast(msgOn);
     } else {
@@ -1098,6 +1119,9 @@ function copyToken(el) {
 }
 
 function copyTextToClipboard(text) {
+    if (typeof playHaptic === 'function') {
+        playHaptic([15, 35, 15], 'medium');
+    }
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(showCopyFeedback);
     } else {
@@ -2545,6 +2569,7 @@ document.addEventListener('click', async (e) => {
                 initHolidayMood();
                 initGlobalLazyLoad();
                 initNodeModalScaling();
+                initHapticsToggle();
 
                 try {
                     if (url.includes('/settings')) {
