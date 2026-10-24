@@ -1,33 +1,41 @@
-import ast
-import html
+import importlib.util
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN = "a" * 32
-HANDLERS = {
-    "cq_node_command", "cq_node_command_confirm", "_handle_node_command",
-    "cq_node_service_action", "cq_node_service_confirm", "_handle_node_service_action",
-}
 
 
 class NodeConfirmationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        source = ast.parse((ROOT / "modules" / "nodes.py").read_text(encoding="utf-8"))
-        functions = [node for node in source.body if isinstance(node, ast.AsyncFunctionDef) and node.name in HANDLERS]
+        dependencies = {
+            name: MagicMock()
+            for name in (
+                "aiohttp", "aiogram", "aiogram.filters", "aiogram.fsm",
+                "aiogram.fsm.context", "aiogram.fsm.state", "aiogram.types",
+                "core", "core.auth", "core.i18n", "core.keyboards",
+                "core.messaging", "core.shared_state", "core.utils",
+            )
+        }
+        dependencies["aiogram.fsm.state"].StatesGroup = object
+        spec = importlib.util.spec_from_file_location("node_confirmation_subject", ROOT / "modules" / "nodes.py")
+        if spec is None or spec.loader is None:
+            self.fail("Unable to load node management module")
+        subject = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, dependencies):
+            spec.loader.exec_module(subject)
         self.node = {"name": "<Test node>", "services": [{"name": "my_service", "type": "docker"}]}
         self.db = SimpleNamespace(
             get_node_by_token=AsyncMock(return_value=self.node),
             update_node_task=AsyncMock(),
             update_node_extra=AsyncMock(),
         )
-        self.env = {
-            "types": SimpleNamespace(CallbackQuery=object),
+        replacements = {
             "config": SimpleNamespace(ADMIN_USER_ID=1),
-            "html": html,
             "nodes_db": self.db,
             "get_user_lang": lambda user_id: "en",
             "is_allowed": Mock(return_value=True),
@@ -38,7 +46,9 @@ class NodeConfirmationTests(unittest.IsolatedAsyncioTestCase):
             "asyncio": SimpleNamespace(sleep=AsyncMock()),
             "cq_node_services": AsyncMock(),
         }
-        exec(compile(ast.Module(body=functions, type_ignores=[]), str(ROOT / "modules" / "nodes.py"), "exec"), self.env)
+        for name, value in replacements.items():
+            setattr(subject, name, value)
+        self.env = vars(subject)
 
     def callback(self, data, user_id=1):
         return SimpleNamespace(

@@ -794,10 +794,10 @@ document.addEventListener("DOMContentLoaded", () => {
 function initHapticsFeedback() {
     let pressedControl = null;
     const rangeFeedback = new WeakMap();
-    const releaseControl = () => {
+    function releaseControl() {
         if (pressedControl) pressedControl.classList.remove('is-control-pressed');
         pressedControl = null;
-    };
+    }
     document.addEventListener('pointerdown', (e) => {
         if (!(e.target instanceof Element) || !e.isPrimary || e.button !== 0) return;
         releaseControl();
@@ -860,7 +860,7 @@ function playHaptic(pattern = [10, 30, 10]) {
         modalClose: 8
     };
     if (typeof pattern === 'string') {
-        if (!Object.prototype.hasOwnProperty.call(profiles, pattern)) {
+        if (!Object.hasOwn(profiles, pattern)) {
             console.warn('Unknown haptic feedback profile:', pattern);
             return;
         }
