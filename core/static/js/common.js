@@ -1979,9 +1979,8 @@ function updateNotifUI(list, count) {
             }
             if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted' && list && list.length > 0) {
                 try {
-                    const tempSpan = document.createElement('span');
-                    tempSpan.innerHTML = list[0].text || '';
-                    const cleanBody = tempSpan.textContent || tempSpan.innerText || '';
+                    const rawText = list[0].text || '';
+                    const cleanBody = rawText.replace(/<[^>]*>/g, '').trim();
                     if (window.swRegistration && window.swRegistration.showNotification) {
                         window.swRegistration.showNotification(document.title || 'VPS Control Panel', {
                             body: cleanBody,
