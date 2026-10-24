@@ -31,6 +31,8 @@ Browser pages use numeric node IDs. Agent tokens are never placed in URLs or bro
 
 `network_validation.py` provides shared public-address validation for agent and node speed tests. It is retained in both installation modes; agent modules must not depend on `node/`, which is removed during systemd installation.
 
+The SSH monitor reads journal records from both `sshd` and `sshd-session` (newer OpenSSH versions). SSH and Fail2Ban file monitors use `tail -F` to survive log rotation. Report read errors are distinguished from empty event lists; the SSH report filters login events before limiting the selection.
+
 ```
 /opt/tg-bot/
 ├── bot.py                    # Entry point, application initialization

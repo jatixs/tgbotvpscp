@@ -670,7 +670,7 @@ async def reliable_journal_monitor(bot, alert_type, parser):
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                "journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd",
+                "journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd", "+", "_COMM=sshd-session",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 start_new_session=True,
@@ -695,6 +695,10 @@ async def reliable_journal_monitor(bot, alert_type, parser):
                             msg_gen,
                             alert_type,
                         )
+            stderr = await proc.stderr.read()
+            returncode = await proc.wait()
+            if returncode:
+                logging.error("Journal monitor exited (%s): %s", returncode, stderr.decode("utf-8", "replace").strip())
         except asyncio.CancelledError:
             if proc:
                 try:
@@ -727,7 +731,7 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                "tail", "-n", "0", "-f", "--", path,
+                "tail", "-n", "0", "-F", "--", path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 start_new_session=True,
@@ -752,6 +756,10 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                             msg_gen,
                             alert_type,
                         )
+            stderr = await proc.stderr.read()
+            returncode = await proc.wait()
+            if returncode:
+                logging.error("Tail monitor exited for %s (%s): %s", path, returncode, stderr.decode("utf-8", "replace").strip())
         except asyncio.CancelledError:
             if proc:
                 try:

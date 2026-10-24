@@ -124,6 +124,104 @@ class ModuleFallbackTests(unittest.TestCase):
 
 
 class ModuleAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_journal_session_login_produces_alert(self):
+        class LoginStream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if getattr(self, "sent", False):
+                    raise StopAsyncIteration
+                self.sent = True
+                return b"Accepted publickey for root from 192.0.2.1 port 1234 ssh2\n"
+
+        process = SimpleNamespace(
+            stdout=LoginStream(), stderr=SimpleNamespace(read=AsyncMock(return_value=b"")),
+            wait=AsyncMock(return_value=0),
+        )
+        alert = AsyncMock()
+        subject = load_functions(
+            "notifications.py", ["reliable_journal_monitor", "parse_ssh_log_line"],
+            get_ip_data=AsyncMock(return_value=("", None)),
+            get_server_timezone_label=lambda: "UTC",
+            escape_html=lambda value: value,
+            RECENT_NOTIFIED_LOGINS={},
+            send_alert=alert,
+            _=lambda key, lang, **params: f"{key}: {params}",
+        )
+        with (
+            patch.object(subject.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)),
+            patch.object(subject.asyncio, "sleep", AsyncMock(side_effect=asyncio.CancelledError)),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                await subject.reliable_journal_monitor(None, "logins", subject.parse_ssh_log_line)
+        alert.assert_awaited_once()
+        self.assertEqual(alert.call_args.args[2], "logins")
+        self.assertIn("alert_ssh_login_detected", alert.call_args.args[1]("en"))
+
+    async def test_ssh_report_reads_session_events_and_reports_read_errors(self):
+        for returncode in (0, 2):
+            with self.subTest(returncode=returncode):
+                process = SimpleNamespace(
+                    returncode=returncode,
+                    communicate=AsyncMock(return_value=(
+                        b"2026-10-25T02:00:00+03:00 host sshd-session[123]: Accepted publickey for root from 192.0.2.1 port 1234 ssh2\n",
+                        b"Permission denied" if returncode else b"",
+                    )),
+                )
+                spawn = AsyncMock(return_value=process)
+                message = SimpleNamespace(
+                    from_user=SimpleNamespace(id=1), chat=SimpleNamespace(id=2),
+                    answer=AsyncMock(return_value=SimpleNamespace(message_id=3)),
+                    bot=SimpleNamespace(edit_message_text=AsyncMock()),
+                )
+                subject = load_functions(
+                    "sshlog.py", ["sshlog_handler"],
+                    get_user_lang=lambda uid: "en", is_allowed=lambda *args: True,
+                    delete_previous_message=AsyncMock(), LAST_MESSAGE_IDS={},
+                    get_host_path=lambda path: path,
+                    os=SimpleNamespace(path=SimpleNamespace(
+                        exists=lambda path: path.endswith("auth.log"), basename=lambda path: "auth.log",
+                    )),
+                    get_country_flag=AsyncMock(return_value=""),
+                    get_server_timezone_label=lambda: "UTC",
+                    escape_html=lambda value: value,
+                    _=lambda key, lang, **params: f"{key}: {params}",
+                )
+                with patch.object(subject.asyncio, "create_subprocess_exec", spawn):
+                    if returncode:
+                        with self.assertLogs(level="ERROR"):
+                            await subject.sshlog_handler(message)
+                    else:
+                        await subject.sshlog_handler(message)
+                text = message.bot.edit_message_text.call_args.args[0]
+                self.assertIn("sshlog_read_error" if returncode else "sshlog_entry_success", text)
+                self.assertEqual(spawn.call_args.args[0], "grep")
+
+    async def test_fail2ban_read_error_is_not_reported_as_no_bans(self):
+        process = SimpleNamespace(
+            returncode=2,
+            communicate=AsyncMock(return_value=(b"", b"Permission denied")),
+        )
+        message = SimpleNamespace(
+            from_user=SimpleNamespace(id=1), chat=SimpleNamespace(id=2),
+            answer=AsyncMock(), bot=object(),
+        )
+        subject = load_functions(
+            "fail2ban.py", ["fail2ban_handler"],
+            get_user_lang=lambda uid: "en", is_allowed=lambda *args: True,
+            delete_previous_message=AsyncMock(),
+            get_host_path=lambda path: path,
+            os=SimpleNamespace(path=SimpleNamespace(exists=lambda path: True)),
+            _=lambda key, lang, **params: f"{key}: {params}",
+        )
+        with (
+            patch.object(subject.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)),
+            self.assertLogs(level="ERROR"),
+        ):
+            await subject.fail2ban_handler(message)
+        self.assertIn("f2b_read_error_generic", message.answer.call_args.args[0])
+
     async def test_agent_handler_starts_selected_speedtest_without_node_installation(self):
         for mode in ("OOKLA", "IPERF3"):
             with self.subTest(mode=mode), patch.dict(
@@ -244,16 +342,19 @@ class ModuleAsyncTests(unittest.IsolatedAsyncioTestCase):
             (
                 "reliable_journal_monitor",
                 (),
-                ("journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd"),
+                ("journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd", "+", "_COMM=sshd-session"),
             ),
             (
                 "reliable_tail_log_monitor",
                 ("/host/log path/auth.log; touch marker",),
-                ("tail", "-n", "0", "-f", "--", "/host/log path/auth.log; touch marker"),
+                ("tail", "-n", "0", "-F", "--", "/host/log path/auth.log; touch marker"),
             ),
         ):
             with self.subTest(monitor=function_name):
-                spawn = AsyncMock(return_value=SimpleNamespace(stdout=EmptyStream()))
+                spawn = AsyncMock(return_value=SimpleNamespace(
+                    stdout=EmptyStream(), stderr=SimpleNamespace(read=AsyncMock(return_value=b"")),
+                    wait=AsyncMock(return_value=0),
+                ))
                 subject = load_functions(
                     "notifications.py", [function_name],
                     asyncio=SimpleNamespace(
