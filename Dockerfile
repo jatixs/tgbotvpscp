@@ -13,7 +13,7 @@ RUN apt-get update \
 WORKDIR /build
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir --upgrade pip 'setuptools>=83.0.0' wheel && \
+RUN pip install --no-cache-dir --upgrade pip 'setuptools>=84.1.0' wheel && \
     pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
 
 # -- Stage 2: Final --

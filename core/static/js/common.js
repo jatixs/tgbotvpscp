@@ -1137,15 +1137,21 @@ function copyIpWithFeedback(ip, triggerEl, event) {
 
     if (iconSvg && !btn._isCopying) {
         btn._isCopying = true;
-        const originalHtml = iconSvg.innerHTML;
+        const originalNodes = Array.from(iconSvg.childNodes).map(n => n.cloneNode(true));
         const originalClass = iconSvg.getAttribute('class') || '';
 
-        // Checkmark icon
-        iconSvg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />';
+        // Checkmark path
+        const checkPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        checkPath.setAttribute('stroke-linecap', 'round');
+        checkPath.setAttribute('stroke-linejoin', 'round');
+        checkPath.setAttribute('stroke-width', '2.5');
+        checkPath.setAttribute('d', 'M5 13l4 4L19 7');
+
+        iconSvg.replaceChildren(checkPath);
         iconSvg.setAttribute('class', originalClass + ' text-emerald-500 dark:text-emerald-400 scale-110');
 
         setTimeout(() => {
-            iconSvg.innerHTML = originalHtml;
+            iconSvg.replaceChildren(...originalNodes);
             iconSvg.setAttribute('class', originalClass);
             btn._isCopying = false;
         }, 1500);
