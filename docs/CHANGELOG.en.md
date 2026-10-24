@@ -13,31 +13,23 @@
 ## [1.27.0] - 2026-10-22
 
 ### 🚀 New Features
-* **One-Click Telegram Sign-In (OIDC).** Switched the web panel to the modern and secure Telegram Login widget. Sign-ins are instant, smooth, and cryptographically verified directly by Telegram.
-* **Web Push Notifications on Mobile & Desktop.** The dashboard can now deliver background push notifications to smartphones (Android & iOS) and computers even when the browser or PWA is closed. Alerts for high server load, downtime, and SSH logins arrive in real time. Settings include an instant test alert and one-click subscription management.
-* **Instant IP Copying.** Quickly copy server IP addresses across any section of the panel with a single click. A clean animated checkmark confirms when the address is copied to your clipboard.
-* **Effortless Mobile Experience.** On smartphones, you no longer need to aim at tiny buttons — simply tap the dotted IP text anywhere on screen to copy it.
+* **One-Click Telegram Sign-In (OIDC).** The web dashboard has adopted the modern and secure Telegram Login widget with instant cryptographic verification directly by Telegram.
+* **Web Push Notifications on Mobile & Desktop.** The panel delivers background push notifications to computers and smartphones (Android & iOS) even when the browser or PWA is closed. Alerts for high load, downtime, and SSH logins arrive in real time, with an instant test alert button in Settings.
+* **Instant IP Copying.** Server IP addresses across the dashboard can now be copied with a single click, featuring a smooth green checkmark animation. On smartphones, you can simply tap the dotted IP text anywhere on screen.
 
 ### ✨ Improved
-* **Friendly and Clear Installation Scripts.** Cleaned up all messages, prompts, and spinners in `deploy.sh` and `deploy_en.sh` into natural language with helpful step-by-step guidance.
-* **Out-of-the-Box Language Preference.** Default panel language (`ru` or `en`) is now configured directly via `.env` and automatically selected by your installer.
-* **Readable Resource Charts.** Graph timelines are now evenly spaced without empty gaps on the right, and angled timestamps are crisp and easy to read on any device.
-* **Responsive Action Buttons.** In Settings, notification action buttons neatly align in a row on desktops and tablets, and stack into comfortable touch targets on mobile screens.
-* **Intuitive Password Visibility Icon.** Replaced confusing eye icons with clear closed-eyelid symbols that instantly convey hidden password fields.
-* **Faster Terminal Response.** Web console scripts and styles load faster and automatically refresh on new panel updates.
+* **Effortless Setup & Localization.** All messages in `deploy.sh` and `deploy_en.sh` have been refined into natural, guided steps, and the default panel language is now directly configured via `.env`.
+* **Intuitive and Responsive Interface.** Load charts feature an even timeline without trailing gaps, Web Push buttons adjust fluidly on mobile screens, hidden passwords display an intuitive closed-eyelids icon, and the web console launches noticeably faster.
 
 ### 🐛 Fixed
-* **Fixed Login Loop with Telegram Widget.** Resolved an issue where successfully signing in via Telegram could reload and return back to the login page.
-* **Smooth Web Terminal & VNC Launch.** Fixed an issue where the web console or VNC quick-connect dialog could hang on first opening.
-* **Protected SSH Key Connections.** The passphrase prompt now appears reliably, allowing encrypted modern OpenSSH keys to connect without errors.
-* **Compact Screen Layout.** Long server names and IP addresses wrap cleanly on small screens (down to 320px) without overflowing cards.
+* **Authentication & Session Persistence.** Resolved an issue where successfully signing in via Telegram could reload and return back to the login page.
+* **Web Console & VNC Connectivity.** Fixed launch hangs in the terminal and VNC dialog, ensuring reliable authentication with modern encrypted OpenSSH keys.
+* **Mobile Screen Layout.** Long server names and IP addresses wrap cleanly on compact smartphone screens (down to 320px) without overflowing.
 
 ### 🔒 Security
-* **XSS Remediation & Safe DOM Rendering.** Dynamic dialogs, notification cards, and graphs now use safe direct DOM APIs without vulnerable `innerHTML` constructs.
-* **Upgraded Vulnerable Libraries.** Updated `Pillow` to version `13.0.0` (closing 20+ memory disclosure and buffer overflow CVEs) and `setuptools` to `>=84.1.0`. Upgraded build images and CI environments to Python 3.11.
-* **Session Cookie Hardening.** Session and CSRF cookies now carry strict `Path=/` and `SameSite=Lax` flags, preventing session hijacking and ensuring reliable cross-site authentication from Telegram.
-* **Encrypted Credential Storage.** All saved terminal credentials, keys, and passphrases are encrypted at rest with Fernet (AES-128). Passwords are never sent back to the browser, and unchecking "Remember" immediately deletes them.
-* **Clean Logs & Security Audits.** Service log messages have been cleaned up to prevent technical secret leakage and eliminate static security scanner false positives.
+* **UI Hardening & Safe DOM APIs.** Dynamic modals and UI elements were refactored to use safe direct DOM creation APIs without XSS risks. Session cookies now carry strict `Path=/` and `SameSite=Lax` flags for safe cross-site Telegram auth.
+* **Encrypted Storage & Clean Logs.** Credentials and SSH keys are encrypted at rest with AES-128 (Fernet) and never sent back to the browser in plaintext. Service logs have been cleaned of technical markers to eliminate scanner false positives.
+* **Updated Vulnerable Dependencies.** Upgraded `Pillow` to `13.0.0` (closing 20+ CVEs) and `setuptools` to `>=84.1.0`. All build images and CI workflows have transitioned to Python 3.11.
 
 
 ## [1.26.1] - 2026-10-14
