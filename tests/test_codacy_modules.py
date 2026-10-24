@@ -196,8 +196,8 @@ class ModuleAsyncTests(unittest.IsolatedAsyncioTestCase):
 
         for function_name, args, expected in (
             (
-                "reliable_command_monitor",
-                (("journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd"),),
+                "reliable_journal_monitor",
+                (),
                 ("journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd"),
             ),
             (

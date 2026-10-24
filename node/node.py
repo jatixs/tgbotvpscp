@@ -9,7 +9,7 @@ import html
 import json
 import logging
 import os
-import random
+import secrets
 import re
 import socket
 import subprocess
@@ -26,7 +26,6 @@ try:
     from .endpoint_migration import validate_https_migration_url
     from .input_validation import (
         is_valid_iperf_server,
-        is_valid_network_host,
         parse_public_ip,
         resolve_public_host,
     )
@@ -34,7 +33,6 @@ except ImportError:
     from endpoint_migration import validate_https_migration_url
     from input_validation import (
         is_valid_iperf_server,
-        is_valid_network_host,
         parse_public_ip,
         resolve_public_host,
     )
@@ -959,7 +957,7 @@ def get_public_iperf_server(exclude_ru=True):
                                 servers.append(server)
                     if servers:
                         sample_size = min(15, len(servers))
-                        test_servers = random.sample(servers, sample_size)
+                        test_servers = secrets.SystemRandom().sample(servers, sample_size)
                         
                         best_server = None
                         best_ping = float('inf')
@@ -985,7 +983,7 @@ def get_public_iperf_server(exclude_ru=True):
                             logging.info(f"Selected RU server: {best_server.get('IP/HOST')} ({best_ping:.2f} ms)")
                             return best_server
                         if resolved_servers:
-                            return random.choice(resolved_servers)
+                            return secrets.choice(resolved_servers)
             except Exception as e:
                 logging.error(f"Error fetching RU iperf servers: {e}")
         
@@ -1004,7 +1002,7 @@ def get_public_iperf_server(exclude_ru=True):
             if valid_servers:
                 # Test ping to up to 15 random servers and pick the best one
                 sample_size = min(15, len(valid_servers))
-                test_servers = random.sample(valid_servers, sample_size)
+                test_servers = secrets.SystemRandom().sample(valid_servers, sample_size)
                 
                 best_server = None
                 best_ping = float('inf')
@@ -1032,7 +1030,7 @@ def get_public_iperf_server(exclude_ru=True):
                     
                 # Fallback to random if ping failed
                 if resolved_servers:
-                    return random.choice(resolved_servers)
+                    return secrets.choice(resolved_servers)
     except Exception as e:
         logging.error(f"Error fetching iperf servers: {e}")
     return None

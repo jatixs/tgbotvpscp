@@ -57,10 +57,9 @@ def register_handlers(dp: Dispatcher):
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     tasks = [asyncio.create_task(resource_monitor(bot), name="ResourceMonitor")]
-    ssh_cmd = ("journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd")
     tasks.append(
         asyncio.create_task(
-            reliable_command_monitor(bot, ssh_cmd, "logins", parse_ssh_log_line),
+            reliable_journal_monitor(bot, "logins", parse_ssh_log_line),
             name="LoginsMonitor_Journal",
         )
     )
@@ -666,12 +665,12 @@ async def resource_monitor(bot: Bot):
         await asyncio.sleep(config.RESOURCE_CHECK_INTERVAL)
 
 
-async def reliable_command_monitor(bot, cmd, alert_type, parser):
+async def reliable_journal_monitor(bot, alert_type, parser):
     while True:
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
+                "journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 start_new_session=True,
@@ -708,7 +707,7 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
                     logging.error(f"Error killing process group: {e}")
             raise
         except Exception as e:
-            logging.error(f"Command monitor error ({cmd}): {e}")
+            logging.error("Journal monitor error: %s", e)
             if proc:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
