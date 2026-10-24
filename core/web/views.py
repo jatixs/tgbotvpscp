@@ -27,6 +27,7 @@ from ..rbac import is_admin as _is_admin
 from ..rbac import is_root as _is_root
 from ..utils import encrypt_for_web, generate_favicons, get_app_version
 
+from . import auth as web_auth
 # Lazy import traffic_module when needed
 from .avatar import get_avatar_html as _get_avatar_html
 
