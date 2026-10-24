@@ -1076,10 +1076,10 @@ function updatePushTestButtonState(isActive) {
     const icon = btn.querySelector('svg');
     btn.disabled = false;
     if (isActive) {
-        btn.className = 'w-full py-2 px-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] min-w-0';
+        btn.className = 'flex-1 w-full sm:w-auto min-h-[38px] py-2 px-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl text-xs font-semibold sm:font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] select-none text-center';
         if (icon) icon.className = 'h-4 w-4 shrink-0 text-blue-500';
     } else {
-        btn.className = 'w-full py-2 px-2.5 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-400 dark:text-gray-500 hover:bg-gray-200/60 dark:hover:bg-white/10 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] min-w-0';
+        btn.className = 'flex-1 w-full sm:w-auto min-h-[38px] py-2 px-3 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-400 dark:text-gray-500 hover:bg-gray-200/60 dark:hover:bg-white/10 rounded-xl text-xs font-semibold sm:font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] select-none text-center';
         if (icon) icon.className = 'h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500';
     }
 }
