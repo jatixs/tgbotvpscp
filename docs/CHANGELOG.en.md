@@ -35,7 +35,10 @@
 ### 🔒 Security
 * **Encrypted Credential Storage.** All saved terminal passwords, private keys, and passphrases are now securely encrypted at rest on the server using Fernet (AES-128).
 * **Zero Browser Leakage.** The server never sends raw private keys or passwords back to the client (displaying safe placeholders instead), and unchecking "Remember" immediately purges saved credentials from the server.
-* **CodeQL & Bandit Hardening.** Hardened subprocess execution in system integrity auditing (`integrity.py`), eliminated potential command injection vectors, and resolved static analysis warnings across streaming and management modules.
+* **CodeQL, Bandit & Codacy Hardening.** Hardened subprocess execution in system integrity auditing (`integrity.py`), eliminated potential command injection vectors, and resolved static analysis warnings across streaming and management modules.
+* **XSS Remediation & Safe DOM Manipulation.** Dynamic UI assignments (`chart_range.js`, `reset_password.js`, modals and notifications in `common.js`) refactored to use safe direct DOM node APIs (`createElement`, `replaceChildren`) alongside `DOMPurify` sanitization. Notification body extraction refactored to native browser `DOMParser` instead of error-prone multi-character regex.
+* **Vulnerable Dependency Upgrades.** Bumped `Pillow` to `13.0.0` (resolving 20+ CVEs across DoS, Out-of-bounds read, and Memory disclosure) and `setuptools` to `>=84.1.0` (mitigating Windows path escape vulnerability `GHSA-xmj3-9gf7-h52w`). Upgraded CI workflows and official Dockerfile to Python 3.11 for full runtime compatibility.
+* **Session Cookie Hardening.** Explicitly set `Path=/` and `SameSite=Lax` for session and CSRF cookies, fixing loop redirects to `/login` after Telegram widget authorization and ensuring safe cross-origin navigations from `oauth.telegram.org`. Added `Cache-Control: no-store` headers to prevent caching of login forms.
 
 
 ## [1.26.1] - 2026-10-14
