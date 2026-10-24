@@ -136,15 +136,31 @@
         function buildButton() {
             if (!mount) return;
             mount.classList.add('chart-range');
-            const btnHtml = `
-                <button type="button" class="chart-range-btn" aria-haspopup="listbox" aria-expanded="false" title="${t('web_chart_range_title', 'Chart period')}">
-                    <span class="chart-range-live" aria-hidden="true"></span>
-                    ${CLOCK_ICON}
-                    <span class="chart-range-label"></span>
-                    ${CHEVRON_ICON}
-                </button>`;
-            mount.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(btnHtml) : btnHtml;
-            ctl.button = mount.querySelector('.chart-range-btn');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'chart-range-btn';
+            btn.setAttribute('aria-haspopup', 'listbox');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.title = t('web_chart_range_title', 'Chart period');
+
+            const liveSpan = document.createElement('span');
+            liveSpan.className = 'chart-range-live';
+            liveSpan.setAttribute('aria-hidden', 'true');
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'chart-range-label';
+
+            const clockWrapper = document.createElement('span');
+            clockWrapper.className = 'inline-flex';
+            clockWrapper.innerHTML = CLOCK_ICON;
+
+            const chevronWrapper = document.createElement('span');
+            chevronWrapper.className = 'inline-flex';
+            chevronWrapper.innerHTML = CHEVRON_ICON;
+
+            btn.append(liveSpan, clockWrapper.firstElementChild || clockWrapper, labelSpan, chevronWrapper.firstElementChild || chevronWrapper);
+            mount.replaceChildren(btn);
+            ctl.button = btn;
             ctl.button.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -165,31 +181,73 @@
                     chip.setAttribute('aria-selected', chip.dataset.range === ctl.range.key ? 'true' : 'false');
                 });
                 const foot = ctl.pop.querySelector('.chart-range-foot');
-            if (foot) foot.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(footHtml()) : footHtml();
+                if (foot) updateFoot(foot);
             }
         }
 
-        function footHtml() {
+        function updateFoot(foot) {
             const isLive = ctl.range.seconds <= LIVE_MAX_SECONDS;
             const stepText = ctl.step ? `${t('web_chart_range_step', 'Step')}: ${stepLabel(ctl.step)}` : '';
             if (isLive) {
-                return `<span class="chart-range-foot-live"><span class="chart-range-live"></span>${t('web_chart_range_live', 'Live')}</span>${stepText ? `<span>${stepText}</span>` : ''}`;
+                const liveSpan = document.createElement('span');
+                liveSpan.className = 'chart-range-foot-live';
+                const dot = document.createElement('span');
+                dot.className = 'chart-range-live';
+                liveSpan.append(dot, document.createTextNode(t('web_chart_range_live', 'Live')));
+
+                if (stepText) {
+                    const stepSpan = document.createElement('span');
+                    stepSpan.textContent = stepText;
+                    foot.replaceChildren(liveSpan, stepSpan);
+                } else {
+                    foot.replaceChildren(liveSpan);
+                }
+            } else {
+                const textSpan = document.createElement('span');
+                textSpan.textContent = stepText || rangeLabel(ctl.range);
+                foot.replaceChildren(textSpan);
             }
-            return `<span>${stepText || rangeLabel(ctl.range)}</span>`;
         }
 
         function buildPopover() {
             const pop = document.createElement('div');
             pop.className = 'chart-range-pop';
             pop.setAttribute('role', 'listbox');
-            const groups = GROUPS.map(group => {
-                const chips = RANGES.filter(r => r.group === group).map(r =>
-                    `<button type="button" class="chart-range-chip" role="option" data-range="${r.key}">${rangeLabel(r)}</button>`
-                ).join('');
-                return `<div class="chart-range-group"><span class="chart-range-group-label">${groupLabel(group)}</span><div class="chart-range-chips">${chips}</div></div>`;
-            }).join('');
-            const popHtml = `<div class="chart-range-pop-title">${t('web_chart_range_title', 'Chart period')}</div>${groups}<div class="chart-range-foot"></div>`;
-            pop.innerHTML = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(popHtml) : popHtml;
+
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'chart-range-pop-title';
+            titleDiv.textContent = t('web_chart_range_title', 'Chart period');
+            pop.appendChild(titleDiv);
+
+            GROUPS.forEach(group => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'chart-range-group';
+
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'chart-range-group-label';
+                labelSpan.textContent = groupLabel(group);
+                groupDiv.appendChild(labelSpan);
+
+                const chipsDiv = document.createElement('div');
+                chipsDiv.className = 'chart-range-chips';
+
+                RANGES.filter(r => r.group === group).forEach(r => {
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'chart-range-chip';
+                    chip.setAttribute('role', 'option');
+                    chip.dataset.range = r.key;
+                    chip.textContent = rangeLabel(r);
+                    chipsDiv.appendChild(chip);
+                });
+
+                groupDiv.appendChild(chipsDiv);
+                pop.appendChild(groupDiv);
+            });
+
+            const footDiv = document.createElement('div');
+            footDiv.className = 'chart-range-foot';
+            pop.appendChild(footDiv);
             pop.addEventListener('click', (e) => {
                 const chip = e.target.closest('.chart-range-chip');
                 if (!chip) return;
