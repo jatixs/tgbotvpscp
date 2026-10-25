@@ -26,7 +26,7 @@
 * 🛡️ **Telegram Node Action Confirmation Safeguard** — Rebooting a node, updating its system, and restarting a service now require explicit confirmation with a cancel button and permission re-validation (matching the agent workflow).
 
 ### 🔒 Security
-* 🛡️ **Network Parameter Validation & Safe Telegram Avatars** — Added strict sanitization for IP addresses, domain names, and iPerf servers (`network_validation.py`) preventing SSRF and command injection vulnerabilities. Telegram profile avatars are now securely routed and cached through an internal proxy (`/api/avatar`), preventing external tracking and CORS issues.
+* **Network Parameter Validation & Safe Telegram Avatars** — Added strict sanitization for IP addresses, domain names, and iPerf servers (`network_validation.py`) preventing SSRF and command injection vulnerabilities. Telegram profile avatars are now securely routed and cached through an internal proxy (`/api/avatar`), preventing external tracking and CORS issues.
 * **Data Protection & UI Hardening** — Web terminal passwords and SSH keys are encrypted at rest with AES-128 (Fernet) and never sent to the browser in plaintext. Dynamic elements are guarded against XSS, cookies use strict `Path=/` and `SameSite=Lax` flags, and server logs are cleaned of redundant technical markers.
 * **Updated Dependencies** — Build environments transitioned to Python 3.11, with upgrades to `setuptools` (`>=84.1.0`) and `Pillow` (`13.0.0`, resolving 20+ vulnerabilities).
 
