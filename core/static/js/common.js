@@ -1637,13 +1637,17 @@ function initHolidayMood() {
     const btns = document.querySelectorAll('[data-action="toggle-holiday-mode"], #holidayBtn, #holidayBtnDesktop');
 
     if (!isHoliday) {
-        btns.forEach(b => b.classList.add('hidden'));
+        btns.forEach(b => {
+            b.classList.add('hidden');
+        });
         stopHolidayEffects();
         return;
     }
 
     // Reveal existing holiday buttons in submenus and headers
-    btns.forEach(b => b.classList.remove('hidden'));
+    btns.forEach(b => {
+        b.classList.remove('hidden');
+    });
 
     // Dynamic fallback: if no button exists yet, insert into the container with toggle-a11y-mode
     if (btns.length === 0) {
@@ -1657,7 +1661,9 @@ function initHolidayMood() {
                 btn.className = isDropdown
                     ? 'p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-sky-400 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95'
                     : 'p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-sky-400 hover:text-sky-500 dark:hover:text-sky-300 hover:scale-110 focus:ring-2 focus:ring-sky-400 focus:outline-none';
-                btn.innerHTML = DOMPurify.sanitize(`<i class="icon icon-snowflake ${isDropdown ? 'h-5 w-5' : 'h-4 w-4 sm:h-5 sm:w-5'}"></i>`);
+                const icon = document.createElement('i');
+                icon.className = `icon icon-snowflake ${isDropdown ? 'h-5 w-5' : 'h-4 w-4 sm:h-5 sm:w-5'}`;
+                btn.appendChild(icon);
                 btn.onclick = toggleHolidayMood;
                 a11y.parentNode.appendChild(btn);
             }
