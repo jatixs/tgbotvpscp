@@ -21,6 +21,7 @@
         window.i18n = window.i18n || {};
         const I18N = {{ i18n_json | safe }};
         const master_billing_json = {{ master_billing_json | safe | default('null') }};
+        window.SERVER_HOLIDAY_TEST = {{ 'true' if holiday_test else 'false' }};
         {{ user_role_js | safe }}
         window.USER_ROLE_LEVEL = {{ user_role_level }};
         window.GLOBAL_PING_MODE = "{{ val_ping_mode }}";
@@ -144,6 +145,17 @@
                                         <input type="checkbox" id="mHapticsCheckbox3" class="sr-only peer mHapticsCheckbox">
                                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
                                     </label>
+                                </div>
+                                <div class="w-full px-4 py-2 flex items-center justify-center gap-3 border-t border-gray-100 dark:border-white/5">
+                                    <button data-action="toggle-perf-mode" title="{{ web_toggle_perf_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-yellow-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    </button>
+                                    <button data-action="toggle-a11y-mode" title="{{ web_toggle_a11y_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-blue-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    </button>
+                                    <button data-action="toggle-holiday-mode" title="{{ web_toggle_holiday_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-sky-400 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95 hidden">
+                                        <i class="icon icon-snowflake h-5 w-5"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>

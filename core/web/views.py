@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import secrets
 import socket
 import time
@@ -149,6 +150,11 @@ async def _ensure_generated_favicons() -> None:
 
 
 def _render_html_response(template_name: str, context: dict[str, Any], request: web.Request) -> web.Response:
+    if "holiday_test" not in context:
+        context["holiday_test"] = os.getenv("WEB_HOLIDAY_TEST", "").lower() in ("true", "1")
+    if "web_toggle_holiday_mode" not in context:
+        lang = context.get("lang") or DEFAULT_LANGUAGE
+        context["web_toggle_holiday_mode"] = _("web_toggle_holiday_mode", lang)
     template = JINJA_ENV.get_template(template_name)
     response = web.Response(text=template.render(**context), content_type="text/html")
     if hasattr(web_auth, "_set_csrf_cookie"):
@@ -398,6 +404,8 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "meta_locked": meta_locked,
         "web_toggle_perf_mode": _("web_toggle_perf_mode", lang),
         "web_toggle_a11y_mode": _("web_toggle_a11y_mode", lang),
+        "web_toggle_holiday_mode": _("web_toggle_holiday_mode", lang),
+        "holiday_test": os.getenv("WEB_HOLIDAY_TEST", "").lower() in ("true", "1"),
         "web_edit_ui": _("web_edit_ui", lang),
         "web_vnc_terminal_title": _("web_vnc_terminal_title", lang),
         "web_brand_name": TG_BOT_NAME,
@@ -611,6 +619,9 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_perf_mode_off": _("web_perf_mode_off", lang),
             "web_a11y_mode_on": _("web_a11y_mode_on", lang),
             "web_a11y_mode_off": _("web_a11y_mode_off", lang),
+            "web_toggle_holiday_mode": _("web_toggle_holiday_mode", lang),
+            "web_holiday_mode_on": _("web_holiday_mode_on", lang),
+            "web_holiday_mode_off": _("web_holiday_mode_off", lang),
             "web_node_rename_success": _("web_node_rename_success", lang),
             "web_node_rename_error": _("web_node_rename_error", lang),
             "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),

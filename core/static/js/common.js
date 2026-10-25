@@ -1624,30 +1624,62 @@ async function addNodeDash() {
 }
 
 function isHolidayPeriod() {
+    if (window.SERVER_HOLIDAY_TEST === true) return true;
+    if (localStorage.getItem('holiday_test') === '1' || localStorage.getItem('holiday_test') === 'true') return true;
+    try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('holiday') || params.has('holiday_test')) {
+            localStorage.setItem('holiday_test', '1');
+            return true;
+        }
+    } catch (_) {}
     const now = new Date();
     return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14);
 }
 let snowInterval = null;
 
 function initHolidayMood() {
-    if (!isHolidayPeriod()) return;
-    const themeBtn = document.getElementById('themeBtn');
-    if (themeBtn && !document.getElementById('holidayBtn')) {
-        const holidayBtn = document.createElement('button');
-        holidayBtn.id = 'holidayBtn';
-        holidayBtn.className = 'flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 mr-1';
-        holidayBtn.innerHTML = DOMPurify.sanitize(`<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"></line><line x1="20" y1="12" x2="4" y2="12"></line><line x1="17.66" y1="6.34" x2="6.34" y2="17.66"></line><line x1="17.66" y1="17.66" x2="6.34" y2="6.34"></line><polyline points="9 4 12 7 15 4"></polyline><polyline points="15 20 12 17 9 20"></polyline><polyline points="20 9 17 12 20 15"></polyline><polyline points="4 15 7 12 4 9"></polyline></svg>`);
-        holidayBtn.onclick = toggleHolidayMood;
-        themeBtn.parentNode.insertBefore(holidayBtn, themeBtn);
+    const isHoliday = isHolidayPeriod();
+    const btns = document.querySelectorAll('[data-action="toggle-holiday-mode"], #holidayBtn, #holidayBtnDesktop');
+
+    if (!isHoliday) {
+        btns.forEach(b => b.classList.add('hidden'));
+        stopHolidayEffects();
+        return;
     }
+
+    // Reveal existing holiday buttons in submenus and headers
+    btns.forEach(b => b.classList.remove('hidden'));
+
+    // Dynamic fallback: if no button exists yet, insert into the container with toggle-a11y-mode
+    if (btns.length === 0) {
+        const a11yBtns = document.querySelectorAll('[data-action="toggle-a11y-mode"]');
+        a11yBtns.forEach(a11y => {
+            if (a11y.parentNode && !a11y.parentNode.querySelector('[data-action="toggle-holiday-mode"]')) {
+                const isDropdown = a11y.classList.contains('p-2') || a11y.closest('#mobileSettingsDropdown');
+                const btn = document.createElement('button');
+                btn.setAttribute('data-action', 'toggle-holiday-mode');
+                btn.setAttribute('title', (typeof I18N !== 'undefined' && I18N.web_toggle_holiday_mode) || 'Новогоднее настроение');
+                btn.className = isDropdown
+                    ? 'p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-sky-400 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95'
+                    : 'p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-sky-400 hover:text-sky-500 dark:hover:text-sky-300 hover:scale-110 focus:ring-2 focus:ring-sky-400 focus:outline-none';
+                btn.innerHTML = DOMPurify.sanitize(`<i class="icon icon-snowflake ${isDropdown ? 'h-5 w-5' : 'h-4 w-4 sm:h-5 sm:w-5'}"></i>`);
+                btn.onclick = toggleHolidayMood;
+                a11y.parentNode.appendChild(btn);
+            }
+        });
+    }
+
     createHolidayStructure();
     window.addEventListener('resize', () => {
         clearTimeout(window.resizeTimer);
         window.resizeTimer = setTimeout(createHolidayStructure, 250);
     });
-    if (localStorage.getItem('holiday_mood') !== 'false') {
+
+    const isEnabled = localStorage.getItem('holiday_mood') !== 'false';
+    updateHolidayUI(isEnabled);
+    if (isEnabled) {
         startHolidayEffects();
-        document.getElementById('holidayBtn')?.classList.add('holiday-btn-active');
     }
 }
 
@@ -1672,18 +1704,38 @@ function createHolidayStructure() {
     }
 }
 
+function updateHolidayUI(isActive) {
+    const btns = document.querySelectorAll('[data-action="toggle-holiday-mode"], #holidayBtn, #holidayBtnDesktop');
+    btns.forEach(btn => {
+        if (isActive) {
+            btn.classList.add('holiday-btn-active');
+        } else {
+            btn.classList.remove('holiday-btn-active');
+        }
+    });
+}
+
 function toggleHolidayMood() {
-    const newState = localStorage.getItem('holiday_mood') === 'false';
-    localStorage.setItem('holiday_mood', newState);
-    const btn = document.getElementById('holidayBtn');
+    const isCurrentlyActive = localStorage.getItem('holiday_mood') !== 'false';
+    const newState = !isCurrentlyActive;
+    localStorage.setItem('holiday_mood', newState ? 'true' : 'false');
+    updateHolidayUI(newState);
     if (newState) {
         startHolidayEffects();
-        btn?.classList.add('holiday-btn-active');
+        if (typeof showToast === 'function') {
+            showToast((typeof I18N !== 'undefined' && I18N.web_holiday_mode_on) || 'Новогоднее настроение включено');
+        }
     } else {
         stopHolidayEffects();
-        btn?.classList.remove('holiday-btn-active');
+        if (typeof showToast === 'function') {
+            showToast((typeof I18N !== 'undefined' && I18N.web_holiday_mode_off) || 'Новогоднее настроение отключено');
+        }
     }
+    if (window.playHaptic) playHaptic([10, 40, 10]);
 }
+
+window.toggleHolidayMood = toggleHolidayMood;
+document.addEventListener('app:action:toggle-holiday-mode', () => toggleHolidayMood());
 
 function startHolidayEffects() {
     startSnow();
@@ -1694,6 +1746,36 @@ function stopHolidayEffects() {
     stopSnow();
     document.getElementById('holiday-lights')?.classList.remove('garland-on');
 }
+
+window.testHoliday = function(force) {
+    const isCurrent = localStorage.getItem('holiday_test') === '1';
+    const enable = (force !== undefined) ? !!force : !isCurrent;
+    if (enable) {
+        localStorage.setItem('holiday_test', '1');
+        localStorage.setItem('holiday_mood', 'true');
+        initHolidayMood();
+        if (typeof showToast === 'function') {
+            showToast('❄️ Тестовый режим: гирлянда и снег включены');
+        }
+        console.log('%c❄️ Holiday test mode ENABLED.', 'color:#60a5fa;font-weight:bold;', 'Snowflake button is visible in the submenu next to the eye and lightning.');
+        return '❄️ Holiday test mode ENABLED. Run testHoliday(false) to turn off.';
+    } else {
+        localStorage.removeItem('holiday_test');
+        stopHolidayEffects();
+        document.querySelectorAll('[data-action="toggle-holiday-mode"], #holidayBtn, #holidayBtnDesktop').forEach(b => {
+            b.classList.remove('holiday-btn-active');
+            b.classList.add('hidden');
+        });
+        document.getElementById('holiday-lights')?.remove();
+        document.getElementById('snow-container')?.remove();
+        if (typeof showToast === 'function') {
+            showToast('❄️ Тестовый режим отключен');
+        }
+        console.log('%c❄️ Holiday test mode DISABLED.', 'color:#9ca3af;font-weight:bold;');
+        return '❄️ Holiday test mode DISABLED.';
+    }
+};
+window.holidayTest = window.testHoliday;
 
 function startSnow() {
     if (snowInterval) return;
