@@ -2091,6 +2091,11 @@ function handleServerRestart() {
     let pollTimer = null;
 
     async function checkServerHealth(manual = false) {
+        if (manual && pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+        }
+
         attempts++;
         const statusEl = document.getElementById('server-restart-status');
         if (statusEl) {
@@ -2104,6 +2109,10 @@ function handleServerRestart() {
             });
 
             if (res.status === 200) {
+                if (pollTimer) {
+                    clearTimeout(pollTimer);
+                    pollTimer = null;
+                }
                 if (statusEl) {
                     const restoredText = (typeof I18N !== 'undefined' && I18N.web_server_restored) ? I18N.web_server_restored : "Связь восстановлена!";
                     statusEl.textContent = restoredText;
@@ -2121,6 +2130,10 @@ function handleServerRestart() {
             }
 
             if (res.status === 401 || res.status === 403) {
+                if (pollTimer) {
+                    clearTimeout(pollTimer);
+                    pollTimer = null;
+                }
                 const overlay = document.getElementById('server-restart-overlay');
                 if (overlay) {
                     overlay.remove();
