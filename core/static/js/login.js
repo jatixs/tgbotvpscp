@@ -516,6 +516,28 @@ document.addEventListener("DOMContentLoaded", () => {
         toggleForms('set-password');
     }
 
+    // 4.1. Check Session Expired parameter or storage flag
+    const isSessionExpired = urlParams.get('expired') === '1' || urlParams.get('reason') === 'expired' || sessionStorage.getItem('session_expired_popup') === '1';
+    if (isSessionExpired) {
+        sessionStorage.removeItem('session_expired_popup');
+        localStorage.removeItem('session_expired_popup');
+        if (urlParams.has('expired') || urlParams.has('reason')) {
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+        }
+        const expiredTitle = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
+        const expiredMsg = (typeof I18N !== 'undefined' && I18N.web_session_expired_desc) 
+            ? I18N.web_session_expired_desc 
+            : ((typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Время вашей сессии истекло или доступ был отозван. Пожалуйста, выполните вход повторно.");
+        setTimeout(() => {
+            if (window.showModalAlert) {
+                window.showModalAlert(expiredMsg, expiredTitle);
+            } else {
+                alert(`${expiredTitle}\n\n${expiredMsg}`);
+            }
+        }, 150);
+    }
+
     // 5. Check Cookie Consent
     if (!localStorage.getItem('cookie_consent')) {
         setTimeout(() => {

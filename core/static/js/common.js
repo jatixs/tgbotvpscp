@@ -314,6 +314,11 @@ async function secureFetch(url, options = {}) {
     }
     
     const response = await fetch(parsedUrl.toString(), reqOptions);
+    if (response.status === 401 || response.status === 403) {
+        if (typeof handleSessionExpired === 'function') {
+            handleSessionExpired();
+        }
+    }
     const originalJson = response.json.bind(response);
     
     response.json = async function() {
@@ -1714,11 +1719,25 @@ function stopSnow() {
     if (document.getElementById('snow-container')) document.getElementById('snow-container').innerHTML = '';
 }
 
+window._isSessionExpired = false;
+let sseReconnectTimer = null;
+
+function dismissAllConnectionAlerts() {
+    const connToast = document.getElementById('conn-error-toast');
+    if (connToast) connToast.remove();
+    const fatalOverlay = document.getElementById('fatal-error-overlay');
+    if (fatalOverlay) fatalOverlay.remove();
+    const offlineToast = document.getElementById('offline-toast');
+    if (offlineToast) offlineToast.remove();
+}
+
 function initSSE() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+    if (window._isSessionExpired) return;
 
     if (sseSource) {
-        sseSource.close();
+        try { sseSource.close(); } catch (_) { }
+        sseSource = null;
     }
 
     isSseConnected = false;
@@ -1727,24 +1746,23 @@ function initSSE() {
     function resetConnectionWatchdog() {
         if (connectionTimer) clearTimeout(connectionTimer);
         connectionTimer = setTimeout(() => {
-            if (navigator.onLine) {
-                const weakText = (typeof I18N !== 'undefined' && I18N.web_weak_conn) ? I18N.web_weak_conn : "Weak internet connection...";
-                showToast(weakText);
-            } else {
-                handleConnectionError();
-            }
+            diagnoseConnectionIssue(true);
         }, 15000);
-    };
+    }
 
     resetConnectionWatchdog();
 
-    sseSource = new EventSource('/api/events');
+    try {
+        sseSource = new EventSource('/api/events');
+    } catch (e) {
+        diagnoseConnectionIssue(false);
+        return;
+    }
 
     sseSource.onopen = () => {
         isSseConnected = true;
         resetConnectionWatchdog();
-        const errToast = document.getElementById('conn-error-toast');
-        if (errToast) errToast.remove();
+        dismissAllConnectionAlerts();
     };
 
     sseSource.addEventListener('agent_stats', () => {
@@ -1777,19 +1795,114 @@ function initSSE() {
         }
     });
 
-    sseSource.addEventListener('shutdown', (e) => {
-        sseSource.close();
+    sseSource.addEventListener('shutdown', () => {
+        if (sseSource) {
+            try { sseSource.close(); } catch (_) { }
+            sseSource = null;
+        }
         handleServerRestart();
     });
 
     sseSource.onerror = () => {
-        if (isSseConnected) {
-            handleConnectionError();
-        }
+        isSseConnected = false;
+        diagnoseConnectionIssue(false);
     };
 
     window.sseSource = sseSource;
 }
+
+async function diagnoseConnectionIssue(isWatchdog = false) {
+    if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
+
+    // 1. Client offline check
+    if (!navigator.onLine) {
+        handleClientOffline();
+        return;
+    }
+
+    // 2. Client is online. Probe server auth and health.
+    try {
+        const authRes = await fetch('/api/auth/status', {
+            method: 'GET',
+            cache: 'no-store'
+        });
+
+        if (authRes.status === 401 || authRes.status === 403) {
+            handleSessionExpired();
+            return;
+        }
+
+        if (authRes.ok) {
+            // Server is active and session is valid!
+            if (isWatchdog) {
+                const slowText = (typeof I18N !== 'undefined' && I18N.web_slow_connection)
+                    ? I18N.web_slow_connection
+                    : "Slow internet connection...";
+                showToast(slowText);
+            } else {
+                dismissAllConnectionAlerts();
+                if (!sseReconnectTimer && !window._isSessionExpired) {
+                    sseReconnectTimer = setTimeout(() => {
+                        sseReconnectTimer = null;
+                        if (!isSseConnected && !window._isSessionExpired) {
+                            initSSE();
+                        }
+                    }, 2000);
+                }
+            }
+            return;
+        }
+    } catch (_) {
+        // Network error fetching /api/auth/status -> Server is restarting or unreachable!
+    }
+
+    // 3. Server failed to answer -> show Server Restarting overlay
+    handleServerRestart();
+}
+
+function handleClientOffline() {
+    if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
+    if (document.getElementById('offline-toast')) return;
+
+    const title = (typeof I18N !== 'undefined' && I18N.web_client_offline) ? I18N.web_client_offline : "Отсутствует подключение к интернету";
+    const desc = (typeof I18N !== 'undefined' && I18N.web_client_offline_desc) ? I18N.web_client_offline_desc : "Проверьте сетевое соединение Wi-Fi или мобильные данные.";
+
+    const toastContainer = getToastContainer();
+    const toast = document.createElement('div');
+    toast.id = 'offline-toast';
+    toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md w-auto max-w-sm transition-all duration-300 transform translate-y-0 opacity-100 mb-2';
+    toast.innerHTML = DOMPurify.sanitize(`
+        <div class="offline-toast-icon p-2 rounded-xl flex-shrink-0 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+            </svg>
+        </div>
+        <div class="flex flex-col text-left flex-1 min-w-0 pr-1">
+            <span class="offline-toast-title text-xs font-bold leading-tight">${escapeHtml(title)}</span>
+            <span class="offline-toast-desc text-[11px] leading-tight mt-0.5">${escapeHtml(desc)}</span>
+        </div>
+        <button type="button" onclick="const t = document.getElementById('offline-toast'); if (t) t.remove();" class="offline-toast-close p-1 rounded-lg transition ml-auto flex-shrink-0" title="Close" aria-label="Close">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    `);
+    toastContainer.appendChild(toast);
+}
+
+window.addEventListener('online', () => {
+    const offlineToast = document.getElementById('offline-toast');
+    if (offlineToast) offlineToast.remove();
+    if (!window._isSessionExpired) {
+        const onlineText = (typeof I18N !== 'undefined' && I18N.web_client_online) ? I18N.web_client_online : "Подключение к сети восстановлено";
+        showToast(onlineText);
+        diagnoseConnectionIssue(false);
+    }
+});
+
+window.addEventListener('offline', () => {
+    handleClientOffline();
+});
 
 function initSessionSync() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
@@ -1798,8 +1911,10 @@ function initSessionSync() {
         if (e.key === 'session_status' && e.newValue && e.newValue.startsWith('logged_out')) {
             handleSessionExpired();
         }
+        if (e.key === 'session_expired_popup' && e.newValue === '1') {
+            handleSessionExpired();
+        }
     });
-
 
     const logoutForms = document.querySelectorAll('form[action="/logout"]');
     logoutForms.forEach(form => {
@@ -1812,8 +1927,8 @@ function initSessionSync() {
 window.checkSessionStatus = function() {
     if (document.getElementById('session-expired-overlay')) return;
 
-    fetch('/api/settings/language', {
-        method: 'HEAD',
+    fetch('/api/auth/status', {
+        method: 'GET',
         cache: 'no-store'
     })
         .then(res => {
@@ -1822,7 +1937,7 @@ window.checkSessionStatus = function() {
             }
         })
         .catch(() => { });
-}
+};
 
 let lastUnreadCount = -1;
 let lastNotificationsJson = "";
@@ -1852,31 +1967,55 @@ function initNotifications() {
 }
 
 function handleSessionExpired() {
-    if (document.getElementById('session-expired-overlay')) return;
+    if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
+    window._isSessionExpired = true;
+
+    try {
+        sessionStorage.setItem('session_expired_popup', '1');
+        localStorage.setItem('session_expired_popup', '1');
+    } catch (_) { }
 
     if (window.sseSource) {
-        window.sseSource.close();
+        try { window.sseSource.close(); } catch (_) { }
         window.sseSource = null;
     }
+    if (window.nodesMonitorSSESource) {
+        try { window.nodesMonitorSSESource.close(); } catch (_) { }
+        window.nodesMonitorSSESource = null;
+    }
+    if (window.servicesSSESource) {
+        try { window.servicesSSESource.close(); } catch (_) { }
+        window.servicesSSESource = null;
+    }
+    if (window.logSSESource) {
+        try { window.logSSESource.close(); } catch (_) { }
+        window.logSSESource = null;
+    }
 
-    const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Session expired";
-    const msg = (typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Please login again";
-    const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Login";
+    dismissAllConnectionAlerts();
+    const restartOverlay = document.getElementById('server-restart-overlay');
+    if (restartOverlay) restartOverlay.remove();
+
+    const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
+    const msg = (typeof I18N !== 'undefined' && I18N.web_session_expired_desc)
+        ? I18N.web_session_expired_desc
+        : ((typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Время вашей сессии истекло или доступ был отозван. Пожалуйста, выполните вход повторно.");
+    const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Войти";
 
     const overlay = document.createElement('div');
     overlay.id = 'session-expired-overlay';
-    overlay.className = 'fixed inset-0 z-[9999] bg-white/30 dark:bg-black/50 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300 opacity-0';
+    overlay.className = 'fixed inset-0 z-[10001] bg-white/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300 opacity-0';
 
     overlay.innerHTML = DOMPurify.sanitize(`
-        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 transform scale-95 transition-transform duration-300">
-            <div class="mb-4 text-red-500 mx-auto bg-red-100 dark:bg-red-900/20 w-16 h-16 flex items-center justify-center rounded-full">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 transform scale-95 transition-transform duration-300">
+            <div class="mb-4 text-amber-500 mx-auto bg-amber-100 dark:bg-amber-900/30 w-16 h-16 flex items-center justify-center rounded-2xl shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
             </div>
             <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
             <p class="text-gray-500 dark:text-gray-400 mb-6 text-sm leading-relaxed">${msg}</p>
-            <a href="/login" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20 active:scale-95">
+            <a href="/login?expired=1" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20 active:scale-95 text-sm">
                 ${btnText}
             </a>
         </div>
@@ -1889,61 +2028,23 @@ function handleSessionExpired() {
 
     requestAnimationFrame(() => {
         overlay.classList.remove('opacity-0');
-        overlay.querySelector('div').classList.remove('scale-95');
-        overlay.querySelector('div').classList.add('scale-100');
+        const card = overlay.querySelector('div');
+        if (card) {
+            card.classList.remove('scale-95');
+            card.classList.add('scale-100');
+        }
     });
 }
+window.handleSessionExpired = handleSessionExpired;
 
 function handleConnectionError() {
-    if (document.getElementById('connection-error-overlay')) return;
-
-    const msg = (typeof I18N !== 'undefined' && I18N.web_conn_problem) ? I18N.web_conn_problem : "Possible internet connection problems";
-    const btnText = (typeof I18N !== 'undefined' && I18N.web_refresh_stream) ? I18N.web_refresh_stream : "Refresh";
-
-    const toastContainer = getToastContainer();
-    const existing = document.getElementById('conn-error-toast');
-    if (existing) return;
-
-    const toast = document.createElement('div');
-    toast.id = 'conn-error-toast';
-    toast.className = 'pointer-events-auto flex flex-col gap-2 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border bg-red-50/90 dark:bg-red-900/90 border-red-200 dark:border-red-800 w-auto max-w-sm transition-all duration-300 transform translate-y-0 opacity-100 mb-2';
-
-    toast.innerHTML = DOMPurify.sanitize(`
-        <div class="flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span class="text-sm font-bold text-red-900 dark:text-red-100">${msg}</span>
-        </div>
-        <button data-action="retry-sse" class="w-full py-1.5 px-3 bg-red-200 hover:bg-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-red-900 dark:text-red-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            ${btnText}
-        </button>
-    `);
-
-    toastContainer.appendChild(toast);
+    diagnoseConnectionIssue(false);
 }
+window.handleConnectionError = handleConnectionError;
 
 function retrySSEStream() {
-    const toast = document.getElementById('conn-error-toast');
-    if (toast) toast.remove();
-
-    if (sseSource) {
-        sseSource.close();
-        sseSource = null;
-    }
-
-    initSSE();
-
-    setTimeout(() => {
-        if (!isSseConnected) {
-            handleFatalConnectionError();
-        }
-    }, 5000);
+    diagnoseConnectionIssue(false);
 }
-
 window.retrySSEStream = retrySSEStream;
 
 document.addEventListener('app:action:retry-sse', () => {
@@ -1951,59 +2052,105 @@ document.addEventListener('app:action:retry-sse', () => {
 });
 
 function handleFatalConnectionError() {
-    if (document.getElementById('fatal-error-overlay')) return;
-
-    const msg = (typeof I18N !== 'undefined' && I18N.web_fatal_conn) ? I18N.web_fatal_conn : "Internet connection problems...";
-    const reloadMsg = (typeof I18N !== 'undefined' && I18N.web_reloading_page) ? I18N.web_reloading_page : "Reloading page...";
-
-    createBlurOverlay('fatal-error-overlay', `
-        <div class="text-red-500 mb-4 animate-bounce">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
-            </svg>
-        </div>
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${msg}</h2>
-        <p class="text-gray-500 dark:text-gray-400 text-sm">${reloadMsg}</p>
-    `);
-
-    setTimeout(() => {
-        window.location.reload();
-    }, 5000);
+    diagnoseConnectionIssue(false);
 }
+window.handleFatalConnectionError = handleFatalConnectionError;
 
 function handleServerRestart() {
+    if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
     if (document.getElementById('server-restart-overlay')) return;
 
-    const msg = (typeof I18N !== 'undefined' && I18N.web_server_rebooting) ? I18N.web_server_rebooting : "Server/bot went into reboot.";
+    dismissAllConnectionAlerts();
+
+    const title = (typeof I18N !== 'undefined' && I18N.web_server_rebooting) ? I18N.web_server_rebooting : "Восстановление сессии...";
+    const desc = (typeof I18N !== 'undefined' && I18N.web_server_rebooting_desc) ? I18N.web_server_rebooting_desc : "Ожидание восстановления связи с панелью управления...";
+    const checkAgainText = (typeof I18N !== 'undefined' && I18N.web_check_again) ? I18N.web_check_again : "Проверить сейчас";
 
     createBlurOverlay('server-restart-overlay', `
-        <div class="text-blue-500 mb-4 animate-spin">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+        <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 mx-auto">
+            <div class="w-16 h-16 bg-blue-500/10 dark:bg-blue-500/20 rounded-2xl mx-auto flex items-center justify-center mb-4">
+                <svg class="h-8 w-8 text-blue-500 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </div>
+            <h3 id="server-restart-title" class="text-xl font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
+            <p id="server-restart-desc" class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-4">${desc}</p>
+            <div id="server-restart-badge" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-xs font-semibold">
+                <span class="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+                <span id="server-restart-status">Восстановление подключения...</span>
+            </div>
+            <div id="server-restart-actions" class="mt-4 hidden">
+                <button onclick="checkServerHealth(true)" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-md">
+                    ${checkAgainText}
+                </button>
+            </div>
         </div>
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white">${msg}</h2>
     `);
 
-    function checkServer() {
-        fetch('/api/settings/language', {
-            method: 'HEAD',
-            cache: 'no-store'
-        })
-            .then(res => {
-                if (res.status === 200 || res.status === 401 || res.status === 403) {
-                    window.location.reload();
-                } else {
-                    setTimeout(checkServer, 2000);
-                }
-            })
-            .catch(() => {
-                setTimeout(checkServer, 2000);
-            });
-    };
+    let attempts = 0;
+    let pollTimer = null;
 
-    setTimeout(checkServer, 3000);
+    async function checkServerHealth(manual = false) {
+        attempts++;
+        const statusEl = document.getElementById('server-restart-status');
+        if (statusEl) {
+            statusEl.textContent = `Проверка связи... (попытка ${attempts})`;
+        }
+
+        try {
+            const res = await fetch('/api/auth/status', {
+                method: 'GET',
+                cache: 'no-store'
+            });
+
+            if (res.status === 200) {
+                if (statusEl) {
+                    const restoredText = (typeof I18N !== 'undefined' && I18N.web_server_restored) ? I18N.web_server_restored : "Связь восстановлена!";
+                    statusEl.textContent = restoredText;
+                }
+                const overlay = document.getElementById('server-restart-overlay');
+                if (overlay) {
+                    overlay.classList.add('opacity-0');
+                    setTimeout(() => {
+                        overlay.remove();
+                        document.body.style.overflow = '';
+                        initSSE();
+                    }, 600);
+                }
+                return;
+            }
+
+            if (res.status === 401 || res.status === 403) {
+                const overlay = document.getElementById('server-restart-overlay');
+                if (overlay) {
+                    overlay.remove();
+                    document.body.style.overflow = '';
+                }
+                handleSessionExpired();
+                return;
+            }
+        } catch (_) {
+            // Still unreachable
+        }
+
+        if (attempts >= 15) {
+            const actions = document.getElementById('server-restart-actions');
+            if (actions) actions.classList.remove('hidden');
+            const descEl = document.getElementById('server-restart-desc');
+            if (descEl && typeof I18N !== 'undefined' && I18N.web_panel_unreachable_desc) {
+                descEl.textContent = I18N.web_panel_unreachable_desc;
+            }
+        }
+
+        if (document.getElementById('server-restart-overlay')) {
+            pollTimer = setTimeout(() => checkServerHealth(false), 2000);
+        }
+    }
+    window.checkServerHealth = checkServerHealth;
+
+    pollTimer = setTimeout(() => checkServerHealth(false), 2000);
 }
+window.handleServerRestart = handleServerRestart;
 
 function createBlurOverlay(id, content) {
     const overlay = document.createElement('div');

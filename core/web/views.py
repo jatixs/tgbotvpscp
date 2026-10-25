@@ -251,7 +251,8 @@ async def handle_agent_ipv4(request: web.Request) -> web.StreamResponse:
 async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
-        raise web.HTTPFound("/login")
+        had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
+        raise web.HTTPFound("/login?expired=1" if had_cookie else "/login")
     if not _is_admin(user):
         raise web.HTTPFound("/")
 
@@ -328,7 +329,8 @@ async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
 async def handle_dashboard(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
-        raise web.HTTPFound("/login")
+        had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
+        raise web.HTTPFound("/login?expired=1" if had_cookie else "/login")
 
     if web_auth.is_default_password_active(int(user["id"])):
         token = secrets.token_urlsafe(32)
@@ -586,6 +588,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_log_connecting": _("web_log_connecting", lang),
             "web_status_restart": _("web_status_restart", lang),
             "web_session_expired": _("web_session_expired", lang),
+            "web_session_expired_desc": _("web_session_expired_desc", lang),
             "web_please_relogin": _("web_please_relogin", lang),
             "web_login_btn": _("web_login_btn", lang),
             "web_weak_conn": _("web_weak_conn", lang),
@@ -593,6 +596,16 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_refresh_stream": _("web_refresh_stream", lang),
             "web_fatal_conn": _("web_fatal_conn", lang),
             "web_server_rebooting": _("web_server_rebooting", lang),
+            "web_server_rebooting_desc": _("web_server_rebooting_desc", lang),
+            "web_server_restored": _("web_server_restored", lang),
+            "web_panel_unreachable": _("web_panel_unreachable", lang),
+            "web_panel_unreachable_desc": _("web_panel_unreachable_desc", lang),
+            "web_client_offline": _("web_client_offline", lang),
+            "web_client_offline_desc": _("web_client_offline_desc", lang),
+            "web_client_online": _("web_client_online", lang),
+            "web_slow_connection": _("web_slow_connection", lang),
+            "web_slow_connection_desc": _("web_slow_connection_desc", lang),
+            "web_check_again": _("web_check_again", lang),
             "web_reloading_page": _("web_reloading_page", lang),
             "web_perf_mode_on": _("web_perf_mode_on", lang),
             "web_perf_mode_off": _("web_perf_mode_off", lang),
@@ -640,7 +653,8 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
 async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
-        raise web.HTTPFound("/login")
+        had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
+        raise web.HTTPFound("/login?expired=1" if had_cookie else "/login")
 
     user_id = int(user["id"])
     lang = get_user_lang(user_id)
@@ -845,6 +859,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
             "web_error_short": _("web_error_short", lang),
             "web_weak_conn": _("web_weak_conn", lang),
             "web_session_expired": _("web_session_expired", lang),
+            "web_session_expired_desc": _("web_session_expired_desc", lang),
             "web_please_relogin": _("web_please_relogin", lang),
             "web_login_btn": _("web_login_btn", lang),
             "web_conn_problem": _("web_conn_problem", lang),
@@ -852,6 +867,16 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
             "web_fatal_conn": _("web_fatal_conn", lang),
             "web_reloading_page": _("web_reloading_page", lang),
             "web_server_rebooting": _("web_server_rebooting", lang),
+            "web_server_rebooting_desc": _("web_server_rebooting_desc", lang),
+            "web_server_restored": _("web_server_restored", lang),
+            "web_panel_unreachable": _("web_panel_unreachable", lang),
+            "web_panel_unreachable_desc": _("web_panel_unreachable_desc", lang),
+            "web_client_offline": _("web_client_offline", lang),
+            "web_client_offline_desc": _("web_client_offline_desc", lang),
+            "web_client_online": _("web_client_online", lang),
+            "web_slow_connection": _("web_slow_connection", lang),
+            "web_slow_connection_desc": _("web_slow_connection_desc", lang),
+            "web_check_again": _("web_check_again", lang),
             "web_nodes_monitor_filter_reset": _("web_nodes_monitor_filter_reset", lang),
             "modal_btn_ok": _("modal_btn_ok", lang),
             "modal_btn_cancel": _("modal_btn_cancel", lang),
@@ -877,7 +902,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
 async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
-        raise web.HTTPFound("/login")
+        had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
+        raise web.HTTPFound("/login?expired=1" if had_cookie else "/login")
 
     user_id = int(user["id"])
     role = str(user.get("role", ROLE_USER))
@@ -1020,6 +1046,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_click_copy": _("web_click_copy", lang),
         "web_server_name_placeholder": _("web_server_name_placeholder", lang),
         "web_session_expired": _("web_session_expired", lang),
+        "web_session_expired_desc": _("web_session_expired_desc", lang),
         "web_please_relogin": _("web_please_relogin", lang),
         "web_login_btn": _("web_login_btn", lang),
         "web_add_user_prompt": _("web_add_user_prompt", lang),
@@ -1028,6 +1055,16 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_refresh_stream": _("web_refresh_stream", lang),
         "web_fatal_conn": _("web_fatal_conn", lang),
         "web_server_rebooting": _("web_server_rebooting", lang),
+        "web_server_rebooting_desc": _("web_server_rebooting_desc", lang),
+        "web_server_restored": _("web_server_restored", lang),
+        "web_panel_unreachable": _("web_panel_unreachable", lang),
+        "web_panel_unreachable_desc": _("web_panel_unreachable_desc", lang),
+        "web_client_offline": _("web_client_offline", lang),
+        "web_client_offline_desc": _("web_client_offline_desc", lang),
+        "web_client_online": _("web_client_online", lang),
+        "web_slow_connection": _("web_slow_connection", lang),
+        "web_slow_connection_desc": _("web_slow_connection_desc", lang),
+        "web_check_again": _("web_check_again", lang),
         "web_reloading_page": _("web_reloading_page", lang),
         "web_perf_mode_on": _("web_perf_mode_on", lang),
         "web_perf_mode_off": _("web_perf_mode_off", lang),
@@ -1321,6 +1358,15 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "web_perf_mode_off",
         "web_a11y_mode_on",
         "web_a11y_mode_off",
+        "web_session_expired",
+        "web_session_expired_desc",
+        "web_please_relogin",
+        "web_server_rebooting",
+        "web_server_rebooting_desc",
+        "web_server_restored",
+        "web_client_offline",
+        "web_client_offline_desc",
+        "web_client_online",
     ]
     i18n_all: dict[str, dict[str, str]] = {}
     for locale in ["ru", "en"]:

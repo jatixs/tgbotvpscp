@@ -7,6 +7,7 @@ import hmac
 import html
 import json
 import logging
+import os
 import secrets
 import time
 from typing import Any, Final
@@ -31,6 +32,8 @@ from ..auth import save_users_async
 from ..config import (
     ADMIN_USER_ID,
     ADMIN_USERNAME,
+    CIPHER_SUITE,
+    CONFIG_DIR,
     TOKEN,
     WEB_PUBLIC_URL,
 )
@@ -60,13 +63,60 @@ MAX_LOGIN_IPS: Final[int] = 10_000
 MAX_RESET_TOKENS: Final[int] = 100
 MAX_SERVER_SESSIONS: Final[int] = 10_000
 AGENT_FLAG: Final[str] = "🏳️"
+SESSIONS_FILE: Final[str] = os.path.join(CONFIG_DIR, "web_sessions.enc")
 
 BOT_USERNAME_CACHE: str | None = None
 SERVER_SESSIONS: dict[str, dict[str, Any]] = {}
+
+
+CSRF_TOKENS: dict[str, float] = {}
+
+
+def _save_sessions_to_disk() -> None:
+    try:
+        now = time.time()
+        valid_csrf = {k: v for k, v in CSRF_TOKENS.items() if v > now}
+        payload = {
+            "sessions": SERVER_SESSIONS,
+            "csrf": valid_csrf,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        encrypted = CIPHER_SUITE.encrypt(data)
+        tmp_file = f"{SESSIONS_FILE}.tmp"
+        with open(tmp_file, "wb") as f:
+            f.write(encrypted)
+        os.replace(tmp_file, SESSIONS_FILE)
+    except Exception as exc:
+        logging.warning("Failed to save web sessions to disk: %s", exc)
+
+
+def _load_sessions_from_disk() -> None:
+    if not os.path.isfile(SESSIONS_FILE):
+        return
+    try:
+        with open(SESSIONS_FILE, "rb") as f:
+            raw = f.read()
+        decrypted = CIPHER_SUITE.decrypt(raw)
+        data = json.loads(decrypted.decode("utf-8"))
+        now = time.time()
+        sessions_data = data.get("sessions") if isinstance(data, dict) and "sessions" in data else data
+        csrf_data = data.get("csrf", {}) if isinstance(data, dict) and "csrf" in data else {}
+        if isinstance(sessions_data, dict):
+            for token, sess in sessions_data.items():
+                if isinstance(sess, dict) and float(sess.get("expires", 0)) > now:
+                    SERVER_SESSIONS[token] = sess
+        if isinstance(csrf_data, dict):
+            for token, exp in csrf_data.items():
+                if isinstance(exp, (int, float)) and float(exp) > now:
+                    CSRF_TOKENS[token] = float(exp)
+    except Exception as exc:
+        logging.warning("Failed to load web sessions from disk: %s", exc)
+
+
+_load_sessions_from_disk()
 RESET_TOKENS: dict[str, dict[str, Any]] = {}
 TELEGRAM_JWKS_CACHE: dict[str, Any] = {"keys": {}, "fetched_at": 0.0}
 TELEGRAM_JWKS_URL: Final[str] = "https://oauth.telegram.org/.well-known/jwks.json"
-CSRF_TOKENS: dict[str, float] = {}
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 PASSWORD_HASHER = PasswordHasher()
 
@@ -499,6 +549,7 @@ def _create_session(
         "created": time.time(),
         "photo_url": photo_url,
     }
+    _save_sessions_to_disk()
     return session_token
 
 
@@ -742,6 +793,7 @@ async def handle_logout(request: web.Request) -> web.StreamResponse:
     session_token = request.cookies.get(COOKIE_NAME)
     if session_token:
         SERVER_SESSIONS.pop(session_token, None)
+        _save_sessions_to_disk()
 
     is_secure = _is_secure_request(request)
     response = web.HTTPFound("/login")
@@ -933,6 +985,8 @@ async def api_get_sessions(request: web.Request) -> web.StreamResponse:
 
     for token in expired_tokens:
         SERVER_SESSIONS.pop(token, None)
+    if expired_tokens:
+        _save_sessions_to_disk()
 
     user_sessions.sort(key=lambda item: (not item["current"], not item["is_mine"], item["created"]))
     import json
@@ -968,6 +1022,7 @@ async def api_revoke_session(request: web.Request) -> web.StreamResponse:
 
         if int(user["id"]) == ADMIN_USER_ID or int(session.get("id", 0)) == int(user["id"]):
             SERVER_SESSIONS.pop(target_token, None)
+            _save_sessions_to_disk()
             return encrypted_json_response({"status": "ok"})
 
         return encrypted_json_response({"error": "Session not found or access denied"}, status=404)
@@ -992,6 +1047,9 @@ async def api_revoke_all_sessions(request: web.Request) -> web.StreamResponse:
         if int(session.get("id", 0)) == uid and token != current_token:
             SERVER_SESSIONS.pop(token, None)
             count += 1
+
+    if count:
+        _save_sessions_to_disk()
 
     return encrypted_json_response({"status": "ok", "revoked_count": count})
 
@@ -1028,6 +1086,37 @@ async def handle_change_password(request: web.Request) -> web.StreamResponse:
     except Exception:
         logging.exception("Password change failed")
         return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.get("/api/health")
+@routes.get("/api/health/")
+async def handle_api_health(request: web.Request) -> web.Response:
+    """Lightweight public health endpoint for connection and restart diagnosis."""
+    from .. import shared_state
+    return web.json_response({
+        "status": "ok",
+        "restarting": bool(getattr(shared_state, "IS_RESTARTING", False)),
+        "time": time.time(),
+    })
+
+
+@routes.get("/api/auth/status")
+@routes.get("/api/auth/status/")
+async def handle_api_auth_status(request: web.Request) -> web.Response:
+    """Check if the caller's session is still authenticated and valid."""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response(
+            {"authenticated": False, "reason": "expired"},
+            status=401,
+        )
+    response = web.json_response({
+        "authenticated": True,
+        "id": user["id"],
+        "role": user.get("role", "users"),
+    })
+    _set_csrf_cookie(response, request)
+    return response
 
 
 __all__ = [

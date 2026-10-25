@@ -10,31 +10,21 @@
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
-## Unreleased
-
-### 🐛 Fixed
-* **Telegram node action confirmations.** Rebooting a node, updating its system and restarting a service now require explicit confirmation with a cancel button, matching the agent workflow. Permissions and target existence are checked again before execution.
-
 ## [1.27.0] - 2026-10-22
 
-### 🚀 New Features
-* **One-Click Telegram Sign-In (OIDC).** The web dashboard has adopted the modern and secure Telegram Login widget with instant cryptographic verification directly by Telegram.
-* **Web Push Notifications on Mobile & Desktop.** The panel delivers background push notifications to computers and smartphones (Android & iOS) even when the browser or PWA is closed. Alerts for high load, downtime, and SSH logins arrive in real time, with an instant test alert button in Settings.
-* **Instant IP Copying.** Server IP addresses across the dashboard can now be copied with a single click, featuring a smooth green checkmark animation. On smartphones, you can simply tap the dotted IP text anywhere on screen.
+### 🚀 New Features & Capabilities
+* 🔐 **One-Click Telegram Sign-In (OIDC)** — The web dashboard has adopted the modern and secure Telegram Login widget with instant cryptographic verification (also resolved an issue where logging in could redirect back to the login form).
+* 🔔 **Background Web Push Notifications** — Instant alerts for high load, downtime, and SSH logins now arrive on desktop and smartphones (Android/iOS) even when the browser is closed. A test push trigger is available in Settings.
+* 🌐 **Smart Connection & Session State Control in WebUI** — The dashboard precisely identifies disconnection causes (no more false network errors on `401` session expiration), smoothly reconnects in the background upon server restart or phone unlock (via new `/api/health` and `/api/auth/status` endpoints), and persists active sessions in encrypted storage (`config/web_sessions.enc`) to survive updates.
 
-### ✨ Improved
-* **Effortless Setup & Localization.** All messages in `deploy.sh` and `deploy_en.sh` have been refined into natural, guided steps, and the default panel language is now directly configured via `.env`.
-* **Intuitive and Responsive Interface.** Load charts feature an even timeline without trailing gaps, Web Push buttons adjust fluidly on mobile screens, hidden passwords display an intuitive closed-eyelids icon, and the web console launches noticeably faster.
-
-### 🐛 Fixed
-* **Authentication & Session Persistence.** Resolved an issue where successfully signing in via Telegram could reload and return back to the login page.
-* **Web Console & VNC Connectivity.** Fixed launch hangs in the terminal and VNC dialog, ensuring reliable authentication with modern encrypted OpenSSH keys.
-* **Mobile Screen Layout.** Long server names and IP addresses wrap cleanly on compact smartphone screens (down to 320px) without overflowing.
+### ✨ Improvements & Fixes
+* 🖥️ **Faster Terminal, VNC & IP Copying** — Web terminal and VNC launch significantly faster without first-run hangs, modern encrypted OpenSSH keys are fully supported, and server IP addresses can be copied with a single click (or tap on smartphones).
+* 📱 **Responsive Interface & Streamlined Setup** — Load charts feature an even timeline without gaps, mobile layouts are refined for narrow screens (down to 320px), and password visibility toggle icons have been modernized. The setup scripts (`deploy.sh` / `deploy_en.sh`) offer guided step-by-step prompts, and default panel language is configurable directly via `.env`.
+* 🛡️ **Telegram Node Action Confirmation Safeguard** — Rebooting a node, updating its system, and restarting a service now require explicit confirmation with a cancel button and permission re-validation (matching the agent workflow).
 
 ### 🔒 Security
-* **UI Hardening & Safe DOM APIs.** Dynamic modals and UI elements were refactored to use safe direct DOM creation APIs without XSS risks. Session cookies now carry strict `Path=/` and `SameSite=Lax` flags for safe cross-site Telegram auth.
-* **Encrypted Storage & Clean Logs.** Credentials and SSH keys are encrypted at rest with AES-128 (Fernet) and never sent back to the browser in plaintext. Service logs have been cleaned of technical markers to eliminate scanner false positives.
-* **Updated Vulnerable Dependencies.** Upgraded `Pillow` to `13.0.0` (closing 20+ CVEs) and `setuptools` to `>=84.1.0`. All build images and CI workflows have transitioned to Python 3.11.
+* **Data Protection & UI Hardening** — Web terminal passwords and SSH keys are encrypted at rest with AES-128 (Fernet) and never sent to the browser in plaintext. Dynamic elements are guarded against XSS, cookies use strict `Path=/` and `SameSite=Lax` flags, and server logs are cleaned of redundant technical markers.
+* **Updated Dependencies** — Build environments transitioned to Python 3.11, with upgrades to `setuptools` (`>=84.1.0`) and `Pillow` (`13.0.0`, resolving 20+ vulnerabilities).
 
 
 ## [1.26.1] - 2026-10-14

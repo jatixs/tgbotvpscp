@@ -2251,3 +2251,131 @@ html.dark .dark\:text-yellow-300 {
 html.dark .dark\:text-yellow-400 {
     color: #facc15 !important;
 }
+
+/* Amber utilities for alerts & modals */
+.text-amber-500 { color: #f59e0b !important; }
+.text-amber-600 { color: #d97706 !important; }
+.bg-amber-100 { background-color: #fef3c7 !important; }
+.dark .dark\:text-amber-400,
+:is(.dark *) .dark\:text-amber-400,
+html.dark .dark\:text-amber-400 { color: #fbbf24 !important; }
+.dark .dark\:bg-amber-900\/30,
+:is(.dark *) .dark\:bg-amber-900\/30,
+html.dark .dark\:bg-amber-900\/30 { background-color: rgba(120, 53, 15, 0.35) !important; }
+
+/* --- Offline Toast Notification (Adaptive for all themes) --- */
+#offline-toast {
+    background-color: rgba(255, 255, 255, 0.98) !important;
+    border: 1.5px solid #f59e0b !important;
+    box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
+}
+
+#offline-toast .offline-toast-title {
+    color: #111827 !important;
+    font-weight: 700 !important;
+}
+
+#offline-toast .offline-toast-desc {
+    color: #4b5563 !important;
+    font-weight: 500 !important;
+}
+
+#offline-toast .offline-toast-icon {
+    background-color: #fef3c7 !important;
+    border: 1px solid #fde68a !important;
+    color: #d97706 !important;
+}
+
+#offline-toast .offline-toast-close {
+    color: #9ca3af !important;
+}
+
+#offline-toast .offline-toast-close:hover {
+    color: #374151 !important;
+    background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Dark Theme */
+html.dark #offline-toast {
+    background-color: rgba(31, 41, 55, 0.96) !important;
+    border: 1.5px solid rgba(245, 158, 11, 0.65) !important;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 16px rgba(245, 158, 11, 0.18) !important;
+}
+
+html.dark #offline-toast .offline-toast-title {
+    color: #ffffff !important;
+}
+
+html.dark #offline-toast .offline-toast-desc {
+    color: #d1d5db !important;
+}
+
+html.dark #offline-toast .offline-toast-icon {
+    background-color: rgba(245, 158, 11, 0.18) !important;
+    border: 1px solid rgba(245, 158, 11, 0.4) !important;
+    color: #fbbf24 !important;
+}
+
+html.dark #offline-toast .offline-toast-close {
+    color: #9ca3af !important;
+}
+
+html.dark #offline-toast .offline-toast-close:hover {
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* AMOLED Theme */
+html.amoled #offline-toast {
+    background-color: #000000 !important;
+    border: 1.5px solid #f59e0b !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(245, 158, 11, 0.25) !important;
+}
+
+html.amoled #offline-toast .offline-toast-title {
+    color: #ffffff !important;
+}
+
+html.amoled #offline-toast .offline-toast-desc {
+    color: #e5e7eb !important;
+}
+
+html.amoled #offline-toast .offline-toast-icon {
+    background-color: rgba(245, 158, 11, 0.25) !important;
+    border: 1px solid rgba(245, 158, 11, 0.55) !important;
+    color: #fcd34d !important;
+}
+
+html.amoled #offline-toast .offline-toast-close {
+    color: #9ca3af !important;
+}
+
+html.amoled #offline-toast .offline-toast-close:hover {
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Accessibility / High-contrast mode */
+html.a11y-mode #offline-toast {
+    border: 2.5px solid #b45309 !important;
+}
+
+html.a11y-mode #offline-toast .offline-toast-title {
+    color: #000000 !important;
+    font-weight: 800 !important;
+}
+
+html.a11y-mode #offline-toast .offline-toast-desc {
+    color: #000000 !important;
+    font-weight: 600 !important;
+}
+
+html.a11y-mode.dark #offline-toast {
+    border: 2.5px solid #fbbf24 !important;
+}
+
+html.a11y-mode.dark #offline-toast .offline-toast-title,
+html.a11y-mode.dark #offline-toast .offline-toast-desc {
+    color: #ffffff !important;
+}
+

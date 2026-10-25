@@ -362,6 +362,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
             if _session_expired(current_token):
                 try:
                     await response.write(b"event: session_status\ndata: expired\n\n")
+                    await response.drain()
                 except Exception:
                     pass
                 break
@@ -611,6 +612,15 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
             if request.transport is None or request.transport.is_closing():
                 break
 
+            current_token = request.cookies.get(COOKIE_NAME)
+            if _session_expired(current_token):
+                try:
+                    await response.write(b"event: session_status\ndata: expired\n\n")
+                    await response.drain()
+                except Exception:
+                    pass
+                break
+
             data_sent = False
             if log_type == "bot" and os.path.exists(bot_log_path):
                 def read_updates(cursor: int) -> tuple[list[str], int]:
@@ -738,6 +748,7 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
             if _session_expired(current_token):
                 try:
                     await response.write(b"event: session_status\ndata: expired\n\n")
+                    await response.drain()
                 except Exception:
                     pass
                 break
@@ -837,6 +848,7 @@ async def handle_sse_node_services(request: web.Request) -> web.StreamResponse:
             if _session_expired(current_token):
                 try:
                     await response.write(b"event: session_status\ndata: expired\n\n")
+                    await response.drain()
                 except Exception:
                     pass
                 break
@@ -912,6 +924,7 @@ async def handle_sse_services(request: web.Request) -> web.StreamResponse:
             if _session_expired(current_token):
                 try:
                     await response.write(b"event: session_status\ndata: expired\n\n")
+                    await response.drain()
                 except Exception:
                     pass
                 break
@@ -1378,6 +1391,7 @@ async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
             if _session_expired(current_token):
                 try:
                     await response.write(b"event: session_status\ndata: expired\n\n")
+                    await response.drain()
                 except Exception:
                     pass
                 break
