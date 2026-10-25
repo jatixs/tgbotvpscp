@@ -32,7 +32,6 @@
         const I18N = {{ i18n_json | safe }};
         const SYS_CONFIG = {{ config_json | safe }};
         const master_billing_json = {{ master_billing_json | safe | default('null') }};
-        window.SERVER_HOLIDAY_TEST = {{ 'true' if holiday_test else 'false' }};
         {{ user_role_js | safe }}
     </script>
     <script src="/static/vendor/twemoji.min.js"></script>

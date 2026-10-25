@@ -28,7 +28,6 @@
         window.HAS_ACTIVE_NODES = {{ val_has_active_nodes }};
         const KEYBOARD_CONFIG = {{ keyboard_config_json | safe }};
         let USER_ALERTS = {{ user_alerts_json | safe }};
-        window.SERVER_HOLIDAY_TEST = {{ 'true' if holiday_test else 'false' }};
         {{ user_role_js | safe }}
         </script>
         <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>

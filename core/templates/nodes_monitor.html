@@ -21,7 +21,6 @@
         window.i18n = window.i18n || {};
         const I18N = {{ i18n_json | safe }};
         const master_billing_json = {{ master_billing_json | safe | default('null') }};
-        window.SERVER_HOLIDAY_TEST = {{ 'true' if holiday_test else 'false' }};
         {{ user_role_js | safe }}
         window.USER_ROLE_LEVEL = {{ user_role_level }};
         window.GLOBAL_PING_MODE = "{{ val_ping_mode }}";

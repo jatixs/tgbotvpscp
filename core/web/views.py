@@ -150,8 +150,6 @@ async def _ensure_generated_favicons() -> None:
 
 
 def _render_html_response(template_name: str, context: dict[str, Any], request: web.Request) -> web.Response:
-    if "holiday_test" not in context:
-        context["holiday_test"] = os.getenv("WEB_HOLIDAY_TEST", "").lower() in ("true", "1")
     if "web_toggle_holiday_mode" not in context:
         lang = context.get("lang") or DEFAULT_LANGUAGE
         context["web_toggle_holiday_mode"] = _("web_toggle_holiday_mode", lang)
@@ -405,7 +403,6 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_toggle_perf_mode": _("web_toggle_perf_mode", lang),
         "web_toggle_a11y_mode": _("web_toggle_a11y_mode", lang),
         "web_toggle_holiday_mode": _("web_toggle_holiday_mode", lang),
-        "holiday_test": os.getenv("WEB_HOLIDAY_TEST", "").lower() in ("true", "1"),
         "web_edit_ui": _("web_edit_ui", lang),
         "web_vnc_terminal_title": _("web_vnc_terminal_title", lang),
         "web_brand_name": TG_BOT_NAME,

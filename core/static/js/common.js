@@ -1624,14 +1624,8 @@ async function addNodeDash() {
 }
 
 function isHolidayPeriod() {
-    if (window.SERVER_HOLIDAY_TEST === true) return true;
-    if (localStorage.getItem('holiday_test') === '1' || localStorage.getItem('holiday_test') === 'true') return true;
     try {
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('holiday') || params.has('holiday_test')) {
-            localStorage.setItem('holiday_test', '1');
-            return true;
-        }
+        if (new URLSearchParams(window.location.search).has('holiday')) return true;
     } catch (_) {}
     const now = new Date();
     return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14);
@@ -1746,36 +1740,6 @@ function stopHolidayEffects() {
     stopSnow();
     document.getElementById('holiday-lights')?.classList.remove('garland-on');
 }
-
-window.testHoliday = function(force) {
-    const isCurrent = localStorage.getItem('holiday_test') === '1';
-    const enable = (force !== undefined) ? !!force : !isCurrent;
-    if (enable) {
-        localStorage.setItem('holiday_test', '1');
-        localStorage.setItem('holiday_mood', 'true');
-        initHolidayMood();
-        if (typeof showToast === 'function') {
-            showToast('❄️ Тестовый режим: гирлянда и снег включены');
-        }
-        console.log('%c❄️ Holiday test mode ENABLED.', 'color:#60a5fa;font-weight:bold;', 'Snowflake button is visible in the submenu next to the eye and lightning.');
-        return '❄️ Holiday test mode ENABLED. Run testHoliday(false) to turn off.';
-    } else {
-        localStorage.removeItem('holiday_test');
-        stopHolidayEffects();
-        document.querySelectorAll('[data-action="toggle-holiday-mode"], #holidayBtn, #holidayBtnDesktop').forEach(b => {
-            b.classList.remove('holiday-btn-active');
-            b.classList.add('hidden');
-        });
-        document.getElementById('holiday-lights')?.remove();
-        document.getElementById('snow-container')?.remove();
-        if (typeof showToast === 'function') {
-            showToast('❄️ Тестовый режим отключен');
-        }
-        console.log('%c❄️ Holiday test mode DISABLED.', 'color:#9ca3af;font-weight:bold;');
-        return '❄️ Holiday test mode DISABLED.';
-    }
-};
-window.holidayTest = window.testHoliday;
 
 function startSnow() {
     if (snowInterval) return;
