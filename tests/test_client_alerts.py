@@ -101,7 +101,6 @@ from modules.client_alerts import (  # noqa: E402
     _get_client_main_keyboard,
     _get_client_settings_keyboard,
     _load_broadcast_history,
-    _load_polls_registry,
     _record_broadcast,
     _render_broadcast_confirm_text,
     _save_broadcast_history,

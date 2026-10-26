@@ -63,9 +63,8 @@ def run_crash_alert_oneshot():
 
     if not error_tail:
         try:
-            # nosec B603
             # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
-            res = subprocess.run(
+            res = subprocess.run(  # nosec B603 B607
                 ["journalctl", "-u", bot_service, "-n", "15", "--no-pager"],
                 capture_output=True,
                 text=True,
