@@ -17,6 +17,7 @@ Subscribers Storage: config/alert_subscribers.json (simple JSON file).
 """
 
 import asyncio
+import io
 import json
 import logging
 import os
@@ -27,7 +28,12 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    BufferedInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyParameters,
+)
 
 from core import config
 from core.i18n import I18nFilter, _, get_user_lang, log_text
@@ -51,6 +57,7 @@ _last_flood_state_cleanup = 0.0
 class BroadcastStates(StatesGroup):
     """FSM: administrator broadcasts to all Alert Bot subscribers."""
     waiting_broadcast_message = State()
+    waiting_broadcast_button = State()
 
 
 class ReplyStates(StatesGroup):
@@ -102,7 +109,7 @@ async def _add_subscriber(user_id: int, user_name: str) -> bool:
     subscribers = _load_subscribers()
     is_new = user_id not in subscribers
     if is_new:
-        subscribers[user_id] = {"name": user_name, "mute_all": False, "muted_nodes": []}
+        subscribers[user_id] = {"name": user_name, "mute_all": False, "mute_broadcasts": False, "muted_nodes": []}
         _save_subscribers(subscribers)
     elif subscribers[user_id].get("name") != user_name:
         subscribers[user_id]["name"] = user_name
@@ -123,12 +130,131 @@ def is_node_muted_for_user(user_id: int, node_token: str) -> bool:
     return False
 
 
+BROADCASTS_FILE = os.path.join(config.CONFIG_DIR, "alert_broadcasts.json")
+
+
+def _load_broadcast_history() -> list[dict]:
+    """Loads broadcast history list from JSON file."""
+    try:
+        if os.path.exists(BROADCASTS_FILE):
+            with open(BROADCASTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+    except Exception as e:
+        logging.warning(f"[client_alerts] Failed to load broadcast history: {e}")
+    return []
+
+
+def _save_broadcast_history(history: list[dict]) -> None:
+    """Saves broadcast history list to JSON file (retaining last 15)."""
+    try:
+        os.makedirs(os.path.dirname(BROADCASTS_FILE), exist_ok=True)
+        trimmed = history[-15:]
+        with open(BROADCASTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(trimmed, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"[client_alerts] Failed to save broadcast history: {e}")
+
+
+def _record_broadcast(preview: str, sent_map: dict[int, int], is_pinned: bool = False) -> str:
+    """Saves record of sent broadcast and returns broadcast_id."""
+    import datetime
+    bc_id = f"bc_{int(time.time())}"
+    now_str = datetime.datetime.now().strftime("%d.%m %H:%M")
+    entry = {
+        "id": bc_id,
+        "timestamp": time.time(),
+        "date_str": now_str,
+        "preview": (preview[:45] + "…") if len(preview) > 45 else preview,
+        "sent": {str(uid): mid for uid, mid in sent_map.items()},
+        "is_pinned": is_pinned,
+    }
+    history = _load_broadcast_history()
+    history.append(entry)
+    _save_broadcast_history(history)
+    return bc_id
+
+
+async def _delete_broadcast_for_all(broadcast_id: str) -> tuple[int, int]:
+    """Deletes messages of a specific broadcast for all subscribers concurrently."""
+    if alert_bot is None:
+        return 0, 0
+    history = _load_broadcast_history()
+    target_entry = None
+    target_idx = -1
+    for idx, entry in enumerate(history):
+        if entry.get("id") == broadcast_id:
+            target_entry = entry
+            target_idx = idx
+            break
+
+    if not target_entry:
+        return 0, 0
+
+    sent_map = target_entry.get("sent", {})
+    is_pinned = target_entry.get("is_pinned", False)
+
+    sem = asyncio.Semaphore(10)
+
+    async def _delete_for_subscriber(uid_str: str, mid: int) -> bool:
+        uid = int(uid_str)
+        async with sem:
+            if is_pinned:
+                try:
+                    await alert_bot.unpin_chat_message(chat_id=uid, message_id=mid)
+                except Exception as unpin_id_err:
+                    logging.debug("Unable to unpin message %s for %s: %s", mid, uid, unpin_id_err)
+                    try:
+                        await alert_bot.unpin_chat_message(chat_id=uid)
+                    except Exception as unpin_last_err:
+                        logging.debug("Unable to unpin latest message for %s: %s", uid, unpin_last_err)
+
+                try:
+                    await alert_bot.unpin_all_chat_messages(chat_id=uid)
+                except Exception as unpin_all_err:
+                    logging.debug("Unable to unpin all messages for %s: %s", uid, unpin_all_err)
+
+            deleted = False
+            try:
+                await alert_bot.delete_message(chat_id=uid, message_id=mid)
+                deleted = True
+            except Exception as e:
+                logging.debug("[client_alerts] Could not delete message %s for %s: %s", mid, uid_str, e)
+
+            if is_pinned:
+                try:
+                    await alert_bot.delete_message(chat_id=uid, message_id=mid + 1)
+                except Exception as del_bubble_err:
+                    logging.debug("No pin service bubble to delete for %s: %s", uid, del_bubble_err)
+
+            return deleted
+
+    tasks = [
+        _delete_for_subscriber(uid_str, mid)
+        for uid_str, mid in sent_map.items()
+    ]
+    if tasks:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        del_ok = sum(1 for r in results if r is True)
+        del_fail = len(results) - del_ok
+    else:
+        del_ok = 0
+        del_fail = 0
+
+    if target_idx >= 0:
+        history.pop(target_idx)
+        _save_broadcast_history(history)
+
+    return del_ok, del_fail
+
+
 # ─── Helper Send Functions ─────────────────────────────────────────
 
-def _extract_message_payload(message: types.Message) -> dict:
+async def _extract_message_payload(message: types.Message) -> dict:
     """
     Extracts serializable payload from message for storage in FSM state.
-    Uses file_id — globally unique across Telegram and works between bots.
+    Downloads media into memory buffer for cross-bot streaming compatibility.
     Stores raw entities for rich text formatting support.
     """
     def dump_entity(e):
@@ -146,30 +272,47 @@ def _extract_message_payload(message: types.Message) -> dict:
         if message.caption_entities:
             payload["entities"] = [dump_entity(e) for e in message.caption_entities]
             
+        async def _download_to_buffer(tg_file, default_name: str) -> None:
+            if message.bot:
+                try:
+                    bio = io.BytesIO()
+                    await message.bot.download(tg_file, destination=bio)
+                    payload["media_bytes"] = bio.getvalue()
+                    payload["filename"] = getattr(tg_file, "file_name", None) or default_name
+                except Exception as dl_err:
+                    logging.warning(f"[client_alerts] Could not download media buffer: {dl_err}")
+
         if message.photo:
             payload["type"] = "photo"
             payload["file_id"] = message.photo[-1].file_id
+            await _download_to_buffer(message.photo[-1], "photo.jpg")
         elif message.video:
             payload["type"] = "video"
             payload["file_id"] = message.video.file_id
+            await _download_to_buffer(message.video, "video.mp4")
         elif message.audio:
             payload["type"] = "audio"
             payload["file_id"] = message.audio.file_id
+            await _download_to_buffer(message.audio, "audio.mp3")
         elif message.document:
             payload["type"] = "document"
             payload["file_id"] = message.document.file_id
+            await _download_to_buffer(message.document, "document")
         elif message.voice:
             payload["type"] = "voice"
             payload["file_id"] = message.voice.file_id
+            await _download_to_buffer(message.voice, "voice.ogg")
         elif message.video_note:
             payload["type"] = "video_note"
             payload["file_id"] = message.video_note.file_id
+            await _download_to_buffer(message.video_note, "video_note.mp4")
         elif message.sticker:
             payload["type"] = "sticker"
             payload["file_id"] = message.sticker.file_id
         elif message.animation:
             payload["type"] = "animation"
             payload["file_id"] = message.animation.file_id
+            await _download_to_buffer(message.animation, "animation.mp4")
         else:
             payload["type"] = "unsupported"
             try:
@@ -180,10 +323,17 @@ def _extract_message_payload(message: types.Message) -> dict:
     return payload
 
 
-async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_message_id: int = None) -> None:
+async def _send_payload_via_alert_bot(
+    chat_id: int, 
+    payload: dict, 
+    reply_to_message_id: int = None,
+    reply_markup: InlineKeyboardMarkup = None,
+    disable_notification: bool = False
+) -> types.Message | None:
     """
     Sends payload via alert_bot to specified chat_id.
-    If reply_to_message_id is provided — sends as reply to specific message.
+    Supports media buffer caching, inline buttons, silent delivery, and ReplyParameters quoting.
+    Returns sent Message or None.
     """
     if alert_bot is None:
         raise RuntimeError("Alert Bot не инициализирован")
@@ -199,40 +349,112 @@ async def _send_payload_via_alert_bot(chat_id: int, payload: dict, reply_to_mess
         from aiogram.types import MessageEntity
         entities = [MessageEntity(**e) for e in raw_entities]
 
-    kwargs = {"reply_to_message_id": reply_to_message_id}
+    cached_id = payload.get("cached_file_id")
+    media_bytes = payload.get("media_bytes")
+    filename = payload.get("filename", "file")
+
+    def _get_input_media(fallback_id):
+        if cached_id:
+            return cached_id
+        if media_bytes:
+            return BufferedInputFile(media_bytes, filename=filename)
+        return fallback_id
+
+    kwargs = {
+        "reply_markup": reply_markup,
+        "disable_notification": disable_notification
+    }
+    if reply_to_message_id:
+        kwargs["reply_parameters"] = ReplyParameters(
+            message_id=reply_to_message_id,
+            allow_sending_without_reply=True
+        )
+
+    sent: types.Message | None = None
 
     if msg_type == "text":
-        await alert_bot.send_message(chat_id, text, entities=entities, **kwargs)
+        sent = await alert_bot.send_message(chat_id, text, entities=entities, **kwargs)
     elif msg_type == "photo":
-        await alert_bot.send_photo(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
+        input_media = _get_input_media(file_id)
+        sent = await alert_bot.send_photo(chat_id, input_media, caption=caption, caption_entities=entities, **kwargs)
+        if sent and sent.photo and not payload.get("cached_file_id"):
+            payload["cached_file_id"] = sent.photo[-1].file_id
     elif msg_type == "video":
-        await alert_bot.send_video(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
+        input_media = _get_input_media(file_id)
+        sent = await alert_bot.send_video(chat_id, input_media, caption=caption, caption_entities=entities, **kwargs)
+        if sent and sent.video and not payload.get("cached_file_id"):
+            payload["cached_file_id"] = sent.video.file_id
     elif msg_type == "audio":
-        await alert_bot.send_audio(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
+        input_media = _get_input_media(file_id)
+        sent = await alert_bot.send_audio(chat_id, input_media, caption=caption, caption_entities=entities, **kwargs)
+        if sent and sent.audio and not payload.get("cached_file_id"):
+            payload["cached_file_id"] = sent.audio.file_id
     elif msg_type == "document":
-        await alert_bot.send_document(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
+        input_media = _get_input_media(file_id)
+        sent = await alert_bot.send_document(chat_id, input_media, caption=caption, caption_entities=entities, **kwargs)
+        if sent and sent.document and not payload.get("cached_file_id"):
+            payload["cached_file_id"] = sent.document.file_id
     elif msg_type == "voice":
-        await alert_bot.send_voice(chat_id, file_id, caption=caption, caption_entities=entities, **kwargs)
+        input_media = _get_input_media(file_id)
+        sent = await alert_bot.send_voice(chat_id, input_media, caption=caption, caption_entities=entities, **kwargs)
+        if sent and sent.voice and not payload.get("cached_file_id"):
+            payload["cached_file_id"] = sent.voice.file_id
     elif msg_type == "video_note":
-        await alert_bot.send_video_note(chat_id, file_id, reply_to_message_id=reply_to_message_id)
+        input_media = _get_input_media(file_id)
+        sent = await alert_bot.send_video_note(chat_id, input_media, **kwargs)
+        if sent and sent.video_note and not payload.get("cached_file_id"):
+            payload["cached_file_id"] = sent.video_note.file_id
     elif msg_type == "sticker":
-        await alert_bot.send_sticker(chat_id, file_id, reply_to_message_id=reply_to_message_id)
+        sent = await alert_bot.send_sticker(chat_id, file_id, **kwargs)
     elif msg_type == "animation":
-        await alert_bot.send_animation(chat_id, file_id, caption=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id)
+        input_media = _get_input_media(file_id)
+        sent = await alert_bot.send_animation(chat_id, input_media, caption=caption, parse_mode="HTML", **kwargs)
+        if sent and sent.animation and not payload.get("cached_file_id"):
+            payload["cached_file_id"] = sent.animation.file_id
     else:
         raise ValueError("Данный тип сообщения (например, таблицы или спецформатирование) не поддерживается для пересылки между ботами. Пожалуйста, используйте обычный текст или медиа.")
 
-async def broadcast_system_alert(text: str) -> None:
+    return sent
+
+
+async def broadcast_system_alert(
+    text: str,
+    reply_markup: InlineKeyboardMarkup = None,
+    pin: bool = False,
+    disable_notification: bool = False
+) -> None:
     """
     Public function to broadcast system alerts (e.g., node downtime)
-    to all Gateway bot subscribers.
+    to all Gateway bot subscribers with optional buttons and pin.
     """
     if alert_bot is None:
         return
     subscribers = _load_subscribers()
     for uid in subscribers:
+        s_data = subscribers.get(uid, {})
+        if s_data.get("mute_all", False):
+            continue
         try:
-            await alert_bot.send_message(uid, text, parse_mode="HTML")
+            sent = await alert_bot.send_message(
+                uid,
+                text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+                disable_notification=disable_notification
+            )
+            if pin and sent:
+                try:
+                    await alert_bot.pin_chat_message(
+                        chat_id=uid,
+                        message_id=sent.message_id,
+                        disable_notification=True
+                    )
+                    try:
+                        await alert_bot.delete_message(chat_id=uid, message_id=sent.message_id + 1)
+                    except Exception as bubble_err:
+                        logging.debug("Unable to delete system alert bubble for %s: %s", uid, bubble_err)
+                except Exception as pe:
+                    logging.debug(f"[client_alerts] System alert pin failed for {uid}: {pe}")
             await asyncio.sleep(0.05)
         except Exception as e:
             logging.warning(f"[client_alerts] Error sending system alert -> {uid}: {e}")
@@ -264,7 +486,9 @@ def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
     Opens when clicking "📣 Write alert" button in the main bot.
     """
     subscribers = _load_subscribers()
+    history = _load_broadcast_history()
     count_label = f"({len(subscribers)} чел.)" if subscribers else "(пусто)"
+    hist_label = f"({len(history)})" if history else ""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -279,10 +503,49 @@ def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text=f"🗑 Удалить рассылку {hist_label}".strip(),
+                    callback_data="alert_panel_history",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
                     text="🔙 В главное меню",
                     callback_data="back_to_menu",
                 ),
             ],
+        ]
+    )
+
+
+def _get_broadcast_history_keyboard(history: list[dict]) -> InlineKeyboardMarkup:
+    """Keyboard listing recent broadcasts for deletion."""
+    keyboard = []
+    for entry in reversed(history):
+        bc_id = entry.get("id")
+        date_str = entry.get("date_str", "")
+        preview = entry.get("preview", "")
+        btn_text = f"🗑 {date_str} — {preview[:22]}"
+        keyboard.append([InlineKeyboardButton(text=btn_text, callback_data=f"alert_view_bc_{bc_id}")])
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="alert_fsm_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def _get_broadcast_delete_confirm_keyboard(broadcast_id: str) -> InlineKeyboardMarkup:
+    """Confirmation button before deleting broadcast across all subscribers."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗑 Да, удалить у всех",
+                    callback_data=f"alert_confirm_del_bc_{broadcast_id}"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔙 Назад к списку",
+                    callback_data="alert_panel_history"
+                ),
+            ]
         ]
     )
 
@@ -301,10 +564,56 @@ def _get_reply_keyboard(client_user_id: int, client_message_id: int) -> InlineKe
     )
 
 
-def _get_broadcast_confirm_keyboard() -> InlineKeyboardMarkup:
-    """Broadcast confirmation or cancellation."""
+def _render_broadcast_confirm_text(
+    subscribers_count: int,
+    pin: bool = False,
+    silent: bool = False,
+    btn_title: str | None = None,
+    btn_url: str | None = None
+) -> str:
+    """Renders broadcast parameters summary text."""
+    btn_line = f"\n🔘 Кнопка: <b>{btn_title}</b> (<code>{btn_url}</code>)" if btn_title and btn_url else "\n🔘 Кнопка: <i>не задана</i>"
+    pin_line = "\n📌 Закрепить у всех: <b>Да</b>" if pin else "\n📌 Закрепить у всех: <b>Нет</b>"
+    sound_line = "\n🔕 Доставка: <b>Без звука</b>" if silent else "\n🔔 Доставка: <b>Со звуком</b>"
+
+    return (
+        f"⚠️ <b>Параметры рассылки</b>\n\n"
+        f"👥 Получателей: <b>{subscribers_count}</b>"
+        f"{pin_line}"
+        f"{sound_line}"
+        f"{btn_line}\n\n"
+        f"Настройте параметры ниже и нажмите <b>Отправить всем</b>:"
+    )
+
+
+def _get_broadcast_confirm_keyboard(
+    pin: bool = False,
+    silent: bool = False,
+    btn_info: str | None = None
+) -> InlineKeyboardMarkup:
+    """Broadcast confirmation or cancellation with advanced options."""
+    pin_text = "📌 Закрепить: ДА" if pin else "📌 Закрепить: НЕТ"
+    sound_text = "🔕 Без звука" if silent else "🔔 Со звуком"
+    btn_text = f"🔘 Кнопка: {btn_info[:14]}…" if btn_info else "🔘 Добавить кнопку"
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=pin_text,
+                    callback_data="alert_broadcast_toggle_pin",
+                ),
+                InlineKeyboardButton(
+                    text=sound_text,
+                    callback_data="alert_broadcast_toggle_sound",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=btn_text,
+                    callback_data="alert_broadcast_setup_button",
+                ),
+            ],
             [
                 InlineKeyboardButton(
                     text="✅ Отправить всем",
@@ -314,7 +623,7 @@ def _get_broadcast_confirm_keyboard() -> InlineKeyboardMarkup:
                     text="❌ Отмена",
                     callback_data="alert_fsm_cancel",
                 ),
-            ]
+            ],
         ]
     )
 
@@ -333,8 +642,18 @@ def _get_cancel_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _get_client_main_keyboard(lang: str = "ru") -> types.ReplyKeyboardMarkup:
+def _get_bot_lang() -> str:
+    """Return the primary language of the main bot to maintain consistent localization."""
+    try:
+        return get_user_lang(config.ADMIN_USER_ID)
+    except Exception:
+        return getattr(config, "DEFAULT_LANGUAGE", "ru")
+
+
+def _get_client_main_keyboard(lang: str | None = None) -> types.ReplyKeyboardMarkup:
     """Client (subscriber) keyboard with built-in settings button."""
+    if not lang:
+        lang = _get_bot_lang()
     return types.ReplyKeyboardMarkup(
         keyboard=[[types.KeyboardButton(text=_("alert_btn_settings", lang))]],
         resize_keyboard=True
@@ -342,7 +661,7 @@ def _get_client_main_keyboard(lang: str = "ru") -> types.ReplyKeyboardMarkup:
 
 
 async def _get_client_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    lang = get_user_lang(user_id)
+    lang = _get_bot_lang()
     subscribers = _load_subscribers()
     s_data = subscribers.get(user_id, {})
     mute_all = s_data.get("mute_all", False)
@@ -352,12 +671,19 @@ async def _get_client_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
     all_nodes = await nodes_db.get_all_nodes()
     
     keyboard = []
+    mute_broadcasts = s_data.get("mute_broadcasts", False)
+
     if mute_all:
-        keyboard.append([InlineKeyboardButton(text=_("alert_btn_notifications_disabled", lang), callback_data="cst_toggle_all")])
+        mute_all_text = _("alert_btn_mute_all_on", lang)
+        keyboard.append([InlineKeyboardButton(text=mute_all_text, callback_data="cst_toggle_all")])
     else:
-        keyboard.append([InlineKeyboardButton(text=_("alert_btn_notifications_enabled", lang), callback_data="cst_toggle_all")])
+        mute_all_text = _("alert_btn_mute_all_off", lang)
+        keyboard.append([InlineKeyboardButton(text=mute_all_text, callback_data="cst_toggle_all")])
         
     if not mute_all:
+        bc_text = _("alert_btn_broadcasts_off", lang) if mute_broadcasts else _("alert_btn_broadcasts_on", lang)
+        keyboard.append([InlineKeyboardButton(text=bc_text, callback_data="cst_toggle_broadcasts")])
+
         for token, n_data in all_nodes.items():
             name = n_data.get("name", "Unknown")
             is_muted = token in muted_nodes
@@ -377,7 +703,7 @@ if alert_dp is not None:
         Client clicks /start in Alert Bot → subscribes to broadcast alerts.
         """
         user_id = message.from_user.id
-        lang = get_user_lang(user_id)
+        lang = _get_bot_lang()
         user_name = message.from_user.full_name or f"ID {user_id}"
         is_new = await _add_subscriber(user_id, user_name)
 
@@ -399,8 +725,86 @@ if alert_dp is not None:
     async def _cq_client_settings_toggle_all(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         subscribers = _load_subscribers()
+        s_data = subscribers.get(user_id, {})
+        mute_all = s_data.get("mute_all", False)
+        lang = _get_bot_lang()
+
+        if not mute_all:
+            # User intends to mute all -> send humorous warning with OK and Cancel buttons first
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=_("alert_btn_confirm_mute", lang),
+                            callback_data="cst_confirm_mute_all"
+                        ),
+                        InlineKeyboardButton(
+                            text=_("alert_btn_cancel_mute", lang),
+                            callback_data="cst_cancel_mute_all"
+                        ),
+                    ]
+                ]
+            )
+            warn_text = _("alert_mute_all_warning", lang)
+            try:
+                await callback.message.edit_text(warn_text, parse_mode="HTML", reply_markup=kb)
+            except Exception as exc:
+                logging.debug("Unable to edit message to show mute warning: %s", exc)
+                try:
+                    await callback.message.answer(warn_text, parse_mode="HTML", reply_markup=kb)
+                except Exception as exc2:
+                    logging.debug("Unable to send mute warning message: %s", exc2)
+            await callback.answer()
+            return
+
+        # If currently muted, clicking toggles it back to unmuted immediately
         if user_id in subscribers:
-            subscribers[user_id]["mute_all"] = not subscribers[user_id].get("mute_all", False)
+            subscribers[user_id]["mute_all"] = False
+            _save_subscribers(subscribers)
+            try:
+                await callback.message.edit_reply_markup(reply_markup=await _get_client_settings_keyboard(user_id))
+            except Exception as exc:
+                logging.debug("Unable to refresh client alert settings keyboard: %s", exc)
+        await callback.answer(_("alert_unmuted_all_notify", lang))
+
+    @alert_dp.callback_query(F.data == "cst_confirm_mute_all")
+    async def _cq_client_confirm_mute_all(callback: types.CallbackQuery):
+        user_id = callback.from_user.id
+        subscribers = _load_subscribers()
+        lang = _get_bot_lang()
+        if user_id in subscribers:
+            subscribers[user_id]["mute_all"] = True
+            _save_subscribers(subscribers)
+        try:
+            await callback.message.edit_text(
+                _("alert_settings_text", lang),
+                parse_mode="HTML",
+                reply_markup=await _get_client_settings_keyboard(user_id)
+            )
+        except Exception as exc:
+            logging.debug("Unable to restore settings keyboard after confirm mute: %s", exc)
+        await callback.answer(_("alert_mute_all_confirmed", lang))
+
+    @alert_dp.callback_query(F.data == "cst_cancel_mute_all")
+    async def _cq_client_cancel_mute_all(callback: types.CallbackQuery):
+        user_id = callback.from_user.id
+        lang = _get_bot_lang()
+        try:
+            await callback.message.edit_text(
+                _("alert_settings_text", lang),
+                parse_mode="HTML",
+                reply_markup=await _get_client_settings_keyboard(user_id)
+            )
+        except Exception as exc:
+            logging.debug("Unable to restore settings keyboard after cancel mute: %s", exc)
+        await callback.answer(_("alert_mute_all_cancelled", lang))
+
+    @alert_dp.callback_query(F.data == "cst_toggle_broadcasts")
+    async def _cq_client_settings_toggle_broadcasts(callback: types.CallbackQuery):
+        user_id = callback.from_user.id
+        subscribers = _load_subscribers()
+        if user_id in subscribers:
+            subscribers[user_id]["mute_broadcasts"] = not subscribers[user_id].get("mute_broadcasts", False)
             _save_subscribers(subscribers)
             try:
                 await callback.message.edit_reply_markup(reply_markup=await _get_client_settings_keyboard(user_id))
@@ -435,8 +839,36 @@ if alert_dp is not None:
         if alert_bot is None:
             return
 
-        lang = get_user_lang(message.from_user.id)
-        if message.text in ["⚙️ Настройки", _("alert_btn_settings", lang), "/settings"]:
+        # Ignore and delete Telegram service event for pinned messages
+        if getattr(message, "pinned_message", None) is not None:
+            try:
+                await message.delete()
+            except Exception as exc:
+                logging.debug("Unable to delete pinned service message: %s", exc)
+            return
+
+        # Ignore messages from bots
+        if message.from_user and message.from_user.is_bot:
+            return
+
+        # Ignore any service events that are not user content
+        is_user_content = any([
+            message.text,
+            message.caption,
+            message.photo,
+            message.video,
+            message.audio,
+            message.document,
+            message.voice,
+            message.video_note,
+            message.sticker,
+            message.animation,
+        ])
+        if not is_user_content:
+            return
+
+        lang = _get_bot_lang()
+        if message.text in ["⚙️ Настройки", "⚙️ Settings", _("alert_btn_settings", "ru"), _("alert_btn_settings", "en"), "/settings"]:
             user_id = message.from_user.id
             user_name = message.from_user.full_name or f"ID {user_id}"
             await _add_subscriber(user_id, user_name)
@@ -676,18 +1108,21 @@ async def _broadcast_message_received(
     """
     Received message for broadcast → save payload in FSM state and request confirmation.
     """
-    payload = _extract_message_payload(message)
+    payload = await _extract_message_payload(message)
     subscribers = _load_subscribers()
     
     data = await state.get_data()
     panel_message_id = data.get("panel_message_id")
-    await state.update_data(broadcast_payload=payload)
-    
-    text = (
-        f"⚠️ <b>Подтверждение рассылки</b>\n\n"
-        f"Это сообщение будет отправлено <b>{len(subscribers)}</b> подписчикам.\n"
-        f"Продолжить?"
+    await state.update_data(
+        broadcast_payload=payload,
+        broadcast_pin=False,
+        broadcast_silent=False,
+        btn_title=None,
+        btn_url=None
     )
+    
+    text = _render_broadcast_confirm_text(len(subscribers), pin=False, silent=False, btn_title=None, btn_url=None)
+    markup = _get_broadcast_confirm_keyboard(pin=False, silent=False, btn_info=None)
 
     try:
         await message.delete()
@@ -702,10 +1137,133 @@ async def _broadcast_message_received(
             message_id=panel_message_id,
             text=text,
             parse_mode="HTML",
-            reply_markup=_get_broadcast_confirm_keyboard(),
+            reply_markup=markup,
         )
     except Exception:
-        await message.answer(text, parse_mode="HTML", reply_markup=_get_broadcast_confirm_keyboard())
+        await message.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
+async def _cq_broadcast_toggle_pin(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Toggle message pinning for broadcast."""
+    if callback.from_user.id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    data = await state.get_data()
+    cur_pin = not data.get("broadcast_pin", False)
+    await state.update_data(broadcast_pin=cur_pin)
+    
+    subscribers = _load_subscribers()
+    silent = data.get("broadcast_silent", False)
+    btn_title = data.get("btn_title")
+    btn_url = data.get("btn_url")
+    
+    text = _render_broadcast_confirm_text(len(subscribers), cur_pin, silent, btn_title, btn_url)
+    markup = _get_broadcast_confirm_keyboard(pin=cur_pin, silent=silent, btn_info=btn_title)
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    except Exception as exc:
+        logging.debug("Unable to update broadcast pin setting: %s", exc)
+    await callback.answer()
+
+
+async def _cq_broadcast_toggle_sound(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Toggle silent delivery for broadcast."""
+    if callback.from_user.id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    data = await state.get_data()
+    cur_silent = not data.get("broadcast_silent", False)
+    await state.update_data(broadcast_silent=cur_silent)
+    
+    subscribers = _load_subscribers()
+    pin = data.get("broadcast_pin", False)
+    btn_title = data.get("btn_title")
+    btn_url = data.get("btn_url")
+    
+    text = _render_broadcast_confirm_text(len(subscribers), pin, cur_silent, btn_title, btn_url)
+    markup = _get_broadcast_confirm_keyboard(pin=pin, silent=cur_silent, btn_info=btn_title)
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    except Exception as exc:
+        logging.debug("Unable to update broadcast sound setting: %s", exc)
+    await callback.answer()
+
+
+async def _cq_broadcast_setup_button(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Ask administrator for custom inline button title and URL."""
+    if callback.from_user.id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    await state.set_state(BroadcastStates.waiting_broadcast_button)
+    await callback.answer()
+    
+    text = (
+        "🔘 <b>Настройка кнопки для рассылки</b>\n\n"
+        "Отправьте текст кнопки и ссылку через разделитель <code>|</code>:\n"
+        "<code>Пример: Наш канал | https://t.me/telegram</code>\n\n"
+        "Или отправьте <code>-</code> (дефис), чтобы удалить кнопку."
+    )
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard())
+    except Exception as exc:
+        logging.debug("Unable to display setup button prompt: %s", exc)
+
+
+async def _broadcast_button_received(message: types.Message, state: FSMContext) -> None:
+    """Handles administrator input for broadcast inline button."""
+    data = await state.get_data()
+    panel_message_id = data.get("panel_message_id")
+    raw_text = (message.text or "").strip()
+    
+    try:
+        await message.delete()
+    except Exception as exc:
+        logging.debug("Unable to delete broadcast button input message: %s", exc)
+
+    if raw_text in ["-", "—", "удалить", "убрать", "del", "none"]:
+        await state.update_data(btn_title=None, btn_url=None)
+    elif "|" in raw_text:
+        parts = raw_text.split("|", 1)
+        title = parts[0].strip()
+        url = parts[1].strip()
+        if (url.startswith("http://") or url.startswith("https://") or url.startswith("tg://")) and title:
+            await state.update_data(btn_title=title, btn_url=url)
+        else:
+            await message.answer(
+                "⚠️ Некорректная ссылка! Ссылка должна начинаться с <code>http://</code>, <code>https://</code> или <code>tg://</code>",
+                parse_mode="HTML"
+            )
+            return
+    else:
+        await message.answer(
+            "⚠️ Формат: <code>Текст кнопки | https://ссылка</code> или <code>-</code> чтобы убрать.",
+            parse_mode="HTML"
+        )
+        return
+
+    await state.set_state(BroadcastStates.waiting_broadcast_message)
+    subscribers = _load_subscribers()
+    updated_data = await state.get_data()
+    pin = updated_data.get("broadcast_pin", False)
+    silent = updated_data.get("broadcast_silent", False)
+    btn_title = updated_data.get("btn_title")
+    btn_url = updated_data.get("btn_url")
+    
+    text = _render_broadcast_confirm_text(len(subscribers), pin, silent, btn_title, btn_url)
+    markup = _get_broadcast_confirm_keyboard(pin=pin, silent=silent, btn_info=btn_title)
+    
+    import bot as main_bot_module
+    main_bot_instance: Bot = main_bot_module.bot
+    try:
+        await main_bot_instance.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=panel_message_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=markup,
+        )
+    except Exception:
+        await message.answer(text, parse_mode="HTML", reply_markup=markup)
 
 
 async def _broadcast_confirm(
@@ -718,6 +1276,10 @@ async def _broadcast_confirm(
 
     data = await state.get_data()
     payload = data.get("broadcast_payload")
+    pin = data.get("broadcast_pin", False)
+    silent = data.get("broadcast_silent", False)
+    btn_title = data.get("btn_title")
+    btn_url = data.get("btn_url")
     await state.clear()
 
     if not payload:
@@ -739,17 +1301,53 @@ async def _broadcast_confirm(
     except Exception as exc:
         logging.debug("Unable to display broadcast progress: %s", exc)
 
+    custom_kb = None
+    if btn_title and btn_url:
+        custom_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text=btn_title, url=btn_url)]]
+        )
+
     sent_ok = 0
     sent_fail = 0
+    sent_messages: dict[int, int] = {}
 
     for uid in subscribers:
+        s_data = subscribers.get(uid, {})
+        if s_data.get("mute_all", False) or s_data.get("mute_broadcasts", False):
+            continue
         try:
-            await _send_payload_via_alert_bot(uid, payload)
+            sent = await _send_payload_via_alert_bot(
+                uid,
+                payload,
+                reply_markup=custom_kb,
+                disable_notification=silent
+            )
+            if sent:
+                sent_messages[uid] = sent.message_id
+                if pin and alert_bot:
+                    try:
+                        await alert_bot.pin_chat_message(
+                            chat_id=uid,
+                            message_id=sent.message_id,
+                            disable_notification=True
+                        )
+                        # Delete Telegram pin service bubble (sent.message_id + 1) to leave no trace in chat
+                        try:
+                            await alert_bot.delete_message(chat_id=uid, message_id=sent.message_id + 1)
+                        except Exception as bubble_err:
+                            logging.debug("Unable to delete broadcast service bubble for %s: %s", uid, bubble_err)
+                    except Exception as pe:
+                        logging.debug(f"[client_alerts] Pin failed for {uid}: {pe}")
             sent_ok += 1
             await asyncio.sleep(0.05)  # rate limit guard
         except Exception as e:
             logging.warning(f"[client_alerts] Broadcast → {uid}: {e}")
             sent_fail += 1
+
+    bc_id = None
+    if sent_messages:
+        preview_text = payload.get("text") or payload.get("caption") or f"Медиа ({payload.get('type')})"
+        bc_id = _record_broadcast(preview_text, sent_messages, is_pinned=bool(pin))
 
     result_text = (
         f"✅ <b>Рассылка завершена</b>\n\n"
@@ -757,10 +1355,146 @@ async def _broadcast_confirm(
         f"❌ Ошибок: <b>{sent_fail}</b>\n\n"
         f"Выберите действие:"
     )
+
+    if bc_id:
+        result_markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🗑 Отозвать (удалить у всех)",
+                        callback_data=f"alert_confirm_del_bc_{bc_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🔙 В панель управления",
+                        callback_data="alert_panel_open_again"
+                    ),
+                    InlineKeyboardButton(
+                        text="🚪 В главное меню",
+                        callback_data="back_to_menu"
+                    ),
+                ]
+            ]
+        )
+    else:
+        result_markup = _get_alert_panel_keyboard()
+
     try:
-        await callback.message.edit_text(result_text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
+        await callback.message.edit_text(result_text, parse_mode="HTML", reply_markup=result_markup)
     except Exception as exc:
         logging.debug("Unable to display broadcast result: %s", exc)
+
+
+async def _cq_panel_open_again(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Return to alert panel menu."""
+    if callback.from_user.id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    await state.clear()
+    subscribers = _load_subscribers()
+    text = (
+        f"📣 <b>Alert Module — Панель управления</b>\n\n"
+        f"👥 Подписчиков: <b>{len(subscribers)}</b>\n"
+        f"🤖 Alert Bot: <b>{'активен' if alert_bot else 'не активен'}</b>\n\n"
+        f"Выберите действие:"
+    )
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
+    except Exception as exc:
+        logging.debug("Unable to return to alert panel: %s", exc)
+    await callback.answer()
+
+
+async def _cq_panel_history(callback: types.CallbackQuery) -> None:
+    """Display list of recent broadcasts available for deletion."""
+    if callback.from_user.id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    history = _load_broadcast_history()
+    if not history:
+        await callback.answer("📭 История рассылок пуста (нет активных сообщений).", show_alert=True)
+        return
+
+    await callback.answer()
+    text = (
+        f"🗑 <b>Удаление сообщений у клиентов</b>\n\n"
+        f"Выберите рассылку, которую требуется удалить из личных сообщений у всех подписчиков:\n"
+    )
+    markup = _get_broadcast_history_keyboard(history)
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    except Exception as exc:
+        logging.debug("Unable to display broadcast history: %s", exc)
+
+
+async def _cq_view_broadcast(callback: types.CallbackQuery) -> None:
+    """Show details of selected broadcast and ask for deletion confirmation."""
+    if callback.from_user.id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    bc_id = callback.data.replace("alert_view_bc_", "")
+    history = _load_broadcast_history()
+    target = next((item for item in history if item.get("id") == bc_id), None)
+
+    if not target:
+        await callback.answer("⚠️ Рассылка не найдена или уже удалена.", show_alert=True)
+        return
+
+    await callback.answer()
+    recipients_count = len(target.get("sent", {}))
+    text = (
+        f"🗑 <b>Удаление рассылки у клиентов</b>\n\n"
+        f"📅 Дата: <b>{target.get('date_str', 'Неизвестно')}</b>\n"
+        f"💬 Текст/медиа: <i>{target.get('preview', 'Без текста')}</i>\n"
+        f"👥 Получателей: <b>{recipients_count}</b>\n\n"
+        f"⚠️ Это сообщение будет безвозвратно удалено у всех {recipients_count} подписчиков. Продолжить?"
+    )
+    markup = _get_broadcast_delete_confirm_keyboard(bc_id)
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    except Exception as exc:
+        logging.debug("Unable to display delete confirmation: %s", exc)
+
+
+async def _cq_confirm_delete_broadcast(callback: types.CallbackQuery) -> None:
+    """Execute broadcast message deletion across all subscribers."""
+    if callback.from_user.id != config.ADMIN_USER_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    bc_id = callback.data.replace("alert_confirm_del_bc_", "")
+    await callback.answer("🗑 Удаляю сообщения у всех клиентов...")
+    try:
+        await callback.message.edit_text(
+            "⏳ <b>Удаление сообщений у всех подписчиков...</b>\nПожалуйста, подождите.",
+            parse_mode="HTML"
+        )
+    except Exception as exc:
+        logging.debug("Unable to display deletion progress: %s", exc)
+
+    del_ok, del_fail = await _delete_broadcast_for_all(bc_id)
+
+    result_text = (
+        f"✅ <b>Рассылка удалена у клиентов</b>\n\n"
+        f"🗑 Удалено сообщений: <b>{del_ok}</b>\n"
+        f"⚠️ Не удалось (уже удалено пользователем): <b>{del_fail}</b>\n\n"
+        f"Выберите действие:"
+    )
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🔙 В панель управления", callback_data="alert_panel_open_again"),
+                InlineKeyboardButton(text="🚪 В главное меню", callback_data="back_to_menu"),
+            ]
+        ]
+    )
+    try:
+        await callback.message.edit_text(result_text, parse_mode="HTML", reply_markup=kb)
+    except Exception as exc:
+        logging.debug("Unable to display deletion result: %s", exc)
 
 
 # ─── Main Bot: FSM — Ticket Reply ──────────────────────────────────────────
@@ -817,7 +1551,7 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
         await message.answer("⚠️ Alert Bot не активен — ответ невозможен.")
         return
 
-    payload = _extract_message_payload(message)
+    payload = await _extract_message_payload(message)
     
     try:
         await message.delete()
@@ -851,8 +1585,27 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
 async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> None:
     """
     Button '❌ Cancel' during any FSM input (broadcast, reply).
-    Resets state and returns to control panel.
+    If in button input mode, returns to broadcast preview.
+    Otherwise resets state and returns to control panel.
     """
+    current_state = await state.get_state()
+    if current_state == BroadcastStates.waiting_broadcast_button.state:
+        await state.set_state(BroadcastStates.waiting_broadcast_message)
+        data = await state.get_data()
+        pin = data.get("broadcast_pin", False)
+        silent = data.get("broadcast_silent", False)
+        btn_title = data.get("btn_title")
+        btn_url = data.get("btn_url")
+        subscribers = _load_subscribers()
+        text = _render_broadcast_confirm_text(len(subscribers), pin, silent, btn_title, btn_url)
+        markup = _get_broadcast_confirm_keyboard(pin=pin, silent=silent, btn_info=btn_title)
+        try:
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+        except Exception as exc:
+            logging.debug("Unable to restore broadcast menu: %s", exc)
+        await callback.answer("Ввод кнопки отменен.")
+        return
+
     await state.clear()
     subscribers = _load_subscribers()
     text = (
@@ -895,8 +1648,20 @@ def register_handlers(dp: Dispatcher) -> None:
     # FSM: received message for broadcast
     dp.message(BroadcastStates.waiting_broadcast_message)(_broadcast_message_received)
 
+    # Broadcast advanced callbacks & inputs
+    dp.callback_query(F.data == "alert_broadcast_toggle_pin")(_cq_broadcast_toggle_pin)
+    dp.callback_query(F.data == "alert_broadcast_toggle_sound")(_cq_broadcast_toggle_sound)
+    dp.callback_query(F.data == "alert_broadcast_setup_button")(_cq_broadcast_setup_button)
+    dp.message(BroadcastStates.waiting_broadcast_button)(_broadcast_button_received)
+
     # Broadcast confirmation callbacks
     dp.callback_query(F.data == "alert_broadcast_confirm")(_broadcast_confirm)
+
+    # Broadcast history & deletion callbacks
+    dp.callback_query(F.data == "alert_panel_history")(_cq_panel_history)
+    dp.callback_query(F.data == "alert_panel_open_again")(_cq_panel_open_again)
+    dp.callback_query(F.data.startswith("alert_view_bc_"))(_cq_view_broadcast)
+    dp.callback_query(F.data.startswith("alert_confirm_del_bc_"))(_cq_confirm_delete_broadcast)
 
     # Callback «💬 Reply» under incoming ticket
     dp.callback_query(F.data.startswith("alert_reply_"))(_alert_reply_callback)
