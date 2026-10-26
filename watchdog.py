@@ -1,11 +1,12 @@
 import glob
+import http.client
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
-import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
@@ -13,7 +14,7 @@ from datetime import datetime, timedelta
 def run_crash_alert_oneshot():
     """
     Ultra-lightweight oneshot handler for systemd OnFailure=tg-watchdog.service.
-    Uses only standard library (urllib.request, json, os, subprocess) for instant
+    Uses only standard library (http.client, json, os, subprocess) for instant
     startup and near-zero memory footprint (~7MB for ~1s, then exits).
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,7 +36,8 @@ def run_crash_alert_oneshot():
     admin_id = env.get("TG_ADMIN_ID")
     bot_name = env.get("TG_BOT_NAME", "VPS Bot")
     lang = env.get("DEFAULT_LANGUAGE", "ru").lower()
-    bot_service = env.get("TG_BOT_SERVICE_NAME", "tg-bot.service")
+    raw_service = env.get("TG_BOT_SERVICE_NAME", "tg-bot.service").strip()
+    bot_service = raw_service if re.match(r"^[a-zA-Z0-9_\-\.]+$", raw_service) else "tg-bot.service"
 
     if not token or not admin_id:
         sys.exit(0)
@@ -61,11 +63,14 @@ def run_crash_alert_oneshot():
 
     if not error_tail:
         try:
+            # nosec B603
+            # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
             res = subprocess.run(
                 ["journalctl", "-u", bot_service, "-n", "15", "--no-pager"],
                 capture_output=True,
                 text=True,
                 timeout=5,
+                check=False,
             )
             if res.stdout:
                 error_tail = res.stdout.strip()
@@ -95,21 +100,25 @@ def run_crash_alert_oneshot():
         )
 
     try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = json.dumps({
             "chat_id": int(admin_id),
             "text": text,
             "parse_mode": "HTML",
             "reply_markup": {"inline_keyboard": []},
         }, ensure_ascii=False).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        conn = http.client.HTTPSConnection("api.telegram.org", timeout=10)
+        conn.request(
+            "POST",
+            f"/bot{token}/sendMessage",
+            body=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(len(payload)),
+            },
         )
-        with urllib.request.urlopen(req, timeout=10):
-            pass
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
     except Exception as exc:
         print(f"Failed to send crash alert: {exc}", file=sys.stderr)
 

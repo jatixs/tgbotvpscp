@@ -60,30 +60,33 @@ class TestWatchdogCrashAlert(unittest.TestCase):
             f.write("123:456")
 
         with patch("os.path.dirname", return_value=self.test_dir), \
-             patch("urllib.request.urlopen") as mock_url:
+             patch("http.client.HTTPSConnection") as mock_conn_cls:
             with self.assertRaises(SystemExit) as cm:
                 watchdog.run_crash_alert_oneshot()
             self.assertEqual(cm.exception.code, 0)
-            mock_url.assert_not_called()
+            mock_conn_cls.assert_not_called()
 
     def test_unplanned_crash_sends_telegram_alert(self):
         """If no flag exists, run_crash_alert_oneshot extracts log error and sends Telegram alert."""
         with patch("os.path.dirname", return_value=self.test_dir), \
-             patch("urllib.request.urlopen") as mock_url:
-            mock_resp = MagicMock()
-            mock_url.return_value.__enter__.return_value = mock_resp
+             patch("http.client.HTTPSConnection") as mock_conn_cls:
+            mock_conn = MagicMock()
+            mock_conn_cls.return_value = mock_conn
 
             with self.assertRaises(SystemExit) as cm:
                 watchdog.run_crash_alert_oneshot()
 
             self.assertEqual(cm.exception.code, 0)
-            mock_url.assert_called_once()
-            # Verify request
-            req = mock_url.call_args[0][0]
-            self.assertIn("123456:FAKE_TOKEN", req.full_url)
-            body = req.data.decode("utf-8")
-            self.assertIn("ZeroDivisionError", body)
-            self.assertIn("Аварийная остановка", body)
+            mock_conn_cls.assert_called_once_with("api.telegram.org", timeout=10)
+            mock_conn.request.assert_called_once()
+            args, kwargs = mock_conn.request.call_args
+            method, path = args[0], args[1]
+            body = kwargs.get("body") if "body" in kwargs else args[2]
+            self.assertEqual(method, "POST")
+            self.assertIn("123456:FAKE_TOKEN", path)
+            body_str = body.decode("utf-8") if isinstance(body, bytes) else body
+            self.assertIn("ZeroDivisionError", body_str)
+            self.assertIn("Аварийная остановка", body_str)
 
 
 if __name__ == "__main__":

@@ -96,7 +96,6 @@ def get_current_traffic_total():
     Returns tuple (rx_total, tx_total) considering offset.
     Used here, in WebUI, and selftest.
     """
-    global _state_loaded
     if not _state_loaded:
         load_traffic_state()
     counters = psutil.net_io_counters()

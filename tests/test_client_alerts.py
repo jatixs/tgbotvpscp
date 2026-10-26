@@ -88,7 +88,6 @@ core.nodes_db = MagicMock()
 sys.modules["core.nodes_db"] = core.nodes_db
 
 from modules.client_alerts import (  # noqa: E402
-    _alert_panel_open,
     _broadcast_confirm,
     _broadcast_message_received,
     _cq_client_cancel_mute_all,
@@ -122,19 +121,16 @@ from modules.client_alerts import (  # noqa: E402
 class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def tearDownClass(cls):
+        import contextlib
         import shutil
         for f in [BROADCASTS_FILE, POLLS_FILE, SUBSCRIBERS_FILE]:
-            try:
+            with contextlib.suppress(OSError):
                 if os.path.exists(f):
                     os.remove(f)
-            except Exception:
-                pass
         config_dir = os.path.dirname(BROADCASTS_FILE)
-        try:
+        with contextlib.suppress(OSError):
             if os.path.exists(config_dir) and not os.listdir(config_dir):
                 shutil.rmtree(config_dir, ignore_errors=True)
-        except Exception:
-            pass
     def test_render_broadcast_confirm_text(self):
         text_default = _render_broadcast_confirm_text(10, pin=False, silent=False)
         self.assertIn("Получателей: <b>10</b>", text_default)

@@ -34,7 +34,6 @@ for m in modules_to_mock:
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core import config
-from core.orchestrator import ModuleTier
 from modules import backups
 
 
