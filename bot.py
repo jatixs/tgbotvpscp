@@ -54,15 +54,16 @@ background_tasks = set()
 # Tier 0 (ALWAYS_ON): loaded at startup, never unloaded.
 # Tier 1 (ON_DEMAND): loaded on first use, unloaded after 5 min inactivity.
 MODULE_CONFIG = {
-    # Tier 0: Always-on — alert system + node monitoring
+    # Tier 0: Always-on — alert system + node monitoring + traffic persistence & live stats + auto-backups
     "modules.notifications":   {"tier": ModuleTier.ALWAYS_ON},
     "modules.nodes":           {"tier": ModuleTier.ALWAYS_ON},
     "modules.client_alerts":   {"tier": ModuleTier.ALWAYS_ON},
+    "modules.traffic":         {"tier": ModuleTier.ALWAYS_ON},
+    "modules.backups":         {"tier": ModuleTier.ALWAYS_ON},
 
     # Tier 1: On-demand — loaded when user triggers the command
     "modules.selftest":  {"tier": ModuleTier.ON_DEMAND},
     "modules.uptime":    {"tier": ModuleTier.ON_DEMAND},
-    "modules.traffic":   {"tier": ModuleTier.ON_DEMAND},
     "modules.users":     {"tier": ModuleTier.ON_DEMAND},
     "modules.speedtest": {"tier": ModuleTier.ON_DEMAND},
     "modules.top":       {"tier": ModuleTier.ON_DEMAND},
@@ -76,7 +77,6 @@ MODULE_CONFIG = {
     "modules.restart":   {"tier": ModuleTier.ON_DEMAND},
     "modules.reboot":    {"tier": ModuleTier.ON_DEMAND},
     "modules.optimize":  {"tier": ModuleTier.ON_DEMAND},
-    "modules.backups":   {"tier": ModuleTier.ON_DEMAND},
 }
 
 # Auto-discover custom extensions (isolated in custom/modules/ and modules/custom/)
@@ -503,6 +503,11 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     if getattr(bot_instance, "session", None):
         await bot_instance.session.close()
     try:
+        from modules import traffic as traffic_module
+        traffic_module.save_current_traffic_backup()
+    except Exception as exc:
+        logging.debug("Unable to save traffic backup on shutdown: %s", exc)
+    try:
         await utils.save_agent_availability_async()
     except Exception:
         pass
@@ -520,6 +525,8 @@ async def main():
         await utils.load_services_config_async()
         await i18n.load_user_settings_async()
         await utils.load_agent_availability_async()
+        await utils.initial_restart_check(bot)
+        await utils.initial_reboot_check(bot)
         asyncio.create_task(auth.refresh_user_names(bot))
 
         # ─── Memory Orchestrator: setup + start GC ───

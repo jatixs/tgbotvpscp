@@ -6,19 +6,23 @@
 <p align="center">
     <img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/>
     <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
-    <img src="https://img.shields.io/badge/date-Oct%2022%202026-green?style=flat-square" alt="Date Oct 22 2026"/>
+    <img src="https://img.shields.io/badge/date-Oct%2026%202026-green?style=flat-square" alt="Date Oct 26 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
 
-## [1.27.0] - 2026-10-22
+## [1.27.0] - 2026-10-26
 
 ### 🚀 New Features & Capabilities
 * 🔐 **One-Click Telegram Sign-In (OIDC)** — The web dashboard has adopted the modern and secure Telegram Login widget with instant cryptographic verification (also resolved an issue where logging in could redirect back to the login form).
 * 🔔 **Background Web Push Notifications** — Instant alerts for high load, downtime, and SSH logins now arrive on desktop and smartphones (Android/iOS) even when the browser is closed. A test push trigger is available in Settings.
 * 🌐 **Smart Connection & Session State Control in WebUI** — The dashboard precisely identifies disconnection causes (no more false network errors on `401` session expiration), smoothly reconnects in the background upon server restart or phone unlock (via new `/api/health` and `/api/auth/status` endpoints), and persists active sessions in encrypted storage (`config/web_sessions.enc`) to survive updates.
 * 🧩 **Integrity Control & Custom Modules** — Overhauled system architecture to ensure complete isolation of custom modules and overall system integrity: user-defined bot modules and web dashboard tabs are isolated in the `custom/` directory (with auto-discovery and protection against being overwritten during updates), backed by a core SHA-256 verification subsystem (`core/integrity.py`, `manage.py integrity`).
+* 📢 **Full Localization & Interactivity for Alert-Bot** — The subscriber alert bot (`client_alerts`) is completely overhauled with dual-language architecture (`ru`/`en`): client language is auto-detected from their Telegram client settings, with an interactive in-chat toggle button. Added confirmation dialogs before muting incident alerts and support for interactive polls and reactions in broadcasts.
 
 ### ✨ Improvements & Fixes
+* 💾 **Reliable Periodic Auto-Backups** — Promoted the backup module (`modules.backups`) to `ALWAYS_ON` status, ensuring scheduled auto-backups launch immediately at boot and preventing garbage collection unloads. Scheduled auto-backups now include network traffic snapshots (`traffic`) alongside config, logs, and nodes, with a non-blocking 5-second interval ticker and safe file packaging.
+* 📊 **Seamless Traffic Persistence Across Any Restarts** — accumulated network traffic statistics are now reliably saved to disk whenever the bot stops and restored immediately upon startup across all deployment modes (systemd, Docker, in-bot restart command, or server reboots). Live metrics in both WebUI and Telegram continue seamlessly without resetting to zero or delays.
+* 🛡️ **Zero-Memory Watchdog Architecture (OnFailure)** — Overhauled the watchdog service: under systemd, it transitions into an ultra-fast `Type=oneshot` handler wired directly to the `OnFailure=tg-watchdog.service` trigger. Watchdog now consumes 0 MB of RAM while the bot is healthy, activating in ~50ms strictly on unexpected crashes to deliver detailed traceback alerts to Telegram before immediately releasing memory. In Docker environments, event-driven streaming (`docker events`) replaces active polling, while routine restart and reboot notifications are now natively handled by the bot core.
 * 🖥️ **Faster Terminal, VNC & IP Copying** — Web terminal and VNC launch significantly faster without first-run hangs, modern encrypted OpenSSH keys are fully supported, and server IP addresses can be copied with a single click (or tap on smartphones).
 * 📳 **Refined Haptic Feedback** — Completely overhauled tactile feedback: standardized vibration behavior across buttons, switches, and sliders in both WebUI and Telegram Mini App (via Vibration API and Telegram Haptic Feedback), with a dedicated toggle in interface settings.
 * 📜 **SSH Log Tracking on Modern Linux Distros** — Overhauled SSH session logs and Fail2Ban monitoring: added recognition of `sshd-session` processes used in modern Linux distributions (Ubuntu 24.04, Debian 12), support for standardized ISO timestamps, and pre-filtered log queries to reduce CPU overhead.

@@ -93,12 +93,7 @@ function initScrollAnimations() {
     });
 }
 
-window.initDashboard = function () {
-    cleanupDashboardSources();
-    nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
-
-    initScrollAnimations();
-
+window.rebindDashboardSSE = function () {
     if (window.sseSource) {
         window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.removeEventListener('nodes_list', handleSSENodesList);
@@ -106,6 +101,21 @@ window.initDashboard = function () {
         window.sseSource.addEventListener('agent_stats', handleSSEAgentStats);
         window.sseSource.addEventListener('nodes_list', handleSSENodesList);
     }
+};
+
+window.addEventListener('sse:ready', () => {
+    if (typeof window.rebindDashboardSSE === 'function') {
+        window.rebindDashboardSSE();
+    }
+});
+
+window.initDashboard = function () {
+    cleanupDashboardSources();
+    nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
+
+    initScrollAnimations();
+
+    window.rebindDashboardSSE();
 
     initAgentChartRange();
 

@@ -1693,19 +1693,46 @@ create_docker_compose_yml() {
 create_and_start_service() {
     local svc=$1; local script=$2; local mode=$3; local desc=$4
     local user="root"; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; fi
+
+    if [ "$svc" == "$WATCHDOG_SERVICE_NAME" ]; then
+        # Watchdog is an event-driven OnFailure crash handler (Type=oneshot).
+        # Consumes 0 MB RAM in idle and only triggers if tg-bot crashes unexpectedly.
+        sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
+[Unit]
+Description=${desc}
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=${BOT_INSTALL_PATH}
+EnvironmentFile=${BOT_INSTALL_PATH}/.env
+ExecStart=${VENV_PATH}/bin/python ${script} --crash-alert
+TimeoutStartSec=30
+EOF
+        sudo systemctl daemon-reload
+        sudo systemctl stop "${svc}" >/dev/null 2>&1 || true
+        sudo systemctl disable "${svc}" >/dev/null 2>&1 || true
+        msg_info "✓ Crash alert service ${svc} (${desc}) configured (OnFailure, 0 MB RAM idle)"
+        return 0
+    fi
+
     sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
 [Unit]
 Description=${desc}
 After=network.target
+OnFailure=tg-watchdog.service
+
 [Service]
 Type=simple
 User=${user}
 WorkingDirectory=${BOT_INSTALL_PATH}
 EnvironmentFile=${BOT_INSTALL_PATH}/.env
 ExecStart=${VENV_PATH}/bin/python ${script}
-Restart=always
-RestartSec=10
+Restart=on-failure
+RestartSec=5
 TimeoutStopSec=20
+
 [Install]
 WantedBy=multi-user.target
 EOF

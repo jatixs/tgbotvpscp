@@ -1861,6 +1861,10 @@ function initSSE() {
     };
 
     window.sseSource = sseSource;
+    window.dispatchEvent(new CustomEvent('sse:ready', { detail: sseSource }));
+    if (typeof window.rebindDashboardSSE === 'function') {
+        window.rebindDashboardSSE();
+    }
 }
 
 async function diagnoseConnectionIssue(isWatchdog = false) {

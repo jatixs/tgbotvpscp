@@ -17,6 +17,7 @@ Subscribers Storage: config/alert_subscribers.json (simple JSON file).
 """
 
 import asyncio
+import html
 import io
 import json
 import logging
@@ -104,16 +105,44 @@ def _save_subscribers(subscribers: dict[int, dict]) -> None:
         logging.error(f"[client_alerts] Failed to save subscribers: {e}")
 
 
-async def _add_subscriber(user_id: int, user_name: str) -> bool:
-    """Add a subscriber or update name. Returns True if added for the first time."""
+def _get_client_lang(user_id: int, tg_lang: str | None = None) -> str:
+    """Get subscriber's preferred language, falling back to Telegram language code or bot language."""
+    subscribers = _load_subscribers()
+    s_data = subscribers.get(user_id, {})
+    if s_data.get("lang"):
+        return s_data["lang"]
+    if tg_lang:
+        code = str(tg_lang).lower()
+        if code.startswith(("ru", "be", "uk")):
+            return "ru"
+        return "en"
+    return _get_bot_lang()
+
+
+async def _add_subscriber(user_id: int, user_name: str, tg_lang: str | None = None) -> bool:
+    """Add a subscriber or update name and language. Returns True if added for the first time."""
     subscribers = _load_subscribers()
     is_new = user_id not in subscribers
     if is_new:
-        subscribers[user_id] = {"name": user_name, "mute_all": False, "mute_broadcasts": False, "muted_nodes": []}
+        lang = "ru" if (tg_lang and str(tg_lang).lower().startswith(("ru", "be", "uk"))) else ("en" if tg_lang else _get_bot_lang())
+        subscribers[user_id] = {
+            "name": user_name,
+            "mute_all": False,
+            "mute_broadcasts": False,
+            "muted_nodes": [],
+            "lang": lang,
+        }
         _save_subscribers(subscribers)
-    elif subscribers[user_id].get("name") != user_name:
-        subscribers[user_id]["name"] = user_name
-        _save_subscribers(subscribers)
+    else:
+        changed = False
+        if subscribers[user_id].get("name") != user_name:
+            subscribers[user_id]["name"] = user_name
+            changed = True
+        if "lang" not in subscribers[user_id] and tg_lang:
+            subscribers[user_id]["lang"] = "ru" if str(tg_lang).lower().startswith(("ru", "be", "uk")) else "en"
+            changed = True
+        if changed:
+            _save_subscribers(subscribers)
     return is_new
 
 
@@ -131,6 +160,7 @@ def is_node_muted_for_user(user_id: int, node_token: str) -> bool:
 
 
 BROADCASTS_FILE = os.path.join(config.CONFIG_DIR, "alert_broadcasts.json")
+POLLS_FILE = os.path.join(config.CONFIG_DIR, "alert_polls.json")
 
 
 def _load_broadcast_history() -> list[dict]:
@@ -157,7 +187,38 @@ def _save_broadcast_history(history: list[dict]) -> None:
         logging.error(f"[client_alerts] Failed to save broadcast history: {e}")
 
 
-def _record_broadcast(preview: str, sent_map: dict[int, int], is_pinned: bool = False) -> str:
+def _load_polls_registry() -> dict[str, dict]:
+    """Loads polls registry mapping poll_id -> metadata."""
+    try:
+        if os.path.exists(POLLS_FILE):
+            with open(POLLS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception as e:
+        logging.warning(f"[client_alerts] Failed to load polls registry: {e}")
+    return {}
+
+
+def _save_polls_registry(registry: dict[str, dict]) -> None:
+    """Saves polls registry mapping poll_id -> metadata (retaining last 500 polls)."""
+    try:
+        os.makedirs(os.path.dirname(POLLS_FILE), exist_ok=True)
+        if len(registry) > 500:
+            keys = list(registry.keys())[-500:]
+            registry = {k: registry[k] for k in keys}
+        with open(POLLS_FILE, "w", encoding="utf-8") as f:
+            json.dump(registry, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"[client_alerts] Failed to save polls registry: {e}")
+
+
+def _record_broadcast(
+    preview: str,
+    sent_map: dict[int, int],
+    is_pinned: bool = False,
+    poll_data: dict | None = None
+) -> str:
     """Saves record of sent broadcast and returns broadcast_id."""
     import datetime
     bc_id = f"bc_{int(time.time())}"
@@ -169,11 +230,48 @@ def _record_broadcast(preview: str, sent_map: dict[int, int], is_pinned: bool = 
         "preview": (preview[:45] + "…") if len(preview) > 45 else preview,
         "sent": {str(uid): mid for uid, mid in sent_map.items()},
         "is_pinned": is_pinned,
+        "reactions": {},
     }
+    if poll_data:
+        entry["poll"] = poll_data
     history = _load_broadcast_history()
     history.append(entry)
     _save_broadcast_history(history)
     return bc_id
+
+
+def _record_client_reaction(user_id: int, message_id: int, reaction_str: str) -> str | None:
+    """Records client reaction into the corresponding broadcast entry, if found."""
+    history = _load_broadcast_history()
+    uid_str = str(user_id)
+    matched_bc_id = None
+    for entry in reversed(history):
+        sent = entry.get("sent", {})
+        if sent.get(uid_str) == message_id:
+            reactions = entry.setdefault("reactions", {})
+            if reaction_str:
+                reactions[uid_str] = reaction_str
+            else:
+                reactions.pop(uid_str, None)
+            matched_bc_id = entry.get("id")
+            _save_broadcast_history(history)
+            break
+    return matched_bc_id
+
+
+def _record_poll_vote(bc_id: str, user_id: int, option_ids: list[int]) -> None:
+    """Records user's poll answer or retraction into the broadcast entry."""
+    history = _load_broadcast_history()
+    uid_str = str(user_id)
+    for entry in history:
+        if entry.get("id") == bc_id and "poll" in entry:
+            votes = entry["poll"].setdefault("votes", {})
+            if option_ids:
+                votes[uid_str] = option_ids
+            else:
+                votes.pop(uid_str, None)
+            _save_broadcast_history(history)
+            break
 
 
 async def _delete_broadcast_for_all(broadcast_id: str) -> tuple[int, int]:
@@ -313,6 +411,41 @@ async def _extract_message_payload(message: types.Message) -> dict:
             payload["type"] = "animation"
             payload["file_id"] = message.animation.file_id
             await _download_to_buffer(message.animation, "animation.mp4")
+        elif message.poll:
+            payload["type"] = "poll"
+            payload["question"] = message.poll.question
+            payload["options"] = [opt.text for opt in message.poll.options]
+            payload["is_anonymous"] = message.poll.is_anonymous
+            payload["allows_multiple_answers"] = message.poll.allows_multiple_answers
+            payload["poll_type"] = message.poll.type
+            payload["explanation"] = message.poll.explanation
+        elif message.location:
+            payload["type"] = "location"
+            payload["latitude"] = message.location.latitude
+            payload["longitude"] = message.location.longitude
+        elif message.venue:
+            payload["type"] = "venue"
+            payload["latitude"] = message.venue.location.latitude
+            payload["longitude"] = message.venue.location.longitude
+            payload["title"] = message.venue.title
+            payload["address"] = message.venue.address
+        elif message.contact:
+            payload["type"] = "contact"
+            payload["phone_number"] = message.contact.phone_number
+            payload["first_name"] = message.contact.first_name
+            payload["last_name"] = message.contact.last_name
+            payload["vcard"] = message.contact.vcard
+        elif message.dice:
+            payload["type"] = "dice"
+            payload["emoji"] = message.dice.emoji
+        elif message.caption and message.caption.strip():
+            payload["type"] = "text"
+            payload["text"] = message.caption
+            if message.caption_entities:
+                payload["entities"] = [dump_entity(e) for e in message.caption_entities]
+        elif getattr(message, "html_text", None):
+            payload["type"] = "text"
+            payload["text"] = message.html_text
         else:
             payload["type"] = "unsupported"
             try:
@@ -411,6 +544,44 @@ async def _send_payload_via_alert_bot(
         sent = await alert_bot.send_animation(chat_id, input_media, caption=caption, parse_mode="HTML", **kwargs)
         if sent and sent.animation and not payload.get("cached_file_id"):
             payload["cached_file_id"] = sent.animation.file_id
+    elif msg_type == "poll":
+        sent = await alert_bot.send_poll(
+            chat_id,
+            question=payload["question"],
+            options=payload["options"],
+            is_anonymous=payload.get("is_anonymous", True),
+            allows_multiple_answers=payload.get("allows_multiple_answers", False),
+            type=payload.get("poll_type", "regular"),
+            explanation=payload.get("explanation"),
+            **kwargs
+        )
+    elif msg_type == "location":
+        sent = await alert_bot.send_location(
+            chat_id,
+            latitude=payload["latitude"],
+            longitude=payload["longitude"],
+            **kwargs
+        )
+    elif msg_type == "venue":
+        sent = await alert_bot.send_venue(
+            chat_id,
+            latitude=payload["latitude"],
+            longitude=payload["longitude"],
+            title=payload["title"],
+            address=payload["address"],
+            **kwargs
+        )
+    elif msg_type == "contact":
+        sent = await alert_bot.send_contact(
+            chat_id,
+            phone_number=payload["phone_number"],
+            first_name=payload["first_name"],
+            last_name=payload.get("last_name"),
+            vcard=payload.get("vcard"),
+            **kwargs
+        )
+    elif msg_type == "dice":
+        sent = await alert_bot.send_dice(chat_id, emoji=payload.get("emoji", "🎲"), **kwargs)
     else:
         raise ValueError("Данный тип сообщения (например, таблицы или спецформатирование) не поддерживается для пересылки между ботами. Пожалуйста, используйте обычный текст или медиа.")
 
@@ -480,36 +651,36 @@ else:
 
 # ─── Inline Keyboards ────────────────────────────────────────────────────────
 
-def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
+def _get_alert_panel_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     """
     Alert Module management panel for administrators.
     Opens when clicking "📣 Write alert" button in the main bot.
     """
     subscribers = _load_subscribers()
     history = _load_broadcast_history()
-    count_label = f"({len(subscribers)} чел.)" if subscribers else "(пусто)"
+    count_label = _("alert_label_count", lang).format(count=len(subscribers)) if subscribers else _("alert_label_empty", lang)
     hist_label = f"({len(history)})" if history else ""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📣 Рассылка",
+                    text=_("alert_btn_broadcast", lang),
                     callback_data="alert_panel_broadcast",
                 ),
                 InlineKeyboardButton(
-                    text=f"👥 Подписчики {count_label}",
+                    text=_("alert_btn_subscribers", lang).format(label=count_label),
                     callback_data="alert_panel_subscribers",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text=f"🗑 Удалить рассылку {hist_label}".strip(),
+                    text=_("alert_btn_delete_broadcast", lang).format(label=hist_label).strip(),
                     callback_data="alert_panel_history",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 В главное меню",
+                    text=_("btn_back_to_menu", lang),
                     callback_data="back_to_menu",
                 ),
             ],
@@ -517,7 +688,7 @@ def _get_alert_panel_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _get_broadcast_history_keyboard(history: list[dict]) -> InlineKeyboardMarkup:
+def _get_broadcast_history_keyboard(history: list[dict], lang: str = "ru") -> InlineKeyboardMarkup:
     """Keyboard listing recent broadcasts for deletion."""
     keyboard = []
     for entry in reversed(history):
@@ -526,37 +697,42 @@ def _get_broadcast_history_keyboard(history: list[dict]) -> InlineKeyboardMarkup
         preview = entry.get("preview", "")
         btn_text = f"🗑 {date_str} — {preview[:22]}"
         keyboard.append([InlineKeyboardButton(text=btn_text, callback_data=f"alert_view_bc_{bc_id}")])
-    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="alert_fsm_cancel")])
+    keyboard.append([InlineKeyboardButton(text=_("btn_back", lang), callback_data="alert_fsm_cancel")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def _get_broadcast_delete_confirm_keyboard(broadcast_id: str) -> InlineKeyboardMarkup:
+def _get_broadcast_delete_confirm_keyboard(broadcast_id: str, is_poll_or_has_reactions: bool = False, lang: str = "ru") -> InlineKeyboardMarkup:
     """Confirmation button before deleting broadcast across all subscribers."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🗑 Да, удалить у всех",
-                    callback_data=f"alert_confirm_del_bc_{broadcast_id}"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔙 Назад к списку",
-                    callback_data="alert_panel_history"
-                ),
-            ]
-        ]
-    )
+    rows = []
+    if is_poll_or_has_reactions:
+        rows.append([
+            InlineKeyboardButton(
+                text=_("alert_btn_refresh", lang),
+                callback_data=f"alert_view_bc_{broadcast_id}"
+            )
+        ])
+    rows.append([
+        InlineKeyboardButton(
+            text=_("alert_btn_confirm_del_all", lang),
+            callback_data=f"alert_confirm_del_bc_{broadcast_id}"
+        )
+    ])
+    rows.append([
+        InlineKeyboardButton(
+            text=_("alert_btn_back_to_list", lang),
+            callback_data="alert_panel_history"
+        )
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _get_reply_keyboard(client_user_id: int, client_message_id: int) -> InlineKeyboardMarkup:
+def _get_reply_keyboard(client_user_id: int, client_message_id: int, lang: str = "ru") -> InlineKeyboardMarkup:
     """Inline 'Reply' button under incoming administrator ticket."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💬 Ответить",
+                    text=_("alert_btn_reply", lang),
                     callback_data=f"alert_reply_{client_user_id}_{client_message_id}",
                 )
             ]
@@ -569,32 +745,32 @@ def _render_broadcast_confirm_text(
     pin: bool = False,
     silent: bool = False,
     btn_title: str | None = None,
-    btn_url: str | None = None
+    btn_url: str | None = None,
+    lang: str = "ru"
 ) -> str:
     """Renders broadcast parameters summary text."""
-    btn_line = f"\n🔘 Кнопка: <b>{btn_title}</b> (<code>{btn_url}</code>)" if btn_title and btn_url else "\n🔘 Кнопка: <i>не задана</i>"
-    pin_line = "\n📌 Закрепить у всех: <b>Да</b>" if pin else "\n📌 Закрепить у всех: <b>Нет</b>"
-    sound_line = "\n🔕 Доставка: <b>Без звука</b>" if silent else "\n🔔 Доставка: <b>Со звуком</b>"
+    btn_line = _("alert_button_line_set", lang).format(title=btn_title, url=btn_url) if btn_title and btn_url else _("alert_button_line_unset", lang)
+    pin_line = _("alert_yes", lang) if pin else _("alert_no", lang)
+    sound_line = _("alert_sound_line_silent", lang) if silent else _("alert_sound_line_loud", lang)
 
-    return (
-        f"⚠️ <b>Параметры рассылки</b>\n\n"
-        f"👥 Получателей: <b>{subscribers_count}</b>"
-        f"{pin_line}"
-        f"{sound_line}"
-        f"{btn_line}\n\n"
-        f"Настройте параметры ниже и нажмите <b>Отправить всем</b>:"
+    return _("alert_broadcast_params_title", lang).format(
+        count=subscribers_count,
+        pin=pin_line,
+        sound=sound_line,
+        button=btn_line
     )
 
 
 def _get_broadcast_confirm_keyboard(
     pin: bool = False,
     silent: bool = False,
-    btn_info: str | None = None
+    btn_info: str | None = None,
+    lang: str = "ru"
 ) -> InlineKeyboardMarkup:
     """Broadcast confirmation or cancellation with advanced options."""
-    pin_text = "📌 Закрепить: ДА" if pin else "📌 Закрепить: НЕТ"
-    sound_text = "🔕 Без звука" if silent else "🔔 Со звуком"
-    btn_text = f"🔘 Кнопка: {btn_info[:14]}…" if btn_info else "🔘 Добавить кнопку"
+    pin_text = _("alert_btn_pin_on", lang) if pin else _("alert_btn_pin_off", lang)
+    sound_text = _("alert_btn_sound_off", lang) if silent else _("alert_btn_sound_on", lang)
+    btn_text = _("alert_btn_button_info", lang).format(info=btn_info[:14]) if btn_info else _("alert_btn_add_button", lang)
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -616,11 +792,11 @@ def _get_broadcast_confirm_keyboard(
             ],
             [
                 InlineKeyboardButton(
-                    text="✅ Отправить всем",
+                    text=_("alert_btn_send_all", lang),
                     callback_data="alert_broadcast_confirm",
                 ),
                 InlineKeyboardButton(
-                    text="❌ Отмена",
+                    text=_("btn_cancel", lang),
                     callback_data="alert_fsm_cancel",
                 ),
             ],
@@ -628,13 +804,13 @@ def _get_broadcast_confirm_keyboard(
     )
 
 
-def _get_cancel_keyboard() -> InlineKeyboardMarkup:
+def _get_cancel_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     """Cancel button for current FSM action."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="❌ Отмена",
+                    text=_("btn_cancel", lang),
                     callback_data="alert_fsm_cancel",
                 )
             ]
@@ -661,7 +837,7 @@ def _get_client_main_keyboard(lang: str | None = None) -> types.ReplyKeyboardMar
 
 
 async def _get_client_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    lang = _get_bot_lang()
+    lang = _get_client_lang(user_id)
     subscribers = _load_subscribers()
     s_data = subscribers.get(user_id, {})
     mute_all = s_data.get("mute_all", False)
@@ -689,6 +865,9 @@ async def _get_client_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
             is_muted = token in muted_nodes
             btn_text = f"🔕 {name}" if is_muted else f"🔔 {name}"
             keyboard.append([InlineKeyboardButton(text=btn_text, callback_data=f"cst_node_{token}")])
+
+    # Language toggle button
+    keyboard.append([InlineKeyboardButton(text=_("alert_btn_client_lang", lang), callback_data="cst_toggle_lang")])
             
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -703,9 +882,10 @@ if alert_dp is not None:
         Client clicks /start in Alert Bot → subscribes to broadcast alerts.
         """
         user_id = message.from_user.id
-        lang = _get_bot_lang()
+        tg_lang = message.from_user.language_code
         user_name = message.from_user.full_name or f"ID {user_id}"
-        is_new = await _add_subscriber(user_id, user_name)
+        is_new = await _add_subscriber(user_id, user_name, tg_lang)
+        lang = _get_client_lang(user_id, tg_lang)
 
         if is_new:
             await message.answer(
@@ -721,13 +901,32 @@ if alert_dp is not None:
                 reply_markup=_get_client_main_keyboard(lang)
             )
 
+    @alert_dp.callback_query(F.data == "cst_toggle_lang")
+    async def _cq_client_toggle_lang(callback: types.CallbackQuery):
+        user_id = callback.from_user.id
+        subscribers = _load_subscribers()
+        if user_id in subscribers:
+            cur = subscribers[user_id].get("lang", "ru")
+            new_lang = "en" if cur == "ru" else "ru"
+            subscribers[user_id]["lang"] = new_lang
+            _save_subscribers(subscribers)
+            try:
+                await callback.message.edit_text(
+                    _("alert_settings_text", new_lang),
+                    parse_mode="HTML",
+                    reply_markup=await _get_client_settings_keyboard(user_id)
+                )
+            except Exception as exc:
+                logging.debug("Unable to update client settings language: %s", exc)
+        await callback.answer()
+
     @alert_dp.callback_query(F.data == "cst_toggle_all")
     async def _cq_client_settings_toggle_all(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         subscribers = _load_subscribers()
         s_data = subscribers.get(user_id, {})
         mute_all = s_data.get("mute_all", False)
-        lang = _get_bot_lang()
+        lang = _get_client_lang(user_id)
 
         if not mute_all:
             # User intends to mute all -> send humorous warning with OK and Cancel buttons first
@@ -771,7 +970,7 @@ if alert_dp is not None:
     async def _cq_client_confirm_mute_all(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         subscribers = _load_subscribers()
-        lang = _get_bot_lang()
+        lang = _get_client_lang(user_id)
         if user_id in subscribers:
             subscribers[user_id]["mute_all"] = True
             _save_subscribers(subscribers)
@@ -788,7 +987,7 @@ if alert_dp is not None:
     @alert_dp.callback_query(F.data == "cst_cancel_mute_all")
     async def _cq_client_cancel_mute_all(callback: types.CallbackQuery):
         user_id = callback.from_user.id
-        lang = _get_bot_lang()
+        lang = _get_client_lang(user_id)
         try:
             await callback.message.edit_text(
                 _("alert_settings_text", lang),
@@ -867,12 +1066,13 @@ if alert_dp is not None:
         if not is_user_content:
             return
 
-        lang = _get_bot_lang()
+        user_id = message.from_user.id
+        tg_lang = message.from_user.language_code
+        user_name = message.from_user.full_name or f"ID {user_id}"
+        await _add_subscriber(user_id, user_name, tg_lang)
+        lang = _get_client_lang(user_id, tg_lang)
+
         if message.text in ["⚙️ Настройки", "⚙️ Settings", _("alert_btn_settings", "ru"), _("alert_btn_settings", "en"), "/settings"]:
-            user_id = message.from_user.id
-            user_name = message.from_user.full_name or f"ID {user_id}"
-            await _add_subscriber(user_id, user_name)
-            
             text = _("alert_settings_text", lang)
             await message.answer(text, parse_mode="HTML", reply_markup=await _get_client_settings_keyboard(user_id))
             return
@@ -895,11 +1095,6 @@ if alert_dp is not None:
                  await message.answer(_("alert_reply_error_bot", lang))
                  return
 
-        # Ensure user is subscribed
-        user_id = message.from_user.id
-        user_name = message.from_user.full_name or f"ID {user_id}"
-        await _add_subscriber(user_id, user_name)
-
         # Anti-flood: max 1 message per 3 seconds
         now = time.time()
         global _last_flood_state_cleanup
@@ -919,18 +1114,17 @@ if alert_dp is not None:
             return
         _user_last_message_time[user_id] = now
 
-        user_name = message.from_user.full_name or f"ID {user_id}"
+        admin_lang = get_user_lang(config.ADMIN_USER_ID)
         username_str = (
             f"@{message.from_user.username}"
             if message.from_user.username
-            else "нет username"
+            else ("no username" if admin_lang == "en" else "нет username")
         )
 
-        ticket_header = (
-            f"📨 <b>Вам ответили на алерт</b>\n"
-            f"👤 <b>{user_name}</b> ({username_str})\n"
-            f"🆔 ID: <code>{user_id}</code>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        ticket_header = _("alert_ticket_header", admin_lang).format(
+            user_name=html.escape(user_name),
+            username_str=html.escape(username_str),
+            user_id=user_id,
         )
 
         # Lazy import of the main bot to avoid circular imports
@@ -946,7 +1140,7 @@ if alert_dp is not None:
                 config.ADMIN_USER_ID,
                 ticket_header,
                 parse_mode="HTML",
-                reply_markup=_get_reply_keyboard(user_id, message.message_id),
+                reply_markup=_get_reply_keyboard(user_id, message.message_id, admin_lang),
             )
             if message.text:
                 await main_bot_instance.send_message(
@@ -964,6 +1158,148 @@ if alert_dp is not None:
             logging.error(f"[client_alerts] Error forwarding ticket: {e}")
             await message.answer("⚠️ Error / Ошибка при отправке. Попробуйте позже.")
 
+    def _extract_reaction_emojis(reaction_list: list) -> str:
+        res = []
+        for r in reaction_list or []:
+            if getattr(r, "emoji", None):
+                res.append(r.emoji)
+            elif getattr(r, "custom_emoji_id", None):
+                res.append("⭐️")
+            elif getattr(r, "type", None) == "paid":
+                res.append("⭐️")
+        return " ".join(res)
+
+    @alert_dp.message_reaction()
+    async def alert_reaction_handler(event: types.MessageReactionUpdated) -> None:
+        """
+        Subscribers add/remove reactions to messages → notify admin in main bot
+        with a Reply button to contact the user.
+        """
+        if alert_bot is None:
+            return
+        user = getattr(event, "user", None)
+        if not user or user.is_bot:
+            return
+
+        user_id = user.id
+        user_name = user.full_name or f"ID {user_id}"
+        username_str = f"@{user.username}" if user.username else "нет username"
+
+        new_emojis = _extract_reaction_emojis(getattr(event, "new_reaction", None))
+        old_emojis = _extract_reaction_emojis(getattr(event, "old_reaction", None))
+
+        # Record in broadcast history if matches a broadcast message
+        _record_client_reaction(user_id, event.message_id, new_emojis)
+
+        # Lazy import of the main bot to avoid circular imports
+        try:
+            import bot as main_bot_module
+            main_bot_instance: Bot = main_bot_module.bot
+        except ImportError:
+            logging.error("[client_alerts] Failed to import the main bot.")
+            return
+
+        lang = _get_bot_lang()
+        safe_user_name = html.escape(user_name)
+        safe_username_str = html.escape(username_str)
+
+        if new_emojis:
+            msg_text = _("alert_reaction_notify", lang).format(
+                user_name=safe_user_name,
+                username_str=safe_username_str,
+                user_id=user_id,
+                reaction=html.escape(new_emojis),
+            )
+        else:
+            msg_text = _("alert_reaction_removed", lang).format(
+                user_name=safe_user_name,
+                username_str=safe_username_str,
+                user_id=user_id,
+                old_reaction=html.escape(old_emojis or "—"),
+            )
+
+        reply_kb = _get_reply_keyboard(user_id, event.message_id, lang)
+        try:
+            await main_bot_instance.send_message(
+                config.ADMIN_USER_ID,
+                msg_text,
+                parse_mode="HTML",
+                reply_markup=reply_kb,
+            )
+        except Exception as exc:
+            logging.error("[client_alerts] Failed to notify admin about reaction: %s", exc)
+
+    @alert_dp.poll_answer()
+    async def alert_poll_answer_handler(poll_answer: types.PollAnswer) -> None:
+        """
+        Subscribers vote or retract answers in polls → update broadcast poll registry
+        and notify admin in main bot with selected options and a Reply button.
+        """
+        if alert_bot is None:
+            return
+        user = getattr(poll_answer, "user", None)
+        if not user or user.is_bot:
+            return
+
+        poll_id = str(getattr(poll_answer, "poll_id", ""))
+        polls_reg = _load_polls_registry()
+        poll_meta = polls_reg.get(poll_id)
+
+        user_id = user.id
+        user_name = user.full_name or f"ID {user_id}"
+        username_str = f"@{user.username}" if user.username else "нет username"
+
+        question = poll_meta.get("question", "Опрос") if poll_meta else "Опрос"
+        options = poll_meta.get("options", []) if poll_meta else []
+        bc_id = poll_meta.get("bc_id") if poll_meta else None
+        msg_id = poll_meta.get("message_id", 0) if poll_meta else 0
+
+        selected_ids = getattr(poll_answer, "option_ids", []) or []
+        if bc_id:
+            _record_poll_vote(bc_id, user_id, selected_ids)
+
+        # Lazy import of the main bot to avoid circular imports
+        try:
+            import bot as main_bot_module
+            main_bot_instance: Bot = main_bot_module.bot
+        except ImportError:
+            logging.error("[client_alerts] Failed to import the main bot.")
+            return
+
+        lang = _get_bot_lang()
+        safe_user_name = html.escape(user_name)
+        safe_username_str = html.escape(username_str)
+        safe_question = html.escape(question)
+
+        if selected_ids:
+            selected_names = [options[i] for i in selected_ids if 0 <= i < len(options)]
+            opts_str = ", ".join(f"«{o}»" for o in selected_names) if selected_names else str(selected_ids)
+            msg_text = _("alert_poll_answer_notify", lang).format(
+                user_name=safe_user_name,
+                username_str=safe_username_str,
+                user_id=user_id,
+                question=safe_question,
+                options=html.escape(opts_str),
+            )
+        else:
+            msg_text = _("alert_poll_answer_retracted", lang).format(
+                user_name=safe_user_name,
+                username_str=safe_username_str,
+                user_id=user_id,
+                question=safe_question,
+            )
+
+        reply_kb = _get_reply_keyboard(user_id, msg_id, lang)
+        try:
+            await main_bot_instance.send_message(
+                config.ADMIN_USER_ID,
+                msg_text,
+                parse_mode="HTML",
+                reply_markup=reply_kb,
+            )
+        except Exception as exc:
+            logging.error("[client_alerts] Failed to notify admin about poll answer: %s", exc)
+
 
 # ─── Main Bot: Control Panel (callback) ───────────────────────────────────
 
@@ -973,52 +1309,50 @@ async def _alert_panel_open(message: types.Message, state: FSMContext) -> None:
     Available only to admin; regular users receive informational message.
     """
     user_id = message.from_user.id
+    lang = get_user_lang(user_id)
 
     if user_id != config.ADMIN_USER_ID:
         # To regular users — info message instead of error
         await message.answer(
-            "📣 <b>Alert Bot</b>\n\n"
-            "Этот раздел предназначен для отправки обращений администратору.\n"
-            "Ваши обращения можно направлять напрямую нашему боту.",
+            _("alert_user_info_not_admin", lang),
             parse_mode="HTML",
         )
         return
 
     await state.clear()
     subscribers = _load_subscribers()
+    status_str = _("alert_status_active", lang) if alert_bot else _("alert_status_inactive", lang)
     text = (
-        f"📣 <b>Alert Module — Панель управления</b>\n\n"
-        f"👥 Подписчиков: <b>{len(subscribers)}</b>\n"
-        f"🤖 Alert Bot: <b>{'активен' if alert_bot else 'не активен'}</b>\n\n"
-        f"Выберите действие:"
+        f"{_('alert_admin_title', lang)}\n\n"
+        f"{_('alert_admin_subscribers_count', lang).format(count=len(subscribers))}\n"
+        f"{_('alert_admin_bot_status', lang).format(status=status_str)}\n\n"
+        f"{_('alert_admin_choose_action', lang)}"
     )
-    await message.answer(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
+    await message.answer(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard(lang))
 
 
 async def _cq_panel_broadcast(callback: types.CallbackQuery, state: FSMContext) -> None:
     """
     Button '📣 Broadcast' in panel → switch to FSM waiting for broadcast message.
     """
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
 
     subscribers = _load_subscribers()
     if not subscribers:
-        await callback.answer("📭 Нет подписчиков для рассылки.", show_alert=True)
+        await callback.answer(_("alert_admin_no_subscribers", lang), show_alert=True)
         return
 
     await state.set_state(BroadcastStates.waiting_broadcast_message)
     await state.update_data(panel_message_id=callback.message.message_id)
     await callback.answer()
     
-    text = (
-        f"📣 <b>Рассылка</b>\n\n"
-        f"Подписчиков: <b>{len(subscribers)}</b>\n\n"
-        f"Отправьте сообщение для рассылки (текст, фото, видео и т.д.):"
-    )
+    text = _("alert_broadcast_prompt", lang).format(count=len(subscribers))
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard())
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard(lang))
     except Exception as exc:
         logging.debug("Unable to display broadcast prompt: %s", exc)
 
@@ -1027,8 +1361,10 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
     """
     Button '👥 Subscribers' → display subscribers list directly in inline message.
     """
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
 
     page = 1
@@ -1039,12 +1375,8 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
     await callback.answer()
 
     if not subscribers:
-        text = (
-            "📣 <b>Alert Module — Панель управления</b>\n\n"
-            "📭 Подписчиков пока нет.\n\n"
-            "Выберите действие:"
-        )
-        markup = _get_alert_panel_keyboard()
+        text = _("alert_subscribers_empty", lang)
+        markup = _get_alert_panel_keyboard(lang)
     else:
         PER_PAGE = 5
         items = list(subscribers.items())
@@ -1075,23 +1407,23 @@ async def _cq_panel_subscribers(callback: types.CallbackQuery) -> None:
         
         ids_text = "\n".join(f"  • {s_data.get('name', 'Unknown')} (<code>{uid}</code>)" for uid, s_data in current_items)
         
-        text = (
-            f"📣 <b>Alert Module — Подписчики</b>\n\n"
-            f"👥 Всего: <b>{len(subscribers)}</b>\n"
-            f"📄 Страница {page} из {total_pages}\n\n"
-            f"{ids_text}\n"
+        text = _("alert_subscribers_title", lang).format(
+            total=len(subscribers),
+            page=page,
+            total_pages=total_pages,
+            list=ids_text
         )
         
         nav_buttons = []
         if page > 1:
-            nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"alert_panel_subscribers_page_{page - 1}"))
+            nav_buttons.append(InlineKeyboardButton(text=_("btn_page_prev", lang), callback_data=f"alert_panel_subscribers_page_{page - 1}"))
         if page < total_pages:
-            nav_buttons.append(InlineKeyboardButton(text="Вперёд ➡️", callback_data=f"alert_panel_subscribers_page_{page + 1}"))
+            nav_buttons.append(InlineKeyboardButton(text=_("btn_page_next", lang), callback_data=f"alert_panel_subscribers_page_{page + 1}"))
             
         keyboard = []
         if nav_buttons:
             keyboard.append(nav_buttons)
-        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="alert_fsm_cancel")])
+        keyboard.append([InlineKeyboardButton(text=_("btn_back", lang), callback_data="alert_fsm_cancel")])
         markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     try:
@@ -1109,6 +1441,15 @@ async def _broadcast_message_received(
     Received message for broadcast → save payload in FSM state and request confirmation.
     """
     payload = await _extract_message_payload(message)
+    lang = get_user_lang(message.from_user.id)
+    if payload.get("type") == "unsupported":
+        logging.warning("[client_alerts] Unsupported message type for broadcast: %s", payload.get("debug", "")[:200])
+        await message.answer(
+            _("alert_broadcast_err_unsupported", lang),
+            parse_mode="HTML"
+        )
+        return
+
     subscribers = _load_subscribers()
     
     data = await state.get_data()
@@ -1121,8 +1462,8 @@ async def _broadcast_message_received(
         btn_url=None
     )
     
-    text = _render_broadcast_confirm_text(len(subscribers), pin=False, silent=False, btn_title=None, btn_url=None)
-    markup = _get_broadcast_confirm_keyboard(pin=False, silent=False, btn_info=None)
+    text = _render_broadcast_confirm_text(len(subscribers), pin=False, silent=False, btn_title=None, btn_url=None, lang=lang)
+    markup = _get_broadcast_confirm_keyboard(pin=False, silent=False, btn_info=None, lang=lang)
 
     try:
         await message.delete()
@@ -1145,8 +1486,10 @@ async def _broadcast_message_received(
 
 async def _cq_broadcast_toggle_pin(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Toggle message pinning for broadcast."""
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
     data = await state.get_data()
     cur_pin = not data.get("broadcast_pin", False)
@@ -1157,8 +1500,8 @@ async def _cq_broadcast_toggle_pin(callback: types.CallbackQuery, state: FSMCont
     btn_title = data.get("btn_title")
     btn_url = data.get("btn_url")
     
-    text = _render_broadcast_confirm_text(len(subscribers), cur_pin, silent, btn_title, btn_url)
-    markup = _get_broadcast_confirm_keyboard(pin=cur_pin, silent=silent, btn_info=btn_title)
+    text = _render_broadcast_confirm_text(len(subscribers), cur_pin, silent, btn_title, btn_url, lang=lang)
+    markup = _get_broadcast_confirm_keyboard(pin=cur_pin, silent=silent, btn_info=btn_title, lang=lang)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
     except Exception as exc:
@@ -1168,8 +1511,10 @@ async def _cq_broadcast_toggle_pin(callback: types.CallbackQuery, state: FSMCont
 
 async def _cq_broadcast_toggle_sound(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Toggle silent delivery for broadcast."""
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
     data = await state.get_data()
     cur_silent = not data.get("broadcast_silent", False)
@@ -1180,8 +1525,8 @@ async def _cq_broadcast_toggle_sound(callback: types.CallbackQuery, state: FSMCo
     btn_title = data.get("btn_title")
     btn_url = data.get("btn_url")
     
-    text = _render_broadcast_confirm_text(len(subscribers), pin, cur_silent, btn_title, btn_url)
-    markup = _get_broadcast_confirm_keyboard(pin=pin, silent=cur_silent, btn_info=btn_title)
+    text = _render_broadcast_confirm_text(len(subscribers), pin, cur_silent, btn_title, btn_url, lang=lang)
+    markup = _get_broadcast_confirm_keyboard(pin=pin, silent=cur_silent, btn_info=btn_title, lang=lang)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
     except Exception as exc:
@@ -1191,20 +1536,17 @@ async def _cq_broadcast_toggle_sound(callback: types.CallbackQuery, state: FSMCo
 
 async def _cq_broadcast_setup_button(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Ask administrator for custom inline button title and URL."""
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
     await state.set_state(BroadcastStates.waiting_broadcast_button)
     await callback.answer()
     
-    text = (
-        "🔘 <b>Настройка кнопки для рассылки</b>\n\n"
-        "Отправьте текст кнопки и ссылку через разделитель <code>|</code>:\n"
-        "<code>Пример: Наш канал | https://t.me/telegram</code>\n\n"
-        "Или отправьте <code>-</code> (дефис), чтобы удалить кнопку."
-    )
+    text = _("alert_button_setup_prompt", lang)
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard())
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard(lang))
     except Exception as exc:
         logging.debug("Unable to display setup button prompt: %s", exc)
 
@@ -1214,6 +1556,7 @@ async def _broadcast_button_received(message: types.Message, state: FSMContext) 
     data = await state.get_data()
     panel_message_id = data.get("panel_message_id")
     raw_text = (message.text or "").strip()
+    lang = get_user_lang(message.from_user.id)
     
     try:
         await message.delete()
@@ -1230,13 +1573,13 @@ async def _broadcast_button_received(message: types.Message, state: FSMContext) 
             await state.update_data(btn_title=title, btn_url=url)
         else:
             await message.answer(
-                "⚠️ Некорректная ссылка! Ссылка должна начинаться с <code>http://</code>, <code>https://</code> или <code>tg://</code>",
+                _("alert_button_err_invalid_url", lang),
                 parse_mode="HTML"
             )
             return
     else:
         await message.answer(
-            "⚠️ Формат: <code>Текст кнопки | https://ссылка</code> или <code>-</code> чтобы убрать.",
+            _("alert_button_err_format", lang),
             parse_mode="HTML"
         )
         return
@@ -1249,8 +1592,8 @@ async def _broadcast_button_received(message: types.Message, state: FSMContext) 
     btn_title = updated_data.get("btn_title")
     btn_url = updated_data.get("btn_url")
     
-    text = _render_broadcast_confirm_text(len(subscribers), pin, silent, btn_title, btn_url)
-    markup = _get_broadcast_confirm_keyboard(pin=pin, silent=silent, btn_info=btn_title)
+    text = _render_broadcast_confirm_text(len(subscribers), pin, silent, btn_title, btn_url, lang=lang)
+    markup = _get_broadcast_confirm_keyboard(pin=pin, silent=silent, btn_info=btn_title, lang=lang)
     
     import bot as main_bot_module
     main_bot_instance: Bot = main_bot_module.bot
@@ -1270,8 +1613,10 @@ async def _broadcast_confirm(
     callback: types.CallbackQuery, state: FSMContext
 ) -> None:
     """Administrator confirmed broadcast."""
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
 
     data = await state.get_data()
@@ -1282,22 +1627,22 @@ async def _broadcast_confirm(
     btn_url = data.get("btn_url")
     await state.clear()
 
-    if not payload:
-        await callback.answer("⚠️ Данные рассылки утеряны.", show_alert=True)
+    if not payload or payload.get("type") == "unsupported":
+        await callback.answer(_("alert_broadcast_err_unsupported", lang), show_alert=True)
         return
 
     if alert_bot is None:
-        await callback.answer("⚠️ Alert Bot не активен.", show_alert=True)
+        await callback.answer(_("alert_bot_not_active", lang), show_alert=True)
         return
 
     subscribers = _load_subscribers()
     if not subscribers:
-        await callback.answer("📭 Нет подписчиков.", show_alert=True)
+        await callback.answer(_("alert_admin_no_subscribers", lang), show_alert=True)
         return
 
-    await callback.answer("📤 Рассылка запущена...")
+    await callback.answer(_("alert_broadcast_starting", lang))
     try:
-        await callback.message.edit_text("⏳ <b>Рассылка запущена...</b>\nПожалуйста, подождите.", parse_mode="HTML", reply_markup=None)
+        await callback.message.edit_text(_("alert_broadcast_progress", lang), parse_mode="HTML", reply_markup=None)
     except Exception as exc:
         logging.debug("Unable to display broadcast progress: %s", exc)
 
@@ -1310,6 +1655,16 @@ async def _broadcast_confirm(
     sent_ok = 0
     sent_fail = 0
     sent_messages: dict[int, int] = {}
+    poll_id_map: dict[str, int] = {}
+
+    is_poll = payload.get("type") == "poll"
+    poll_data = None
+    if is_poll:
+        poll_data = {
+            "question": payload.get("question", ""),
+            "options": payload.get("options", []),
+            "votes": {}
+        }
 
     for uid in subscribers:
         s_data = subscribers.get(uid, {})
@@ -1324,6 +1679,8 @@ async def _broadcast_confirm(
             )
             if sent:
                 sent_messages[uid] = sent.message_id
+                if is_poll and getattr(sent, "poll", None) and getattr(sent.poll, "id", None):
+                    poll_id_map[str(sent.poll.id)] = uid
                 if pin and alert_bot:
                     try:
                         await alert_bot.pin_chat_message(
@@ -1346,39 +1703,46 @@ async def _broadcast_confirm(
 
     bc_id = None
     if sent_messages:
-        preview_text = payload.get("text") or payload.get("caption") or f"Медиа ({payload.get('type')})"
-        bc_id = _record_broadcast(preview_text, sent_messages, is_pinned=bool(pin))
+        no_text_label = "Media" if lang == "en" else "Медиа"
+        preview_text = payload.get("text") or payload.get("caption") or (f"Poll: {payload.get('question')}" if (is_poll and lang == "en") else (f"Опрос: {payload.get('question')}" if is_poll else f"{no_text_label} ({payload.get('type')})"))
+        bc_id = _record_broadcast(preview_text, sent_messages, is_pinned=bool(pin), poll_data=poll_data)
+        if is_poll and poll_id_map:
+            polls_reg = _load_polls_registry()
+            for pid, uid in poll_id_map.items():
+                polls_reg[pid] = {
+                    "bc_id": bc_id,
+                    "user_id": uid,
+                    "message_id": sent_messages.get(uid, 0),
+                    "question": payload.get("question", ""),
+                    "options": payload.get("options", [])
+                }
+            _save_polls_registry(polls_reg)
 
-    result_text = (
-        f"✅ <b>Рассылка завершена</b>\n\n"
-        f"📤 Успешно: <b>{sent_ok}</b>\n"
-        f"❌ Ошибок: <b>{sent_fail}</b>\n\n"
-        f"Выберите действие:"
-    )
+    result_text = _("alert_broadcast_finished", lang).format(sent_ok=sent_ok, sent_fail=sent_fail)
 
     if bc_id:
         result_markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="🗑 Отозвать (удалить у всех)",
+                        text=_("alert_btn_revoke_all", lang),
                         callback_data=f"alert_confirm_del_bc_{bc_id}"
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        text="🔙 В панель управления",
+                        text=_("alert_btn_back_to_panel", lang),
                         callback_data="alert_panel_open_again"
                     ),
                     InlineKeyboardButton(
-                        text="🚪 В главное меню",
+                        text=_("btn_back_to_menu", lang),
                         callback_data="back_to_menu"
                     ),
                 ]
             ]
         )
     else:
-        result_markup = _get_alert_panel_keyboard()
+        result_markup = _get_alert_panel_keyboard(lang)
 
     try:
         await callback.message.edit_text(result_text, parse_mode="HTML", reply_markup=result_markup)
@@ -1388,19 +1752,22 @@ async def _broadcast_confirm(
 
 async def _cq_panel_open_again(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Return to alert panel menu."""
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
     await state.clear()
     subscribers = _load_subscribers()
+    status_str = _("alert_status_active", lang) if alert_bot else _("alert_status_inactive", lang)
     text = (
-        f"📣 <b>Alert Module — Панель управления</b>\n\n"
-        f"👥 Подписчиков: <b>{len(subscribers)}</b>\n"
-        f"🤖 Alert Bot: <b>{'активен' if alert_bot else 'не активен'}</b>\n\n"
-        f"Выберите действие:"
+        f"{_('alert_admin_title', lang)}\n\n"
+        f"{_('alert_admin_subscribers_count', lang).format(count=len(subscribers))}\n"
+        f"{_('alert_admin_bot_status', lang).format(status=status_str)}\n\n"
+        f"{_('alert_admin_choose_action', lang)}"
     )
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard(lang))
     except Exception as exc:
         logging.debug("Unable to return to alert panel: %s", exc)
     await callback.answer()
@@ -1408,21 +1775,20 @@ async def _cq_panel_open_again(callback: types.CallbackQuery, state: FSMContext)
 
 async def _cq_panel_history(callback: types.CallbackQuery) -> None:
     """Display list of recent broadcasts available for deletion."""
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
 
     history = _load_broadcast_history()
     if not history:
-        await callback.answer("📭 История рассылок пуста (нет активных сообщений).", show_alert=True)
+        await callback.answer(_("alert_history_empty", lang), show_alert=True)
         return
 
     await callback.answer()
-    text = (
-        f"🗑 <b>Удаление сообщений у клиентов</b>\n\n"
-        f"Выберите рассылку, которую требуется удалить из личных сообщений у всех подписчиков:\n"
-    )
-    markup = _get_broadcast_history_keyboard(history)
+    text = _("alert_history_title", lang)
+    markup = _get_broadcast_history_keyboard(history, lang)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
     except Exception as exc:
@@ -1430,9 +1796,11 @@ async def _cq_panel_history(callback: types.CallbackQuery) -> None:
 
 
 async def _cq_view_broadcast(callback: types.CallbackQuery) -> None:
-    """Show details of selected broadcast and ask for deletion confirmation."""
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    """Show details of selected broadcast, poll/reaction statistics, and ask for deletion confirmation."""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
 
     bc_id = callback.data.replace("alert_view_bc_", "")
@@ -1440,19 +1808,49 @@ async def _cq_view_broadcast(callback: types.CallbackQuery) -> None:
     target = next((item for item in history if item.get("id") == bc_id), None)
 
     if not target:
-        await callback.answer("⚠️ Рассылка не найдена или уже удалена.", show_alert=True)
+        await callback.answer(_("alert_broadcast_not_found", lang), show_alert=True)
         return
 
     await callback.answer()
     recipients_count = len(target.get("sent", {}))
-    text = (
-        f"🗑 <b>Удаление рассылки у клиентов</b>\n\n"
-        f"📅 Дата: <b>{target.get('date_str', 'Неизвестно')}</b>\n"
-        f"💬 Текст/медиа: <i>{target.get('preview', 'Без текста')}</i>\n"
-        f"👥 Получателей: <b>{recipients_count}</b>\n\n"
-        f"⚠️ Это сообщение будет безвозвратно удалено у всех {recipients_count} подписчиков. Продолжить?"
+    poll = target.get("poll")
+    reactions = target.get("reactions", {})
+    extra_info = ""
+
+    if poll:
+        question = poll.get("question", "")
+        options = poll.get("options", [])
+        votes = poll.get("votes", {})
+        total_voters = len(votes)
+        counts = [0] * len(options)
+        for u_opts in votes.values():
+            for opt_idx in u_opts:
+                if 0 <= opt_idx < len(counts):
+                    counts[opt_idx] += 1
+        extra_info += "\n\n" + _("alert_poll_results_header", lang).format(question=html.escape(question))
+        for idx, opt_name in enumerate(options):
+            c = counts[idx]
+            pct = (c / total_voters * 100) if total_voters > 0 else 0.0
+            extra_info += f"• {html.escape(opt_name)}: <b>{c}</b> ({pct:.1f}%)\n"
+        extra_info += _("alert_poll_total_voters", lang).format(total=total_voters) + "\n"
+
+    if reactions:
+        from collections import Counter
+        emoji_counts = Counter(reactions.values())
+        extra_info += "\n\n" + _("alert_reactions_header", lang)
+        for emoji_char, count in emoji_counts.most_common():
+            extra_info += f"• {html.escape(emoji_char)} — <b>{count}</b>\n"
+        extra_info += _("alert_reactions_total", lang).format(total=len(reactions)) + "\n"
+
+    no_text_label = "No text" if lang == "en" else "Без текста"
+    preview_escaped = html.escape(target.get("preview", no_text_label))
+    text = _("alert_delete_confirm_prompt", lang).format(
+        date=target.get('date_str', 'Unknown' if lang == 'en' else 'Неизвестно'),
+        preview=preview_escaped,
+        recipients=recipients_count,
+        extra=extra_info
     )
-    markup = _get_broadcast_delete_confirm_keyboard(bc_id)
+    markup = _get_broadcast_delete_confirm_keyboard(bc_id, is_poll_or_has_reactions=bool(poll or reactions), lang=lang)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
     except Exception as exc:
@@ -1461,15 +1859,17 @@ async def _cq_view_broadcast(callback: types.CallbackQuery) -> None:
 
 async def _cq_confirm_delete_broadcast(callback: types.CallbackQuery) -> None:
     """Execute broadcast message deletion across all subscribers."""
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
 
     bc_id = callback.data.replace("alert_confirm_del_bc_", "")
-    await callback.answer("🗑 Удаляю сообщения у всех клиентов...")
+    await callback.answer(_("alert_deleting_progress", lang))
     try:
         await callback.message.edit_text(
-            "⏳ <b>Удаление сообщений у всех подписчиков...</b>\nПожалуйста, подождите.",
+            _("alert_deleting_progress", lang),
             parse_mode="HTML"
         )
     except Exception as exc:
@@ -1477,17 +1877,12 @@ async def _cq_confirm_delete_broadcast(callback: types.CallbackQuery) -> None:
 
     del_ok, del_fail = await _delete_broadcast_for_all(bc_id)
 
-    result_text = (
-        f"✅ <b>Рассылка удалена у клиентов</b>\n\n"
-        f"🗑 Удалено сообщений: <b>{del_ok}</b>\n"
-        f"⚠️ Не удалось (уже удалено пользователем): <b>{del_fail}</b>\n\n"
-        f"Выберите действие:"
-    )
+    result_text = _("alert_delete_result", lang).format(del_ok=del_ok, del_fail=del_fail)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🔙 В панель управления", callback_data="alert_panel_open_again"),
-                InlineKeyboardButton(text="🚪 В главное меню", callback_data="back_to_menu"),
+                InlineKeyboardButton(text=_("alert_btn_back_to_panel", lang), callback_data="alert_panel_open_again"),
+                InlineKeyboardButton(text=_("btn_back_to_menu", lang), callback_data="back_to_menu"),
             ]
         ]
     )
@@ -1505,8 +1900,10 @@ async def _alert_reply_callback(
     """
     Button '💬 Reply' under incoming ticket → switch to FSM ReplyStates.
     """
-    if callback.from_user.id != config.ADMIN_USER_ID:
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    if user_id != config.ADMIN_USER_ID:
+        await callback.answer(_("alert_admin_access_denied", lang), show_alert=True)
         return
 
     try:
@@ -1514,7 +1911,7 @@ async def _alert_reply_callback(
         client_user_id = int(parts[2])
         client_message_id = int(parts[3])
     except (IndexError, ValueError):
-        await callback.answer("⚠️ Некорректный ID клиента или сообщения.", show_alert=True)
+        await callback.answer("⚠️ Некорректный ID клиента или сообщения." if lang != "en" else "⚠️ Invalid client or message ID.", show_alert=True)
         return
 
     await state.set_state(ReplyStates.waiting_reply_text)
@@ -1522,12 +1919,9 @@ async def _alert_reply_callback(
 
     await callback.answer()
     
-    text = (
-        f"✏️ <b>Ответ клиенту</b> <code>{client_user_id}</code>\n\n"
-        f"Отправьте ваш ответ (текст, фото, голосовое и т.д.):"
-    )
+    text = _("alert_reply_prompt", lang).format(user_id=client_user_id)
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard())
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_cancel_keyboard(lang))
     except Exception as exc:
         logging.debug("Unable to display alert reply prompt: %s", exc)
 
@@ -1542,13 +1936,14 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
     client_message_id = data.get("reply_to_message_id")
     panel_message_id = data.get("panel_message_id")
     await state.clear()
+    lang = get_user_lang(message.from_user.id)
 
     if not client_user_id:
-        await message.answer("⚠️ Ошибка: ID клиента не найден.")
+        await message.answer(_("alert_reply_client_not_found", lang))
         return
 
     if alert_bot is None:
-        await message.answer("⚠️ Alert Bot не активен — ответ невозможен.")
+        await message.answer(_("alert_reply_bot_inactive", lang))
         return
 
     payload = await _extract_message_payload(message)
@@ -1561,23 +1956,24 @@ async def _reply_text_received(message: types.Message, state: FSMContext) -> Non
     try:
         await _send_payload_via_alert_bot(client_user_id, payload, reply_to_message_id=client_message_id)
         logging.info(f"[client_alerts] Reply sent to client {client_user_id}.")
-        text = f"✅ <b>Ответ отправлен</b> клиенту <code>{client_user_id}</code>."
+        text = _("alert_reply_success", lang).format(user_id=client_user_id)
     except Exception as e:
         logging.error(f"[client_alerts] Error replying to client {client_user_id}: {e}")
-        text = f"❌ Ошибка отправки <code>{client_user_id}</code>: {e}"
+        text = _("alert_reply_fail", lang).format(user_id=client_user_id, error=e)
 
+    full_text = f"{text}\n\n{_('alert_admin_choose_action', lang)}"
     try:
         import bot as main_bot_module
         main_bot_instance: Bot = main_bot_module.bot
         await main_bot_instance.edit_message_text(
             chat_id=message.chat.id,
             message_id=panel_message_id,
-            text=text + "\n\nВыберите действие:",
+            text=full_text,
             parse_mode="HTML",
-            reply_markup=_get_alert_panel_keyboard()
+            reply_markup=_get_alert_panel_keyboard(lang)
         )
     except Exception:
-        await message.answer(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
+        await message.answer(full_text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard(lang))
 
 
 # ─── Main Bot: General FSM cancellation via button ─────────────────────────────────
@@ -1588,6 +1984,8 @@ async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> No
     If in button input mode, returns to broadcast preview.
     Otherwise resets state and returns to control panel.
     """
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
     current_state = await state.get_state()
     if current_state == BroadcastStates.waiting_broadcast_button.state:
         await state.set_state(BroadcastStates.waiting_broadcast_message)
@@ -1597,28 +1995,29 @@ async def _cq_fsm_cancel(callback: types.CallbackQuery, state: FSMContext) -> No
         btn_title = data.get("btn_title")
         btn_url = data.get("btn_url")
         subscribers = _load_subscribers()
-        text = _render_broadcast_confirm_text(len(subscribers), pin, silent, btn_title, btn_url)
-        markup = _get_broadcast_confirm_keyboard(pin=pin, silent=silent, btn_info=btn_title)
+        text = _render_broadcast_confirm_text(len(subscribers), pin, silent, btn_title, btn_url, lang=lang)
+        markup = _get_broadcast_confirm_keyboard(pin=pin, silent=silent, btn_info=btn_title, lang=lang)
         try:
             await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
         except Exception as exc:
             logging.debug("Unable to restore broadcast menu: %s", exc)
-        await callback.answer("Ввод кнопки отменен.")
+        await callback.answer(_("alert_fsm_button_cancelled", lang))
         return
 
     await state.clear()
     subscribers = _load_subscribers()
+    status_str = _("alert_status_active", lang) if alert_bot else _("alert_status_inactive", lang)
     text = (
-        f"📣 <b>Alert Module — Панель управления</b>\n\n"
-        f"👥 Подписчиков: <b>{len(subscribers)}</b>\n"
-        f"🤖 Alert Bot: <b>{'активен' if alert_bot else 'не активен'}</b>\n\n"
-        f"Выберите действие:"
+        f"{_('alert_admin_title', lang)}\n\n"
+        f"{_('alert_admin_subscribers_count', lang).format(count=len(subscribers))}\n"
+        f"{_('alert_admin_bot_status', lang).format(status=status_str)}\n\n"
+        f"{_('alert_admin_choose_action', lang)}"
     )
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard())
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=_get_alert_panel_keyboard(lang))
     except Exception as exc:
         logging.debug("Unable to display cancelled alert menu: %s", exc)
-    await callback.answer("Отменено.")
+    await callback.answer(_("alert_fsm_cancelled", lang))
 
 
 # ─── register_handlers + start_background_tasks ───────────────────────────────
@@ -1702,7 +2101,7 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
             # steal the signal and prevent the main bot from shutting down gracefully.
             await alert_dp.start_polling(
                 alert_bot,
-                allowed_updates=alert_dp.resolve_used_update_types(),
+                allowed_updates=list(set((alert_dp.resolve_used_update_types() or []) + ["message", "callback_query", "message_reaction", "poll_answer"])),
                 handle_signals=False,
             )
         except asyncio.CancelledError:

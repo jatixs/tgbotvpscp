@@ -67,6 +67,8 @@ mock_aiogram.types = mock_types
 mock_dp = MagicMock()
 mock_dp.message.return_value = lambda f: f
 mock_dp.callback_query.return_value = lambda f: f
+mock_dp.message_reaction.return_value = lambda f: f
+mock_dp.poll_answer.return_value = lambda f: f
 mock_aiogram.Dispatcher.return_value = mock_dp
 mock_aiogram.fsm.state.StatesGroup = MockStatesGroup
 mock_aiogram.fsm.state.State = MagicMock
@@ -81,25 +83,39 @@ sys.modules["aiogram.fsm.storage"] = mock_aiogram.fsm.storage
 sys.modules["aiogram.fsm.storage.memory"] = mock_aiogram.fsm.storage.memory
 
 import core  # noqa: E402
+from core import config  # noqa: E402
 core.nodes_db = MagicMock()
 sys.modules["core.nodes_db"] = core.nodes_db
 
 from modules.client_alerts import (  # noqa: E402
+    _alert_panel_open,
     _broadcast_confirm,
+    _broadcast_message_received,
     _cq_client_cancel_mute_all,
     _cq_client_confirm_mute_all,
     _cq_client_settings_toggle_all,
     _cq_client_settings_toggle_broadcasts,
+    _cq_view_broadcast,
     _delete_broadcast_for_all,
+    _get_alert_panel_keyboard,
     _get_broadcast_confirm_keyboard,
     _get_client_main_keyboard,
     _get_client_settings_keyboard,
+    _load_broadcast_history,
+    _load_polls_registry,
     _record_broadcast,
     _render_broadcast_confirm_text,
+    _save_broadcast_history,
+    _save_polls_registry,
     _send_payload_via_alert_bot,
     alert_message_handler,
+    alert_poll_answer_handler,
+    alert_reaction_handler,
     broadcast_system_alert,
     is_node_muted_for_user,
+    BROADCASTS_FILE,
+    POLLS_FILE,
+    SUBSCRIBERS_FILE,
 )
 
 
@@ -107,8 +123,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def tearDownClass(cls):
         import shutil
-        from modules.client_alerts import BROADCASTS_FILE, SUBSCRIBERS_FILE
-        for f in [BROADCASTS_FILE, SUBSCRIBERS_FILE]:
+        for f in [BROADCASTS_FILE, POLLS_FILE, SUBSCRIBERS_FILE]:
             try:
                 if os.path.exists(f):
                     os.remove(f)
@@ -461,6 +476,199 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
             await alert_message_handler(mock_msg)
             mock_msg.answer.assert_not_called()
             mock_msg.delete.assert_called_once()
+
+    async def test_broadcast_unsupported_type_rejected(self):
+        mock_msg = MagicMock()
+        mock_msg.text = None
+        mock_msg.caption = None
+        mock_msg.photo = None
+        mock_msg.video = None
+        mock_msg.audio = None
+        mock_msg.document = None
+        mock_msg.voice = None
+        mock_msg.video_note = None
+        mock_msg.sticker = None
+        mock_msg.animation = None
+        mock_msg.poll = None
+        mock_msg.location = None
+        mock_msg.venue = None
+        mock_msg.contact = None
+        mock_msg.dice = None
+        mock_msg.html_text = None
+        mock_msg.caption_entities = None
+        mock_msg.answer = AsyncMock()
+        mock_state = AsyncMock()
+
+        await _broadcast_message_received(mock_msg, mock_state)
+        # Should NOT save to state
+        mock_state.update_data.assert_not_called()
+        # Should reply with unsupported type error
+        mock_msg.answer.assert_called_once()
+        args, _ = mock_msg.answer.call_args
+        self.assertIn("не поддерживается", args[0])
+
+    async def test_send_poll_payload(self):
+        mock_bot = AsyncMock()
+        mock_bot.send_poll.return_value = MagicMock(message_id=777)
+        poll_payload = {
+            "type": "poll",
+            "question": "Все работает?",
+            "options": ["Да", "Нет"],
+            "is_anonymous": True,
+        }
+        with patch("modules.client_alerts.alert_bot", mock_bot):
+            res = await _send_payload_via_alert_bot(12345, poll_payload)
+            self.assertEqual(res.message_id, 777)
+            mock_bot.send_poll.assert_called_once()
+
+    async def test_reaction_handler_new_and_removed(self):
+        mock_main_bot = AsyncMock()
+        mock_main_module = MagicMock(bot=mock_main_bot)
+
+        mock_user = MagicMock(id=555123, full_name="Alice User", username="alice", is_bot=False)
+        mock_emoji_type = MagicMock(emoji="🔥", custom_emoji_id=None)
+        mock_event_new = MagicMock(
+            user=mock_user,
+            message_id=9876,
+            new_reaction=[mock_emoji_type],
+            old_reaction=[],
+        )
+
+        with patch.dict(sys.modules, {"bot": mock_main_module}):
+            await alert_reaction_handler(mock_event_new)
+            mock_main_bot.send_message.assert_called_once()
+            call_args = mock_main_bot.send_message.call_args[0]
+            self.assertEqual(call_args[0], config.ADMIN_USER_ID)
+            self.assertIn("Реакция на сообщение", call_args[1])
+            self.assertIn("🔥", call_args[1])
+            self.assertIn("Alice User", call_args[1])
+
+        mock_main_bot.reset_mock()
+        mock_event_removed = MagicMock(
+            user=mock_user,
+            message_id=9876,
+            new_reaction=[],
+            old_reaction=[mock_emoji_type],
+        )
+
+        with patch.dict(sys.modules, {"bot": mock_main_module}):
+            await alert_reaction_handler(mock_event_removed)
+            mock_main_bot.send_message.assert_called_once()
+            call_args = mock_main_bot.send_message.call_args[0]
+            self.assertIn("Реакция снята", call_args[1])
+            self.assertIn("🔥", call_args[1])
+
+    async def test_poll_answer_handler_and_aggregated_results(self):
+        bc_id = "bc_test_poll"
+        _save_broadcast_history([{
+            "id": bc_id,
+            "timestamp": 1234567.0,
+            "date_str": "26.10 21:00",
+            "preview": "Опрос: Довольны ли вы скоростью?",
+            "sent": {"444111": 7001},
+            "is_pinned": False,
+            "reactions": {},
+            "poll": {
+                "question": "Довольны ли вы скоростью?",
+                "options": ["Да", "Нет", "Частично"],
+                "votes": {},
+            }
+        }])
+        _save_polls_registry({
+            "poll_id_999": {
+                "bc_id": bc_id,
+                "user_id": 444111,
+                "message_id": 7001,
+                "question": "Довольны ли вы скоростью?",
+                "options": ["Да", "Нет", "Частично"]
+            }
+        })
+
+        mock_main_bot = AsyncMock()
+        mock_main_module = MagicMock(bot=mock_main_bot)
+        mock_user = MagicMock(id=444111, full_name="Bob Voter", username="bob", is_bot=False)
+
+        # 1. Client votes for "Да" (index 0)
+        mock_answer_vote = MagicMock(
+            poll_id="poll_id_999",
+            user=mock_user,
+            option_ids=[0]
+        )
+
+        with patch.dict(sys.modules, {"bot": mock_main_module}):
+            await alert_poll_answer_handler(mock_answer_vote)
+            mock_main_bot.send_message.assert_called_once()
+            call_args = mock_main_bot.send_message.call_args[0]
+            self.assertIn("Ответ в опросе", call_args[1])
+            self.assertIn("Да", call_args[1])
+            self.assertIn("Bob Voter", call_args[1])
+
+        history = _load_broadcast_history()
+        bc = next(b for b in history if b["id"] == bc_id)
+        self.assertEqual(bc["poll"]["votes"].get("444111"), [0])
+
+        # 2. Check _cq_view_broadcast displays aggregated stats
+        mock_cq = AsyncMock()
+        mock_cq.from_user.id = config.ADMIN_USER_ID
+        mock_cq.data = f"alert_view_bc_{bc_id}"
+        mock_cq.message.edit_text = AsyncMock()
+
+        await _cq_view_broadcast(mock_cq)
+        mock_cq.message.edit_text.assert_called_once()
+        text_shown = mock_cq.message.edit_text.call_args[0][0]
+        self.assertIn("Результаты опроса:", text_shown)
+        self.assertIn("Да: <b>1</b> (100.0%)", text_shown)
+        self.assertIn("Всего проголосовало: <b>1</b>", text_shown)
+
+        # 3. Client retracts vote
+        mock_main_bot.reset_mock()
+        mock_answer_retract = MagicMock(
+            poll_id="poll_id_999",
+            user=mock_user,
+            option_ids=[]
+        )
+
+        with patch.dict(sys.modules, {"bot": mock_main_module}):
+            await alert_poll_answer_handler(mock_answer_retract)
+            mock_main_bot.send_message.assert_called_once()
+            call_args = mock_main_bot.send_message.call_args[0]
+            self.assertIn("Отзыв голоса в опросе", call_args[1])
+
+        history = _load_broadcast_history()
+        bc = next(b for b in history if b["id"] == bc_id)
+        self.assertNotIn("444111", bc["poll"]["votes"])
+
+    def test_alert_panel_keyboard_localization(self):
+        """Test Alert Module control panel keyboards in ru and en."""
+        kb_ru = _get_alert_panel_keyboard("ru")
+        ru_texts = [btn.text for row in kb_ru.inline_keyboard for btn in row]
+        self.assertIn("📣 Рассылка", ru_texts)
+        self.assertIn("🔙 Назад в меню", ru_texts)
+
+        kb_en = _get_alert_panel_keyboard("en")
+        en_texts = [btn.text for row in kb_en.inline_keyboard for btn in row]
+        self.assertIn("📣 Broadcast", en_texts)
+        self.assertIn("🔙 Back to menu", en_texts)
+
+    async def test_client_bot_settings_language_toggle(self):
+        """Test subscriber language toggle in Alert Bot."""
+        fake_subscribers = {
+            777: {"name": "Test User", "mute_all": False, "mute_broadcasts": False, "muted_nodes": [], "lang": "ru"}
+        }
+        with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers), \
+             patch("core.nodes_db.get_all_nodes", AsyncMock(return_value={})):
+            kb = await _get_client_settings_keyboard(777)
+            texts = [btn.text for row in kb.inline_keyboard for btn in row]
+            self.assertIn("🌐 Язык: 🇷🇺 Русский", texts)
+
+        fake_subscribers_en = {
+            777: {"name": "Test User", "mute_all": False, "mute_broadcasts": False, "muted_nodes": [], "lang": "en"}
+        }
+        with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers_en), \
+             patch("core.nodes_db.get_all_nodes", AsyncMock(return_value={})):
+            kb_en = await _get_client_settings_keyboard(777)
+            texts_en = [btn.text for row in kb_en.inline_keyboard for btn in row]
+            self.assertIn("🌐 Language: 🇬🇧 English", texts_en)
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ from typing import Any
 import aiohttp
 import requests
 from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup
 
 try:
     from PIL import Image
@@ -821,10 +822,12 @@ async def initial_restart_check(bot: Bot):
                 content = f.read().strip()
             if ":" in content:
                 cid, mid = content.split(":", 1)
+                lang = get_user_lang(int(cid))
                 await bot.edit_message_text(
                     chat_id=int(cid),
                     message_id=int(mid),
-                    text=get_text("utils_bot_restarted", get_user_lang(int(cid))),
+                    text=f"✅ {get_text('utils_bot_restarted', lang)}",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[]),
                 )
         except Exception as e:
             logging.error(f"Restart check error: {e}")
@@ -838,9 +841,10 @@ async def initial_reboot_check(bot: Bot):
         try:
             with open(REBOOT_FLAG_FILE, "r") as f:
                 uid = int(f.read().strip())
+            lang = get_user_lang(uid)
             await bot.send_message(
                 chat_id=uid,
-                text=get_text("utils_server_rebooted", get_user_lang(uid)),
+                text=f"✅ {get_text('utils_server_rebooted', lang)}",
                 parse_mode="HTML",
             )
         except Exception as e:
