@@ -2454,6 +2454,15 @@ window.toggleTheme = function(event) {
     setThemeDirect(nextTheme, event || window.event);
 }
 
+function applyThemeDirect(resolvedTheme) {
+    localStorage.setItem("theme", resolvedTheme);
+    document.documentElement.classList.toggle('dark', resolvedTheme === 'dark' || resolvedTheme === 'amoled');
+    document.documentElement.classList.toggle('amoled', resolvedTheme === 'amoled');
+    applyThemeUI(resolvedTheme);
+    window.dispatchEvent(new Event("themeChanged"));
+    if (typeof playHaptic === 'function') playHaptic('press');
+}
+
 function setThemeDirect(theme, event) {
     const ev = event || window.event;
     if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
@@ -2462,21 +2471,12 @@ function setThemeDirect(theme, event) {
         ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
         : theme;
 
-    const applyTheme = () => {
-        localStorage.setItem("theme", resolvedTheme);
-        document.documentElement.classList.toggle('dark', resolvedTheme === 'dark' || resolvedTheme === 'amoled');
-        document.documentElement.classList.toggle('amoled', resolvedTheme === 'amoled');
-        applyThemeUI(resolvedTheme);
-        window.dispatchEvent(new Event("themeChanged"));
-        if (typeof playHaptic === 'function') playHaptic('press');
-    };
-
     if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        document.startViewTransition(() => {
-            applyTheme();
+        document.startViewTransition(function() {
+            applyThemeDirect(resolvedTheme);
         });
     } else {
-        applyTheme();
+        applyThemeDirect(resolvedTheme);
     }
 }
 window.setThemeDirect = setThemeDirect;
