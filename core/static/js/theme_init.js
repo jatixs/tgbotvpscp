@@ -29,8 +29,11 @@ window.tailwind.config = {
 
 (function() {
     try {
-        const theme = localStorage.getItem('theme') || 'system';
-        const isDark = theme === 'dark' || theme === 'amoled' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        let theme = localStorage.getItem('theme');
+        if (!theme || theme === 'system') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        const isDark = theme === 'dark' || theme === 'amoled';
         if (isDark) {
             document.documentElement.classList.add('dark');
         } else {

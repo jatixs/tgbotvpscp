@@ -67,7 +67,9 @@ let nodesFirstUpdateReceived = false;
 
 
 window.addEventListener('themeChanged', () => {
-    updateChartsColors();
+    requestAnimationFrame(() => {
+        updateChartsColors();
+    });
 });
 
 function initScrollAnimations() {
@@ -1041,7 +1043,7 @@ function updateChartsColors() {
             chart.options.scales.y.grid.color = gridColor;
             chart.options.scales.y.ticks.color = tickColor;
             if (chart.options.plugins.legend) chart.options.plugins.legend.labels.color = tickColor;
-            chart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
+            chart.update('none');
         }
     });
 }

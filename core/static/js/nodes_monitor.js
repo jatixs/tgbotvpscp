@@ -207,8 +207,13 @@ function initNodesMonitor() {
     connectNodesMonitorStream();
     
     // Setup theme
+    const curTheme = (typeof getResolvedTheme === 'function')
+        ? getResolvedTheme()
+        : ((!localStorage.getItem('theme') || localStorage.getItem('theme') === 'system')
+            ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+            : localStorage.getItem('theme'));
     if (typeof applyThemeUI === 'function') {
-        applyThemeUI(localStorage.getItem('theme') || 'system');
+        applyThemeUI(curTheme);
     } else if (typeof updateThemeIcons === 'function') {
         updateThemeIcons();
     }
@@ -1456,15 +1461,21 @@ if (typeof toggleTheme === 'undefined') {
 }
 
 function updateThemeIcons() {
-    const theme = localStorage.getItem('theme') || 'system';
+    const theme = (typeof getResolvedTheme === 'function')
+        ? getResolvedTheme()
+        : ((!localStorage.getItem('theme') || localStorage.getItem('theme') === 'system')
+            ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+            : localStorage.getItem('theme'));
+
     if (typeof applyThemeUI === 'function') {
         applyThemeUI(theme);
         return;
     }
-    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.getElementById('iconMoon')?.classList.toggle('hidden', !isDark || theme === 'system');
-    document.getElementById('iconSun')?.classList.toggle('hidden', isDark || theme === 'system');
-    document.getElementById('iconSystem')?.classList.toggle('hidden', theme !== 'system');
+    const isDark = theme === 'dark' || theme === 'amoled';
+    document.getElementById('iconMoon')?.classList.toggle('hidden', !isDark || theme === 'amoled');
+    document.getElementById('iconAmoled')?.classList.toggle('hidden', theme !== 'amoled');
+    document.getElementById('iconSun')?.classList.toggle('hidden', isDark);
+    document.getElementById('iconSystem')?.classList.add('hidden');
 }
 // Global CustomEvent delegation for nodes_monitor.js
 document.addEventListener('app:change:toggle-node-selection', e => {

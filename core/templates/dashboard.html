@@ -144,14 +144,9 @@
                     </div>
                 </div>
                 <!-- Desktop Theme Toggle -->
-                <button onclick="toggleTheme()"
+                <button onclick="toggleTheme(event)"
                     class="hide-on-mobile flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400"
                     id="themeBtn">
-                    <svg id="iconSystem" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none"
-                        viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
                     <svg id="iconSun" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none"
                         viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -191,9 +186,6 @@
                             <div class="w-full px-4 py-2 text-sm flex items-center justify-between text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-white/5">
                                 <span class="font-medium">{{ web_theme_label|default("Тема") }}</span>
                                 <div class="flex items-center gap-1 bg-gray-200/50 dark:bg-black/30 p-1 rounded-xl text-sm shrink-0" id="mobileThemeSegment">
-                                    <button onclick="setThemeDirect('system', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeSys">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                                    </button>
                                     <button onclick="setThemeDirect('light', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeLight">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                                     </button>
