@@ -48,6 +48,8 @@ async def fail2ban_handler(message: types.Message):
             stderr=asyncio.subprocess.PIPE,
         )
         out, stderr = await proc.communicate()
+        if proc.returncode not in (0, 1):
+            raise RuntimeError(f"Fail2Ban log read failed ({proc.returncode}): {stderr.decode('utf-8', 'replace').strip()}")
         lines = out.decode("utf-8", "ignore").split("\n")
         entries = []
         tz = get_server_timezone_label()

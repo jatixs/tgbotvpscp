@@ -4,11 +4,41 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/>
-    <img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/>
-    <img src="https://img.shields.io/badge/date-Oct%2014%202026-green?style=flat-square" alt="Date Oct 14 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/>
+    <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
+    <img src="https://img.shields.io/badge/date-Oct%2026%202026-green?style=flat-square" alt="Date Oct 26 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.27.0] - 2026-10-26
+
+### 🚀 Key Innovations
+* 🔐 **One-Click Telegram Sign-In (OIDC)** — Upgraded the web console with native Telegram Login widget support, enabling seamless one-click cryptographic authentication without manual password entry.
+* 🔔 **Cross-Platform Background Web Push** — Real-time infrastructure alerting now extends beyond the messenger: critical alerts regarding resource spikes, service downtimes, and unauthorized SSH sessions are delivered straight to your desktop and mobile OS (Android/iOS) even when the browser is closed.
+* 🌐 **Resilient Connection & Session State Management** — Re-architected the web client's networking layer: added graceful background reconnection when roaming across networks or unlocking mobile devices, granular connectivity status telemetry, and encrypted persistent session storage (`config/web_sessions.enc`) ensuring active logins survive server restarts and upgrades.
+* 🧩 **Modular Custom Extensions & Integrity Verification** — Established a robust foundation for platform customizability: user-defined bot modules and custom dashboard views now reside within an isolated `custom/` directory featuring automatic discovery and upgrade persistence. The system core is strictly safeguarded by a SHA-256 cryptographic verification engine.
+* 📢 **Client Alert Gateway & Two-Way Helpdesk** — The subscriber communication module (`client_alerts`) has evolved into a comprehensive customer engagement platform:
+  * **Bilingual Auto-Detection:** Automatically matches subscriber locale (`ru`/`en`) based on Telegram client preferences, complete with instant in-chat language switching.
+  * **Two-Way Helpdesk Ticket Flow:** Clients can message the gateway bot directly (protected by a sliding-window anti-flood filter scaling up to 20,000 states), while administrators reply with a single tap from the master bot via inline FSM workflows.
+  * **Interactive Polls & Real-Time Reaction Telemetry:** Native Telegram poll broadcasts with live response aggregation and subscriber reaction tracking recorded directly into broadcast metrics.
+  * **Broadcast History & Concurrent Recall:** Sent broadcasts are tracked in an interactive registry with engagement statistics, featuring instant mass deletion across all subscribers via concurrent async worker pools.
+  * **Granular Preference Management:** Subscribers can independently tailor notification filters per infrastructure node, toggle broadcast streams, or activate mute-all modes guarded by confirmation dialogs.
+
+### ✨ Performance & Interface Refinements
+* 🛡️ **Zero-Overhead Event-Driven Watchdog** — Redesigned failover monitoring: systemd environments leverage an ultra-responsive `OnFailure` hook while Docker deployments utilize real-time streaming events, dropping idle memory consumption to a strict 0 MB. In the event of an unexpected fault, Watchdog spins up in milliseconds, dispatches an exhaustive diagnostic traceback to Telegram, and immediately relinquishes resources.
+* 📊 **Persistent Traffic Accounting & Guaranteed Backups** — Network traffic telemetry now maintains unbroken continuity: metrics are automatically checkpointed upon service shutdown and instantly restored across restarts (systemd, Docker, or node reboots) with zero data loss. Scheduled auto-backups operate in a non-blocking background queue with robust storage lock prevention.
+* 🎨 **Seamless Theme Adaptation & Fluid Micro-Interactions** — Completely redesigned the visual aesthetics and responsiveness of theme switching: the dashboard now natively honors OS system preferences out of the box (automatically matching Light or Dark mode without unnecessary steps), the mobile selector features a premium frosted-glass sliding pill indicator, and desktop controls incorporate fluid, tactile micro-animations. Theme transitions across the entire interface now feel cinematic with soft crossfade blending and frame-perfect chart rendering.
+* 📳 **Refined Tactile Haptic Feedback** — Standardized tactile response across both WebUI and Telegram Mini App: control switches, sliders, and navigation buttons now provide delightful physical confirmation with customizable intensity settings.
+* 🖥️ **Instant Terminal & Streamlined VNC** — Cold-start latency for web console and VNC sessions has been reduced to near-instant levels, encrypted modern OpenSSH keys are fully recognized, and node network credentials can be copied with a single tap.
+* 📜 **Next-Gen Linux SSH Session Tracking** — Audit telemetry and Fail2Ban integration natively support `sshd-session` process topologies on modern distributions (Ubuntu 24.04 and Debian 12), coupled with standardized ISO timestamps and pre-filtered query parsing to reduce CPU load.
+* 📱 **Adaptive Layout & Guided Onboarding** — The dashboard is meticulously adapted for any screen width with streamlined metric timelines, modernized form controls, and an interactive CLI installation flow with pre-configurable `.env` locale defaults.
+* 🛡️ **Two-Step Infrastructure Guardrails in Telegram** — Destructive node commands (reboots, package upgrades, and daemon restarts) now enforce mandatory interactive confirmation dialogs with role-based permission verification.
+
+### 🔒 Platform Hardening & Security
+* **Perimeter Validation & Secure Telegram Avatars** — Strict input sanitization for network destinations and iPerf endpoints (`network_validation.py`) eliminates SSRF and command injection attack vectors. Telegram profile avatars are routed and cached securely through an internal reverse-proxy gateway, preventing third-party tracking and CORS leakage.
+* **At-Rest Secret Encryption & UI Isolation** — Terminal session credentials are encrypted on disk via AES-128 (Fernet), dynamic DOM containers are strictly sanitized against XSS, cookies enforce strict isolation flags, and server logs are scrubbed of sensitive runtime tokens.
+* **Runtime Modernization** — Production environments standardized on Python 3.11 with core security dependency updates (`setuptools >= 84.1.0`, `Pillow 13.0.0`) addressing upstream CVE disclosures.
+
 
 ## [1.26.1] - 2026-10-14
 

@@ -5,6 +5,8 @@ import logging
 import os
 import platform
 import re
+import shutil
+import subprocess
 import time
 from typing import Any
 
@@ -20,6 +22,7 @@ from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import escape_html
+from network_validation import is_valid_iperf_server, resolve_public_host
 
 BUTTON_KEY = "btn_speedtest"
 SERVER_LIST_URL = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
@@ -56,25 +59,20 @@ def get_speedtest_mode() -> str:
                 if mode in ('OOKLA', 'RU'):
                     _SPEEDTEST_MODE_CACHE = 'OOKLA' if mode == 'OOKLA' else 'IPERF3'
                     return _SPEEDTEST_MODE_CACHE
-        except Exception:
-            pass
+        except (OSError, UnicodeError) as exc:
+            logging.debug("Unable to read speedtest mode file: %s", exc)
     
     try:
-        import subprocess
         result = subprocess.run(['speedtest', '--version'], capture_output=True, timeout=5)
         if result.returncode == 0 and b'Speedtest by Ookla' in result.stdout:
             _SPEEDTEST_MODE_CACHE = 'OOKLA'
             return _SPEEDTEST_MODE_CACHE
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError) as exc:
+        logging.debug("Ookla speedtest is unavailable: %s", exc)
     
-    try:
-        import shutil
-        if shutil.which('iperf3'):
-            _SPEEDTEST_MODE_CACHE = 'IPERF3'
-            return _SPEEDTEST_MODE_CACHE
-    except Exception:
-        pass
+    if shutil.which('iperf3'):
+        _SPEEDTEST_MODE_CACHE = 'IPERF3'
+        return _SPEEDTEST_MODE_CACHE
     
     _SPEEDTEST_MODE_CACHE = 'AUTO'
     return _SPEEDTEST_MODE_CACHE
@@ -149,11 +147,15 @@ async def speedtest_progress_updater(
             )
         except TelegramRetryAfter as e:
             await asyncio.sleep(e.retry_after)
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.debug("Unable to update speedtest progress: %s", exc)
 
 
 async def get_ping_async(host: str) -> float | None:
+    host = await asyncio.to_thread(resolve_public_host, host)
+    if host is None:
+        logging.debug("Ignoring speedtest host without a public address")
+        return None
     os_type = platform.system().lower()
     
     if os_type == "windows":
@@ -182,11 +184,12 @@ async def get_ping_async(host: str) -> float | None:
     try:
         t1 = time.time()
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://{host}", timeout=aiohttp.ClientTimeout(total=3), allow_redirects=False) as resp:
+            url_host = f"[{host}]" if ":" in host else host
+            async with session.get(f"https://{url_host}", timeout=aiohttp.ClientTimeout(total=3), allow_redirects=False) as resp:
                 if resp.status in (200, 301, 302, 403, 204):
                     return (time.time() - t1) * 1000
-    except Exception:
-        pass
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        logging.debug("HTTP ping fallback failed for %s: %s", host, exc)
     
     return None
 
@@ -298,7 +301,8 @@ async def fetch_servers_async(vps_country_code: str | None) -> list[dict[str, An
                         continue
                     try:
                         port = int(str(port_str).split("-")[0].strip())
-                    except Exception:
+                    except ValueError as exc:
+                        logging.debug("Ignoring speedtest server with invalid port %r: %s", port_str, exc)
                         continue
                     servers_list.append(
                         {
@@ -369,8 +373,12 @@ def _handle_iperf_error_output(
 async def run_iperf_test_async(
     bot: Bot, chat_id: int, message_id: int, server: dict, ping: float, lang: str
 ) -> str:
-    host = server["host"]
-    port = str(server["port"])
+    if not is_valid_iperf_server({"IP/HOST": server.get("host"), "PORT": server.get("port")}):
+        return "Invalid speedtest server address or port"
+    host = await asyncio.to_thread(resolve_public_host, server["host"])
+    if host is None:
+        return "Speedtest server must resolve to a public address"
+    port = str(int(server["port"]))
     logging.info(f"Starting iperf3 test on {host}:{port}...")
     await edit_status_safe(
         bot,
@@ -491,7 +499,6 @@ async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str
                 ping_latency = data.get("ping", {}).get("latency", 0)
                 server_name = data.get("server", {}).get("name", "N/A")
                 server_location = data.get("server", {}).get("location", "N/A")
-                server_country = data.get("server", {}).get("country", "")
                 result_url = data.get("result", {}).get("url", "")
                 
                 return _(

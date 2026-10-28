@@ -1,0 +1,400 @@
+import ast
+import asyncio
+import importlib.util
+import json
+import re
+import sys
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_functions(filename, names, **dependencies):
+    """Load backend functions without requiring the optional Telegram runtime."""
+    imports = {
+        name: MagicMock()
+        for name in (
+            "aiohttp", "yaml", "psutil", "aiogram", "aiogram.types",
+            "aiogram.exceptions", "core", "core.auth", "core.config",
+            "core.i18n", "core.keyboards", "core.messaging", "core.rbac",
+            "core.shared_state", "core.utils",
+        )
+    }
+    imports["core"].config.CONFIG_DIR = "config"
+    spec = importlib.util.spec_from_file_location(
+        f"codacy_modules_{Path(filename).stem}", ROOT / "modules" / filename,
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load module {filename}")
+    subject = importlib.util.module_from_spec(spec)
+    with patch.dict(sys.modules, imports):
+        spec.loader.exec_module(subject)
+    for name, value in dependencies.items():
+        setattr(subject, name, value)
+    for name in names:
+        if not callable(getattr(subject, name)):
+            raise TypeError(f"Expected a function: {name}")
+    return subject
+
+
+class ModuleFallbackTests(unittest.TestCase):
+    def test_speedtest_loads_without_node_installation(self):
+        with patch.dict(sys.modules, {"node": None, "node.input_validation": None}):
+            subject = load_functions(
+                "speedtest.py", ["speedtest_handler", "get_speedtest_mode"],
+            )
+        self.assertEqual(subject.resolve_public_host("8.8.8.8"), "8.8.8.8")
+        self.assertIsNone(subject.resolve_public_host("127.0.0.1"))
+
+    def test_changed_modules_have_no_silent_broad_exception_handlers(self):
+        filenames = (
+            "backups.py", "client_alerts.py", "nodes.py", "notifications.py",
+            "optimize.py", "selftest.py", "services.py", "speedtest.py", "traffic.py",
+        )
+        for filename in filenames:
+            source = ast.parse((ROOT / "modules" / filename).read_text(encoding="utf-8"))
+            for node in ast.walk(source):
+                if not isinstance(node, ast.ExceptHandler):
+                    continue
+                if not isinstance(node.type, ast.Name) or node.type.id != "Exception":
+                    continue
+                with self.subTest(filename=filename, line=node.lineno):
+                    self.assertFalse(
+                        len(node.body) == 1 and isinstance(node.body[0], (ast.Pass, ast.Continue)),
+                    )
+
+    def test_speedtest_detection_survives_unreadable_config_and_missing_binary(self):
+        for installed, expected in (("iperf3", "IPERF3"), (None, "AUTO")):
+            with self.subTest(installed=installed):
+                runner = Mock(side_effect=FileNotFoundError("speedtest"))
+                subject = load_functions(
+                    "speedtest.py", ["get_speedtest_mode"],
+                    _SPEEDTEST_MODE_CACHE=None,
+                    SPEEDTEST_MODE_FILE="mode",
+                    os=SimpleNamespace(path=SimpleNamespace(exists=lambda path: True)),
+                    shutil=SimpleNamespace(which=lambda name: installed),
+                )
+                with (
+                    patch.object(subject.subprocess, "run", runner),
+                    patch("builtins.open", side_effect=PermissionError("mode")),
+                    self.assertLogs(level="DEBUG"),
+                ):
+                    self.assertEqual(subject.get_speedtest_mode(), expected)
+                runner.assert_called_once_with(
+                    ["speedtest", "--version"], capture_output=True, timeout=5,
+                )
+
+    def test_speedtest_config_keeps_priority_over_binary_detection(self):
+        runner = Mock()
+        subject = load_functions(
+            "speedtest.py", ["get_speedtest_mode"],
+            _SPEEDTEST_MODE_CACHE=None,
+            SPEEDTEST_MODE_FILE="mode",
+            os=SimpleNamespace(path=SimpleNamespace(exists=lambda path: True)),
+        )
+        with (
+            patch.object(subject.subprocess, "run", runner),
+            patch("builtins.open", mock_open(read_data="ru\n")),
+        ):
+            self.assertEqual(subject.get_speedtest_mode(), "IPERF3")
+        runner.assert_not_called()
+
+    def test_services_pass_validated_names_as_single_arguments(self):
+        runner = Mock(return_value=SimpleNamespace(
+            returncode=0, stdout="LoadState=loaded\nActiveState=active\nSubState=running\n",
+            stderr="",
+        ))
+        subject = load_functions(
+            "services.py", ["_validate_name", "get_systemd_status"],
+            _VALID_NAME_RE=re.compile(r"^[a-zA-Z0-9._@/:-]+$"),
+        )
+        with patch.object(subject.subprocess, "run", runner):
+            self.assertEqual(subject.get_systemd_status("nginx.service"), "running")
+            self.assertEqual(runner.call_args.args[0][-2:], ["--", "nginx.service"])
+            self.assertNotIn("shell", runner.call_args.kwargs)
+            runner.reset_mock()
+            with self.assertLogs(level="ERROR"):
+                self.assertEqual(subject.get_systemd_status("nginx; touch marker"), "error")
+            runner.assert_not_called()
+
+
+class ModuleAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_journal_session_login_produces_alert(self):
+        class LoginStream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if getattr(self, "sent", False):
+                    raise StopAsyncIteration
+                self.sent = True
+                return b"Accepted publickey for root from 192.0.2.1 port 1234 ssh2\n"
+
+        process = SimpleNamespace(
+            stdout=LoginStream(), stderr=SimpleNamespace(read=AsyncMock(return_value=b"")),
+            wait=AsyncMock(return_value=0),
+        )
+        alert = AsyncMock()
+        subject = load_functions(
+            "notifications.py", ["reliable_journal_monitor", "parse_ssh_log_line"],
+            get_ip_data=AsyncMock(return_value=("", None)),
+            get_server_timezone_label=lambda: "UTC",
+            escape_html=lambda value: value,
+            RECENT_NOTIFIED_LOGINS={},
+            send_alert=alert,
+            _=lambda key, lang, **params: f"{key}: {params}",
+        )
+        with (
+            patch.object(subject.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)),
+            patch.object(subject.asyncio, "sleep", AsyncMock(side_effect=asyncio.CancelledError)),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                await subject.reliable_journal_monitor(None, "logins", subject.parse_ssh_log_line)
+        alert.assert_awaited_once()
+        self.assertEqual(alert.call_args.args[2], "logins")
+        self.assertIn("alert_ssh_login_detected", alert.call_args.args[1]("en"))
+
+    async def test_ssh_report_reads_session_events_and_reports_read_errors(self):
+        for returncode in (0, 2):
+            with self.subTest(returncode=returncode):
+                process = SimpleNamespace(
+                    returncode=returncode,
+                    communicate=AsyncMock(return_value=(
+                        b"2026-10-25T02:00:00+03:00 host sshd-session[123]: Accepted publickey for root from 192.0.2.1 port 1234 ssh2\n",
+                        b"Permission denied" if returncode else b"",
+                    )),
+                )
+                spawn = AsyncMock(return_value=process)
+                message = SimpleNamespace(
+                    from_user=SimpleNamespace(id=1), chat=SimpleNamespace(id=2),
+                    answer=AsyncMock(return_value=SimpleNamespace(message_id=3)),
+                    bot=SimpleNamespace(edit_message_text=AsyncMock()),
+                )
+                subject = load_functions(
+                    "sshlog.py", ["sshlog_handler"],
+                    get_user_lang=lambda uid: "en", is_allowed=lambda *args: True,
+                    delete_previous_message=AsyncMock(), LAST_MESSAGE_IDS={},
+                    get_host_path=lambda path: path,
+                    os=SimpleNamespace(path=SimpleNamespace(
+                        exists=lambda path: path.endswith("auth.log"), basename=lambda path: "auth.log",
+                    )),
+                    get_country_flag=AsyncMock(return_value=""),
+                    get_server_timezone_label=lambda: "UTC",
+                    escape_html=lambda value: value,
+                    _=lambda key, lang, **params: f"{key}: {params}",
+                )
+                with patch.object(subject.asyncio, "create_subprocess_exec", spawn):
+                    if returncode:
+                        with self.assertLogs(level="ERROR"):
+                            await subject.sshlog_handler(message)
+                    else:
+                        await subject.sshlog_handler(message)
+                text = message.bot.edit_message_text.call_args.args[0]
+                self.assertIn("sshlog_read_error" if returncode else "sshlog_entry_success", text)
+                self.assertEqual(spawn.call_args.args[0], "grep")
+
+    async def test_fail2ban_read_error_is_not_reported_as_no_bans(self):
+        process = SimpleNamespace(
+            returncode=2,
+            communicate=AsyncMock(return_value=(b"", b"Permission denied")),
+        )
+        message = SimpleNamespace(
+            from_user=SimpleNamespace(id=1), chat=SimpleNamespace(id=2),
+            answer=AsyncMock(), bot=object(),
+        )
+        subject = load_functions(
+            "fail2ban.py", ["fail2ban_handler"],
+            get_user_lang=lambda uid: "en", is_allowed=lambda *args: True,
+            delete_previous_message=AsyncMock(),
+            get_host_path=lambda path: path,
+            os=SimpleNamespace(path=SimpleNamespace(exists=lambda path: True)),
+            _=lambda key, lang, **params: f"{key}: {params}",
+        )
+        with (
+            patch.object(subject.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)),
+            self.assertLogs(level="ERROR"),
+        ):
+            await subject.fail2ban_handler(message)
+        self.assertIn("f2b_read_error_generic", message.answer.call_args.args[0])
+
+    async def test_agent_handler_starts_selected_speedtest_without_node_installation(self):
+        for mode in ("OOKLA", "IPERF3"):
+            with self.subTest(mode=mode), patch.dict(
+                sys.modules, {"node": None, "node.input_validation": None},
+            ):
+                ookla = AsyncMock(return_value="Speedtest results")
+                iperf = AsyncMock()
+                message = SimpleNamespace(
+                    from_user=SimpleNamespace(id=1),
+                    chat=SimpleNamespace(id=2),
+                    bot=SimpleNamespace(edit_message_text=AsyncMock()),
+                    answer=AsyncMock(return_value=SimpleNamespace(message_id=3)),
+                )
+                subject = load_functions(
+                    "speedtest.py", ["speedtest_handler"],
+                    get_user_lang=lambda user_id: "en",
+                    is_allowed=lambda *args: True,
+                    delete_previous_message=AsyncMock(),
+                    get_speedtest_mode=lambda: mode,
+                    run_ookla_speedtest=ookla,
+                    speedtest_iperf3_handler=iperf,
+                    LAST_MESSAGE_IDS={},
+                    _=lambda key, lang: key,
+                )
+                await subject.speedtest_handler(message)
+                if mode == "OOKLA":
+                    ookla.assert_awaited_once_with(message.bot, 2, 3, "en")
+                    iperf.assert_not_awaited()
+                    message.bot.edit_message_text.assert_awaited_once_with(
+                        "Speedtest results", chat_id=2, message_id=3,
+                        parse_mode="HTML", disable_web_page_preview=True,
+                    )
+                else:
+                    iperf.assert_awaited_once_with(message)
+                    ookla.assert_not_awaited()
+
+    async def test_ping_uses_only_pinned_public_targets(self):
+        for resolved in (None, "8.8.8.8"):
+            with self.subTest(resolved=resolved):
+                proc = SimpleNamespace(communicate=AsyncMock(return_value=(
+                    b"rtt min/avg/max/mdev = 1.0/2.0/3.0/0.0 ms", b"",
+                )))
+                spawn = AsyncMock(return_value=proc)
+                resolver = Mock(return_value=resolved)
+                subject = load_functions(
+                    "speedtest.py", ["get_ping_async"],
+                    asyncio=SimpleNamespace(
+                        create_subprocess_exec=spawn, to_thread=asyncio.to_thread,
+                        subprocess=asyncio.subprocess,
+                    ),
+                    resolve_public_host=resolver,
+                    platform=SimpleNamespace(system=lambda: "Linux"),
+                    PING_COUNT=3, PING_TIMEOUT_SEC=2, re=re,
+                )
+                result = await subject.get_ping_async("-malicious-host")
+                resolver.assert_called_once_with("-malicious-host")
+                if resolved is None:
+                    self.assertIsNone(result)
+                    spawn.assert_not_awaited()
+                else:
+                    self.assertEqual(result, 2.0)
+                    self.assertEqual(spawn.call_args.args[-1], "8.8.8.8")
+
+    async def test_iperf_rejects_invalid_or_private_feed_targets(self):
+        for valid, resolved in ((False, None), (True, None)):
+            with self.subTest(valid=valid):
+                spawn = AsyncMock()
+                subject = load_functions(
+                    "speedtest.py", ["run_iperf_test_async"],
+                    Bot=object,
+                    asyncio=SimpleNamespace(
+                        create_subprocess_exec=spawn, to_thread=asyncio.to_thread,
+                    ),
+                    is_valid_iperf_server=lambda server: valid,
+                    resolve_public_host=lambda host: resolved,
+                )
+                result = await subject.run_iperf_test_async(
+                    None, 1, 1, {"host": "127.0.0.1", "port": 5201}, 1.0, "en",
+                )
+                self.assertIn("server", result)
+                spawn.assert_not_awaited()
+
+    async def test_ssh_log_path_is_a_single_argument_and_invalid_offset_is_logged(self):
+        log_path = "/host/log path/auth.log; touch marker"
+        proc = SimpleNamespace(
+            communicate=AsyncMock(return_value=(b"Accepted password for root from 192.0.2.1\n", b"")),
+        )
+        spawn = AsyncMock(return_value=proc)
+        subject = load_functions(
+            "selftest.py", ["get_last_ssh_login"],
+            asyncio=SimpleNamespace(
+                create_subprocess_exec=spawn, subprocess=asyncio.subprocess,
+            ),
+            os=SimpleNamespace(
+                path=SimpleNamespace(exists=lambda path: True, basename=lambda path: "auth.log"),
+            ),
+            get_host_path=lambda path: log_path,
+            get_ip_data_full=AsyncMock(return_value=("flag", "invalid")),
+            escape_html=lambda value: value,
+            get_server_timezone_label=lambda: "UTC",
+            datetime=datetime, timedelta=timedelta, timezone=timezone, re=re,
+            _=lambda key, lang, **values: values,
+        )
+        with self.assertLogs(level="DEBUG"):
+            result = await subject.get_last_ssh_login("en")
+        self.assertEqual(result["user"], "root")
+        self.assertEqual(spawn.call_args.args, ("tail", "-n", "200", "--", log_path))
+
+    async def test_notification_monitors_use_argv_without_a_shell(self):
+        class EmptyStream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+        for function_name, args, expected in (
+            (
+                "reliable_journal_monitor",
+                (),
+                ("journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd", "+", "_COMM=sshd-session"),
+            ),
+            (
+                "reliable_tail_log_monitor",
+                ("/host/log path/auth.log; touch marker",),
+                ("tail", "-n", "0", "-F", "--", "/host/log path/auth.log; touch marker"),
+            ),
+        ):
+            with self.subTest(monitor=function_name):
+                spawn = AsyncMock(return_value=SimpleNamespace(
+                    stdout=EmptyStream(), stderr=SimpleNamespace(read=AsyncMock(return_value=b"")),
+                    wait=AsyncMock(return_value=0),
+                ))
+                subject = load_functions(
+                    "notifications.py", [function_name],
+                    asyncio=SimpleNamespace(
+                        create_subprocess_exec=spawn,
+                        subprocess=asyncio.subprocess,
+                        sleep=AsyncMock(side_effect=asyncio.CancelledError),
+                        CancelledError=asyncio.CancelledError,
+                    ),
+                    os=SimpleNamespace(path=SimpleNamespace(exists=lambda path: True)),
+                )
+                with self.assertRaises(asyncio.CancelledError):
+                    await getattr(subject, function_name)(None, *args, "logins", AsyncMock())
+                self.assertEqual(spawn.call_args.args, expected)
+                self.assertTrue(spawn.call_args.kwargs["start_new_session"])
+
+    async def test_invalid_cached_speedtest_port_does_not_hide_valid_servers(self):
+        response = SimpleNamespace(status=500)
+        request = AsyncMock()
+        request.__aenter__.return_value = response
+        session = SimpleNamespace(get=Mock(return_value=request))
+        session_context = AsyncMock()
+        session_context.__aenter__.return_value = session
+        subject = load_functions(
+            "speedtest.py", ["fetch_servers_async"],
+            Any=object,
+            aiohttp=SimpleNamespace(ClientSession=lambda: session_context),
+            os=SimpleNamespace(path=SimpleNamespace(exists=lambda path: True)),
+            json=json, SERVER_LIST_URL="https://example.test",
+            LOCAL_CACHE_FILE="cache.json",
+        )
+        servers = [
+            {"IP/HOST": "invalid.example", "PORT": "not-a-port"},
+            {"IP/HOST": "valid.example", "PORT": "5201-5209"},
+        ]
+        with patch("builtins.open", mock_open(read_data=json.dumps(servers))), self.assertLogs(level="DEBUG"):
+            result = await subject.fetch_servers_async(None)
+        self.assertEqual([(server["host"], server["port"]) for server in result], [
+            ("valid.example", 5201),
+        ])
+
+
+if __name__ == "__main__":
+    unittest.main()

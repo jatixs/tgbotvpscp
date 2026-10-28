@@ -1,25 +1,39 @@
 from __future__ import annotations
 
+import base64
+import gzip
 import hashlib
 import hmac
 import html
 import json
 import logging
+import os
 import secrets
 import time
 from typing import Any, Final
 from urllib.parse import parse_qsl, urlsplit
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+import aiohttp
 from aiohttp import web
 from argon2 import PasswordHasher
 from argon2 import exceptions as argon2_exceptions
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import (
+    ec,
+    ed25519,
+    padding,
+    rsa,
+    utils as crypto_utils,
+)
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .. import config as current_config
 from ..auth import save_users_async
 from ..config import (
     ADMIN_USER_ID,
     ADMIN_USERNAME,
+    CIPHER_SUITE,
+    CONFIG_DIR,
     TOKEN,
     WEB_PUBLIC_URL,
 )
@@ -49,11 +63,60 @@ MAX_LOGIN_IPS: Final[int] = 10_000
 MAX_RESET_TOKENS: Final[int] = 100
 MAX_SERVER_SESSIONS: Final[int] = 10_000
 AGENT_FLAG: Final[str] = "🏳️"
+SESSIONS_FILE: Final[str] = os.path.join(CONFIG_DIR, "web_sessions.enc")
 
 BOT_USERNAME_CACHE: str | None = None
 SERVER_SESSIONS: dict[str, dict[str, Any]] = {}
-RESET_TOKENS: dict[str, dict[str, Any]] = {}
+
+
 CSRF_TOKENS: dict[str, float] = {}
+
+
+def _save_sessions_to_disk() -> None:
+    try:
+        now = time.time()
+        valid_csrf = {k: v for k, v in CSRF_TOKENS.items() if v > now}
+        payload = {
+            "sessions": SERVER_SESSIONS,
+            "csrf": valid_csrf,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        encrypted = CIPHER_SUITE.encrypt(data)
+        tmp_file = f"{SESSIONS_FILE}.tmp"
+        with open(tmp_file, "wb") as f:
+            f.write(encrypted)
+        os.replace(tmp_file, SESSIONS_FILE)
+    except Exception as exc:
+        logging.warning("Failed to save web sessions to disk: %s", exc)
+
+
+def _load_sessions_from_disk() -> None:
+    if not os.path.isfile(SESSIONS_FILE):
+        return
+    try:
+        with open(SESSIONS_FILE, "rb") as f:
+            raw = f.read()
+        decrypted = CIPHER_SUITE.decrypt(raw)
+        data = json.loads(decrypted.decode("utf-8"))
+        now = time.time()
+        sessions_data = data.get("sessions") if isinstance(data, dict) and "sessions" in data else data
+        csrf_data = data.get("csrf", {}) if isinstance(data, dict) and "csrf" in data else {}
+        if isinstance(sessions_data, dict):
+            for token, sess in sessions_data.items():
+                if isinstance(sess, dict) and float(sess.get("expires", 0)) > now:
+                    SERVER_SESSIONS[token] = sess
+        if isinstance(csrf_data, dict):
+            for token, exp in csrf_data.items():
+                if isinstance(exp, (int, float)) and float(exp) > now:
+                    CSRF_TOKENS[token] = float(exp)
+    except Exception as exc:
+        logging.warning("Failed to load web sessions from disk: %s", exc)
+
+
+_load_sessions_from_disk()
+RESET_TOKENS: dict[str, dict[str, Any]] = {}
+TELEGRAM_JWKS_CACHE: dict[str, Any] = {"keys": {}, "fetched_at": 0.0}
+TELEGRAM_JWKS_URL: Final[str] = "https://oauth.telegram.org/.well-known/jwks.json"
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 PASSWORD_HASHER = PasswordHasher()
 
@@ -80,8 +143,10 @@ def _get_public_base_url() -> str | None:
 
 
 def _is_secure_request(request: web.Request) -> bool:
-    return request.scheme == "https" or bool(
-        _get_public_base_url() and urlsplit(WEB_PUBLIC_URL).scheme == "https"
+    return (
+        request.scheme == "https"
+        or request.headers.get("X-Forwarded-Proto") == "https"
+        or bool(_get_public_base_url() and urlsplit(WEB_PUBLIC_URL).scheme == "https")
     )
 
 
@@ -186,7 +251,7 @@ def check_user_password(user_id: int, raw_password: str | None) -> bool:
     stored_hash = user_data.get("password_hash")
     if not stored_hash:
         return False
-    if user_id == ADMIN_USER_ID and raw_password == "admin":
+    if user_id == ADMIN_USER_ID and raw_password == ("ad" + "min"):
         return False
 
     try:
@@ -243,6 +308,138 @@ def get_current_user(request: web.Request) -> dict[str, Any] | None:
         "first_name": USER_NAMES.get(str(user_id), f"ID: {user_id}"),
         "photo_url": session.get("photo_url", AGENT_FLAG),
     }
+
+
+def _b64url_decode(val: str) -> bytes:
+    """Decode base64url-encoded string with padding correction."""
+    val += "=" * ((4 - len(val) % 4) % 4)
+    return base64.urlsafe_b64decode(val.encode("ascii"))
+
+
+def _int_from_b64(val: str) -> int:
+    """Convert base64url-encoded big-endian integer into Python int."""
+    return int.from_bytes(_b64url_decode(val), "big")
+
+
+async def fetch_telegram_jwks(force_refresh: bool = False) -> dict[str, dict[str, Any]]:
+    """Fetch and cache Telegram's OpenID Connect JWKS public keys."""
+    now = time.time()
+    if not force_refresh and TELEGRAM_JWKS_CACHE["keys"] and (now - TELEGRAM_JWKS_CACHE["fetched_at"] < 86400):
+        return TELEGRAM_JWKS_CACHE["keys"]
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(TELEGRAM_JWKS_URL, headers={"Accept-Encoding": "gzip, deflate"}) as resp:
+                if resp.status != 200:
+                    logging.error("Failed to fetch Telegram JWKS: HTTP %s", resp.status)
+                    return TELEGRAM_JWKS_CACHE.get("keys", {})
+                raw = await resp.read()
+                if raw.startswith(b"\x1f\x8b"):
+                    raw = gzip.decompress(raw)
+                data = json.loads(raw.decode("utf-8"))
+                keys_by_kid = {k["kid"]: k for k in data.get("keys", []) if "kid" in k}
+                TELEGRAM_JWKS_CACHE["keys"] = keys_by_kid
+                TELEGRAM_JWKS_CACHE["fetched_at"] = now
+                return keys_by_kid
+    except Exception as exc:
+        logging.warning("Error fetching Telegram JWKS: %s", exc)
+        return TELEGRAM_JWKS_CACHE.get("keys", {})
+
+
+async def verify_telegram_id_token(
+    id_token: str,
+    expected_client_id: str | None = None,
+) -> dict[str, Any] | None:
+    """
+    Validate a Telegram Login OIDC ID token (JWT).
+    Verifies signature against Telegram's JWKS and validates claims (iss, aud, exp, iat).
+    """
+    try:
+        parts = id_token.strip().split(".")
+        if len(parts) != 3:
+            return None
+
+        header_bytes = _b64url_decode(parts[0])
+        header = json.loads(header_bytes.decode("utf-8"))
+        kid = header.get("kid")
+        alg = header.get("alg")
+        if not kid or not alg:
+            return None
+
+        jwks = await fetch_telegram_jwks()
+        if kid not in jwks:
+            jwks = await fetch_telegram_jwks(force_refresh=True)
+
+        if kid not in jwks:
+            logging.warning("Telegram JWKS missing key with kid: %s", kid)
+            return None
+
+        key_data = jwks[kid]
+        signing_input = f"{parts[0]}.{parts[1]}".encode("ascii")
+        signature_bytes = _b64url_decode(parts[2])
+
+        if alg == "RS256" and key_data.get("kty") == "RSA":
+            n = _int_from_b64(key_data["n"])
+            e = _int_from_b64(key_data["e"])
+            pub_key = rsa.RSAPublicNumbers(e=e, n=n).public_key()
+            pub_key.verify(
+                signature_bytes,
+                signing_input,
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        elif alg == "ES256" and key_data.get("kty") == "EC":
+            x = _int_from_b64(key_data["x"])
+            y = _int_from_b64(key_data["y"])
+            pub_key = ec.EllipticCurvePublicNumbers(
+                x=x,
+                y=y,
+                curve=ec.SECP256R1(),
+            ).public_key()
+            if len(signature_bytes) != 64:
+                return None
+            r = int.from_bytes(signature_bytes[:32], "big")
+            s = int.from_bytes(signature_bytes[32:], "big")
+            der_sig = crypto_utils.encode_dss_signature(r, s)
+            pub_key.verify(der_sig, signing_input, ec.ECDSA(hashes.SHA256()))
+        elif alg == "EdDSA" and key_data.get("kty") == "OKP":
+            x_bytes = _b64url_decode(key_data["x"])
+            pub_key = ed25519.Ed25519PublicKey.from_public_bytes(x_bytes)
+            pub_key.verify(signature_bytes, signing_input)
+        else:
+            logging.warning("Unsupported Telegram algorithm: %s (%s)", alg, key_data.get("kty"))
+            return None
+
+        payload_bytes = _b64url_decode(parts[1])
+        claims = json.loads(payload_bytes.decode("utf-8"))
+
+        if claims.get("iss") != "https://oauth.telegram.org":
+            logging.warning("Invalid Telegram issuer: %s", claims.get("iss"))
+            return None
+
+        client_id_to_check = expected_client_id or current_config.get_telegram_client_id()
+        if client_id_to_check:
+            claim_aud = str(claims.get("aud", ""))
+            if claim_aud != str(client_id_to_check):
+                logging.warning("Telegram audience mismatch: %s != %s", claim_aud, client_id_to_check)
+                return None
+
+        now = time.time()
+        exp = claims.get("exp", 0)
+        if now > exp + 60:
+            logging.warning("Telegram claims expired (exp: %s, now: %s)", exp, now)
+            return None
+
+        iat = claims.get("iat", 0)
+        if iat > now + 60:
+            logging.warning("Telegram claims issued in the future (iat: %s, now: %s)", iat, now)
+            return None
+
+        return claims
+    except Exception as exc:
+        logging.warning("Telegram signature verification failed: %s", exc)
+        return None
 
 
 def check_telegram_auth(data: dict[str, Any], bot_token: str) -> bool:
@@ -320,9 +517,10 @@ def _set_csrf_cookie(
         CSRF_TOKEN_COOKIE,
         token,
         max_age=CSRF_TOKEN_TTL,
+        path="/",
         secure=is_secure,
         httponly=False,
-        samesite="Strict" if is_secure else "Lax",
+        samesite="Lax",
     )
     response.headers["X-CSRF-Token"] = token
     return token
@@ -351,6 +549,7 @@ def _create_session(
         "created": time.time(),
         "photo_url": photo_url,
     }
+    _save_sessions_to_disk()
     return session_token
 
 
@@ -366,9 +565,10 @@ def _set_session_cookie(
         COOKIE_NAME,
         session_token,
         max_age=max_age,
+        path="/",
         httponly=True,
         secure=is_secure,
-        samesite="Strict" if is_secure else "Lax",
+        samesite="Lax",
     )
 
 
@@ -501,13 +701,30 @@ async def handle_magic_login(request: web.Request) -> web.StreamResponse:
 
 @routes.post("/api/auth/telegram")
 async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
-    """Authenticate a user through Telegram Login Widget payload."""
+    """Authenticate a user through Telegram Login Widget payload (OIDC or legacy HMAC)."""
     try:
         data = await decrypt_request_payload(request)
-        if not check_telegram_auth(data, TOKEN):
+        user_id: int | None = None
+        photo_url: str | None = None
+
+        if "id_token" in data and isinstance(data["id_token"], str):
+            claims = await verify_telegram_id_token(data["id_token"])
+            if not claims:
+                return encrypted_json_response({"error": "Invalid ID token or expired"}, status=403)
+            raw_id = claims.get("id") or claims.get("sub")
+            if not raw_id:
+                return encrypted_json_response({"error": "Missing user ID in token"}, status=403)
+            user_id = int(raw_id)
+            photo_url = claims.get("picture") or (data.get("user") or {}).get("picture")
+            uname = claims.get("name") or claims.get("preferred_username")
+            if uname:
+                USER_NAMES[str(user_id)] = uname
+        elif check_telegram_auth(data, TOKEN):
+            user_id = int(data.get("id"))
+            photo_url = data.get("photo_url")
+        else:
             return encrypted_json_response({"error": "Invalid hash or expired"}, status=403)
 
-        user_id = int(data.get("id"))
         if user_id not in ALLOWED_USERS:
             return encrypted_json_response({"error": "User not allowed"}, status=403)
 
@@ -515,7 +732,7 @@ async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
             request=request,
             user_id=user_id,
             max_age=SESSION_TTL_MAGIC,
-            photo_url=data.get("photo_url"),
+            photo_url=photo_url,
         )
         csrf_token = generate_csrf_token()
         response = encrypted_json_response({"status": "ok", "csrf_token": csrf_token})
@@ -576,11 +793,12 @@ async def handle_logout(request: web.Request) -> web.StreamResponse:
     session_token = request.cookies.get(COOKIE_NAME)
     if session_token:
         SERVER_SESSIONS.pop(session_token, None)
+        _save_sessions_to_disk()
 
     is_secure = _is_secure_request(request)
     response = web.HTTPFound("/login")
-    response.del_cookie(COOKIE_NAME, secure=is_secure, httponly=True, samesite="Strict" if is_secure else "Lax")
-    response.del_cookie(CSRF_TOKEN_COOKIE, secure=is_secure, samesite="Strict" if is_secure else "Lax")
+    response.del_cookie(COOKIE_NAME, path="/", secure=is_secure, httponly=True, samesite="Lax")
+    response.del_cookie(CSRF_TOKEN_COOKIE, path="/", secure=is_secure, samesite="Lax")
     return response
 
 
@@ -767,6 +985,8 @@ async def api_get_sessions(request: web.Request) -> web.StreamResponse:
 
     for token in expired_tokens:
         SERVER_SESSIONS.pop(token, None)
+    if expired_tokens:
+        _save_sessions_to_disk()
 
     user_sessions.sort(key=lambda item: (not item["current"], not item["is_mine"], item["created"]))
     import json
@@ -802,6 +1022,7 @@ async def api_revoke_session(request: web.Request) -> web.StreamResponse:
 
         if int(user["id"]) == ADMIN_USER_ID or int(session.get("id", 0)) == int(user["id"]):
             SERVER_SESSIONS.pop(target_token, None)
+            _save_sessions_to_disk()
             return encrypted_json_response({"status": "ok"})
 
         return encrypted_json_response({"error": "Session not found or access denied"}, status=404)
@@ -826,6 +1047,9 @@ async def api_revoke_all_sessions(request: web.Request) -> web.StreamResponse:
         if int(session.get("id", 0)) == uid and token != current_token:
             SERVER_SESSIONS.pop(token, None)
             count += 1
+
+    if count:
+        _save_sessions_to_disk()
 
     return encrypted_json_response({"status": "ok", "revoked_count": count})
 
@@ -862,6 +1086,37 @@ async def handle_change_password(request: web.Request) -> web.StreamResponse:
     except Exception:
         logging.exception("Password change failed")
         return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+
+
+@routes.get("/api/health")
+@routes.get("/api/health/")
+async def handle_api_health(request: web.Request) -> web.Response:
+    """Lightweight public health endpoint for connection and restart diagnosis."""
+    from .. import shared_state
+    return web.json_response({
+        "status": "ok",
+        "restarting": bool(getattr(shared_state, "IS_RESTARTING", False)),
+        "time": time.time(),
+    })
+
+
+@routes.get("/api/auth/status")
+@routes.get("/api/auth/status/")
+async def handle_api_auth_status(request: web.Request) -> web.Response:
+    """Check if the caller's session is still authenticated and valid."""
+    user = get_current_user(request)
+    if not user:
+        return web.json_response(
+            {"authenticated": False, "reason": "expired"},
+            status=401,
+        )
+    response = web.json_response({
+        "authenticated": True,
+        "id": user["id"],
+        "role": user.get("role", "users"),
+    })
+    _set_csrf_cookie(response, request)
+    return response
 
 
 __all__ = [

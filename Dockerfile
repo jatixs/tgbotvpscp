@@ -1,5 +1,5 @@
 # -- Stage 1: Builder --
-FROM python:3.10-slim-bookworm AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -13,11 +13,11 @@ RUN apt-get update \
 WORKDIR /build
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir --upgrade pip 'setuptools>=83.0.0' wheel && \
+RUN pip install --no-cache-dir --upgrade pip 'setuptools>=84.1.0' wheel && \
     pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
 
 # -- Stage 2: Final --
-FROM python:3.10-slim-bookworm
+FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 

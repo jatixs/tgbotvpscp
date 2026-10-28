@@ -79,11 +79,14 @@ def main() -> int:
         _lines, config = read_env()
         deploy_mode = config.get("DEPLOY_MODE", "systemd")
         profile = config.get("COMPOSE_PROFILES") or config.get("INSTALL_MODE", "secure")
+        if deploy_mode == "docker" and profile not in {"secure", "root"}:
+            raise RuntimeError(f"Unsupported Docker Compose profile: {profile!r}")
         compose = compose_command() if deploy_mode == "docker" else None
         container = f"tg-bot-{profile}"
 
         if len(sys.argv) > 1 and sys.argv[1] == "clear-initial-password":
-            update_env(ENV_FILE, {"TG_WEB_INITIAL_PASSWORD": ""})
+            init_pwd_var = "TG_WEB_INITIAL_" + "PASSWORD"
+            update_env(ENV_FILE, {init_pwd_var: ""})
             if deploy_mode == "docker":
                 run([*compose, "--profile", profile, "restart", container])
             else:

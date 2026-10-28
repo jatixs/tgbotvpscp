@@ -1,12 +1,141 @@
 import glob
+import http.client
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
+
+
+def run_crash_alert_oneshot():
+    """
+    Ultra-lightweight oneshot handler for systemd OnFailure=tg-watchdog.service.
+    Uses only standard library (http.client, json, os, subprocess) for instant
+    startup and near-zero memory footprint (~7MB for ~1s, then exits).
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    env_file = os.path.join(base_dir, ".env")
+    env = {}
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        v = v.strip().strip("\"'")
+                        env[k.strip()] = v
+        except Exception:
+            pass
+
+    token = env.get("TG_BOT_TOKEN")
+    admin_id = env.get("TG_ADMIN_ID")
+    bot_name = env.get("TG_BOT_NAME", "VPS Bot")
+    lang = env.get("DEFAULT_LANGUAGE", "ru").lower()
+    raw_service = env.get("TG_BOT_SERVICE_NAME", "tg-bot.service").strip()
+    bot_service = raw_service if re.match(r"^[a-zA-Z0-9_\-\.]+$", raw_service) else "tg-bot.service"
+
+    if not token or not admin_id:
+        sys.exit(0)
+
+    config_dir = os.path.join(base_dir, "config")
+    restart_flag = os.path.join(config_dir, "restart_flag.txt")
+    reboot_flag = os.path.join(config_dir, "reboot_flag.txt")
+
+    # If restart or reboot flag exists, this was an intentional restart, NOT an unexpected crash!
+    if os.path.exists(restart_flag) or os.path.exists(reboot_flag):
+        sys.exit(0)
+
+    # Read error from logs/bot/bot.log or journalctl
+    error_tail = ""
+    bot_log_path = os.path.join(base_dir, "logs", "bot", "bot.log")
+    if os.path.exists(bot_log_path):
+        try:
+            with open(bot_log_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+                error_tail = "".join(lines[-20:]).strip()
+        except Exception:
+            pass
+
+    if not error_tail:
+        try:
+            # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
+            res = subprocess.run(  # nosec B603 B607
+                ["journalctl", "-u", bot_service, "-n", "15", "--no-pager"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if res.stdout:
+                error_tail = res.stdout.strip()
+        except Exception:
+            pass
+
+    safe_tail = (error_tail or "No log traceback available")[:1200]
+    safe_tail = (
+        safe_tail.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+    if lang == "ru":
+        text = (
+            f"🚨 <b>[{bot_name}] Аварийная остановка бота!</b>\n\n"
+            f"Служба <code>{bot_service}</code> неожиданно упала.\n"
+            f"<i>Systemd выполняет автоматический перезапуск службы...</i>\n\n"
+            f"📋 <b>Последние строки лога:</b>\n<pre>{safe_tail}</pre>"
+        )
+    else:
+        text = (
+            f"🚨 <b>[{bot_name}] Bot Service Crashed!</b>\n\n"
+            f"Service <code>{bot_service}</code> stopped unexpectedly.\n"
+            f"<i>Systemd is automatically restarting the service...</i>\n\n"
+            f"📋 <b>Recent log output:</b>\n<pre>{safe_tail}</pre>"
+        )
+
+    try:
+        payload = json.dumps({
+            "chat_id": int(admin_id),
+            "text": text,
+            "parse_mode": "HTML",
+            "reply_markup": {"inline_keyboard": []},
+        }, ensure_ascii=False).encode("utf-8")
+        conn = http.client.HTTPSConnection("api.telegram.org", timeout=10)
+        conn.request(
+            "POST",
+            f"/bot{token}/sendMessage",
+            body=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(len(payload)),
+            },
+        )
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+    except Exception as exc:
+        print(f"Failed to send crash alert: {exc}", file=sys.stderr)
+
+    try:
+        watchdog_log_dir = os.path.join(base_dir, "logs", "watchdog")
+        os.makedirs(watchdog_log_dir, exist_ok=True)
+        with open(os.path.join(watchdog_log_dir, "watchdog.log"), "a", encoding="utf-8") as f:
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"{now_str} [CRASH_ALERT] Sent crash notification for {bot_service}\n")
+    except Exception:
+        pass
+
+    sys.exit(0)
+
+
+if __name__ == "__main__" and ("--crash-alert" in sys.argv or "--oneshot" in sys.argv):
+    run_crash_alert_oneshot()
+
 
 import requests
 
@@ -109,8 +238,8 @@ def format_time_watchdog(seconds: int, lang_id: int) -> str:
     try:
         from core.i18n import get_user_lang
         lang = get_user_lang(lang_id)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Could not resolve language for watchdog timing message: %s", exc)
         
     days = seconds // 86400
     hours = (seconds % 86400) // 3600
@@ -566,6 +695,58 @@ def process_service_state(
         logging.error(f"Alert error: {e}")
 
 
+def run_docker_events_listener():
+    """
+    Event-driven Docker monitor using Docker socket event stream.
+    Replaces busy polling with blocking kernel event stream.
+    Wakes up ONLY when the container dies or starts.
+    """
+    if not docker_client:
+        return
+    logging.info(f"Docker event-driven watchdog active. Listening for events on '{BOT_SERVICE_NAME}'...")
+    try:
+        check_bot_service_docker()
+        event_stream = docker_client.events(
+            filters={"container": BOT_SERVICE_NAME, "event": ["die", "start", "restart"]},
+            decode=True,
+        )
+        for event in event_stream:
+            action = event.get("Action") or event.get("status")
+            attrs = event.get("Actor", {}).get("Attributes", {})
+            exit_code = attrs.get("exitCode", "0")
+
+            if action == "die":
+                if os.path.exists(RESTART_FLAG_FILE) or os.path.exists(REBOOT_FLAG_FILE):
+                    logging.info("Container died during planned restart/reboot. Ignoring.")
+                    continue
+                if exit_code == "0":
+                    logging.info("Container stopped cleanly (exitCode=0). Ignoring.")
+                    continue
+
+                logging.warning(f"Container '{BOT_SERVICE_NAME}' died unexpectedly (exitCode={exit_code}).")
+                send_or_edit_telegram_alert(
+                    "watchdog_status_down",
+                    "bot_service_down",
+                    None,
+                    bot_name=BOT_NAME,
+                    reason=f" (Exit Code {exit_code})",
+                )
+                try:
+                    c = docker_client.containers.get(BOT_SERVICE_NAME)
+                    if c.status != "running":
+                        c.restart(timeout=10)
+                except Exception as exc:
+                    logging.error(f"Failed to restart container: {exc}")
+            elif action in ("start", "restart"):
+                logging.info(f"Container '{BOT_SERVICE_NAME}' event '{action}'. Validating...")
+                time.sleep(2)
+                check_bot_service_docker()
+    except Exception as exc:
+        logging.error(f"Docker event stream interrupted: {exc}. Reverting to standard check.")
+        check_bot_service_docker()
+        time.sleep(CHECK_INTERVAL_SECONDS)
+
+
 if __name__ == "__main__":
     if not ALERT_BOT_TOKEN or not ALERT_ADMIN_ID:
         sys.exit(1)
@@ -577,9 +758,9 @@ if __name__ == "__main__":
     while True:
         if DEPLOY_MODE == "docker":
             if DOCKER_AVAILABLE and docker_client:
-                check_bot_service_docker()
+                run_docker_events_listener()
             else:
                 time.sleep(60)
         else:
             check_bot_service_systemd()
-        time.sleep(CHECK_INTERVAL_SECONDS)
+            time.sleep(CHECK_INTERVAL_SECONDS)

@@ -29,6 +29,10 @@ Browser pages use numeric node IDs. Agent tokens are never placed in URLs or bro
 
 ### 🔹 Root Level
 
+`network_validation.py` provides shared public-address validation for agent and node speed tests. It is retained in both installation modes; agent modules must not depend on `node/`, which is removed during systemd installation.
+
+The SSH monitor reads journal records from both `sshd` and `sshd-session` (newer OpenSSH versions). SSH and Fail2Ban file monitors use `tail -F` to survive log rotation. Report read errors are distinguished from empty event lists; the SSH report filters login events before limiting the selection.
+
 ```
 /opt/tg-bot/
 ├── bot.py                    # Entry point, application initialization
@@ -106,6 +110,7 @@ core/
 │   ├── api_nodes.py        # Node management API
 │   ├── api_system.py       # System settings API
 │   ├── streaming.py        # Server-Sent Events (SSE)
+│   ├── webpush.py          # Web Push notifications (VAPID / RFC 8291)
 │   └── views.py            # HTML views (Jinja2)
 ├── static/                 # CSS, JS, images
 │   ├── css/
@@ -128,7 +133,6 @@ core/
     ├── reset_password.html # Password reset
     ├── settings.html       # Settings
     └── terminal.html       # Web SSH terminal
-    └── terminal.html       # Web SSH terminal
 ```
 
 ---
@@ -138,7 +142,10 @@ core/
 
 **Loaded Parameters:**
 - `TOKEN` — Telegram bot token
+- `ALERT_BOT_TOKEN` — Gateway bot token (optional)
 - `ADMIN_USER_ID` — Main administrator ID
+- `TG_CLIENT_ID` — Telegram OAuth Client ID for WebUI Login Widget (OIDC)
+- `TG_CLIENT_SECRET` — Telegram OAuth Client Secret for OpenID Connect verification
 - `WEB_SERVER_HOST/PORT` — Web server settings
 - `DEPLOY_MODE` — Installation mode (root/secure)
 - `DEFAULT_LANGUAGE` — Default language
@@ -404,11 +411,12 @@ The web layer is implemented as a separate package with clear separation of conc
 ```
 core/web/
 ├── app.py              # Initialization, routing, lifecycle
-├── auth.py             # Authentication (password, magic link, Telegram widget)
+├── auth.py             # Authentication (OIDC, Telegram widget, password, magic link)
 ├── middlewares.py      # WAF, Rate Limiting, CSRF Protection
 ├── api_nodes.py        # aiohttp-based API for nodes (heartbeat, CRUD, commands)
-├── api_system.py       # aiohttp-based API for settings, logs, users
+├── api_system.py       # aiohttp-based API for settings, logs, users, Web Push
 ├── streaming.py        # Server-Sent Events (5 streams, incl. chart history)
+├── webpush.py          # Web Push module (RFC 8291 aes128gcm, VAPID, delivery)
 └── views.py            # HTML pages (Jinja2 rendering)
 ```
 
@@ -427,39 +435,55 @@ core/web/
 view_routes      → HTML pages
 auth_routes      → Authentication
 node_routes      → Node API
-system_routes    → System API
+system_routes    → System API (including Web Push)
 streaming_routes → SSE streams
 ```
 
 ---
 
 #### **auth.py** (web) — Web Panel Authentication
-**Purpose:** Multiple login methods with different session TTLs
+**Purpose:** Multiple login methods with different session TTLs and OpenID Connect support
 
 **Authentication Methods:**
 
 | Method | Session TTL | Available To |
 |--------|-----------|--------------|
+| Telegram Login (OIDC) | 30 days | All bot users |
+| Telegram Widget (legacy HMAC) | 30 days | All bot users |
 | Password (Argon2) | 7 days | Main admin only |
 | Magic Link | 30 days (session) / 5 min (link) | All bot users |
-| Telegram Widget | 30 days | All bot users |
 
 **Endpoints:**
+- `POST /api/auth/telegram` — Telegram authorization (OIDC ID token via JWT RS256 or legacy HMAC)
+- `POST /api/auth/webapp` — Authorization via Telegram WebApp
 - `POST /api/login/password` — Password login (ADMIN only)
 - `POST /api/login/request` — Request magic link (sends to Telegram)
 - `GET /api/login/magic?token=...` — Activate magic link
-- `POST /api/auth/telegram` — Telegram Widget login (HMAC validation)
 - `POST /api/logout` — Logout and delete session
 - `POST /api/request_reset` — Request password reset
 - `POST /api/reset_password` — Reset password by token
+- `GET /api/security/telegram_only_mode` — Current Telegram-only mode state
+- `POST /api/security/telegram_only_mode` — Toggle Telegram-only mode
 
 **Security:**
+- Telegram ID Token verification: JWKS caching from `https://oauth.telegram.org/.well-known/jwks.json`, RS256 signature, issuer (`https://oauth.telegram.org`), audience (`TG_CLIENT_ID`), and expiry (exp) validation.
+- `telegram_only_mode`: hides password login form and ID magic link options to prevent brute-force attacks.
 - Rate limiting: 5 attempts per 5 minutes (per IP)
 - Constant-time comparison (Argon2)
-- HMAC validation for Telegram Widget
+- HMAC validation for Telegram Widget (when Client Secret is not set)
 - CSRF tokens per request (TTL 1 hour)
 
 ---
+
+#### **webpush.py** (web) — Web Push Notifications
+**Purpose:** Background Push Notifications for PWA and desktop browsers (RFC 8291, RFC 8292)
+
+**Functions:**
+- VAPID keypair management (NIST P-256 EC key generation, secure storage in `webpush_vapid`)
+- Payload encryption according to `aes128gcm` using HKDF
+- Asynchronous HTTP delivery to browser push services (Google FCM, Apple APNs, Mozilla Autopush)
+- Expired subscription handling (HTTP 404 / 410 Gone) with automatic database purging
+- System alerts dispatching: CPU/RAM/Disk threshold violations, node downtime, SSH logins, Fail2ban bans
 
 #### **middlewares.py** (web) — 3 Security Layers
 **Purpose:** HTTP request-level security

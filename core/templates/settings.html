@@ -112,17 +112,9 @@
                             </div>
                         </div>
                     </div>
-                    <button onclick="toggleTheme()"
+                    <button onclick="toggleTheme(event)"
                             class="hide-on-mobile flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400"
                             id="themeBtn">
-                        <svg id="iconMoon"
-                             xmlns="http://www.w3.org/2000/svg"
-                             class="h-5 w-5 hidden"
-                             fill="none"
-                             viewBox="0 0 24 24"
-                             stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                        </svg>
                         <svg id="iconSun"
                              xmlns="http://www.w3.org/2000/svg"
                              class="h-5 w-5 hidden"
@@ -131,18 +123,18 @@
                              stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                         </svg>
-                        <svg id="iconSystem"
+                        <svg id="iconMoon"
                              xmlns="http://www.w3.org/2000/svg"
                              class="h-5 w-5 hidden"
                              fill="none"
                              viewBox="0 0 24 24"
                              stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                         </svg>
-                        <svg id="iconAmoled" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none"
+                        <svg id="iconAmoled" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="currentColor"
                             viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2V4a8 8 0 100 16z" />
+                                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                         </svg>
                     </button>
                     <!-- Mobile Settings Dropdown -->
@@ -165,27 +157,38 @@
                                 <div class="w-full px-4 py-2 text-sm flex items-center justify-between text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-white/5">
                                     <span class="font-medium">Тема</span>
                                     <div class="flex items-center gap-1 bg-gray-200/50 dark:bg-black/30 p-1 rounded-xl text-sm shrink-0" id="mobileThemeSegment">
-                                        <button onclick="setThemeDirect('system', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeSys">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                        <button onclick="setThemeDirect('light', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeLight">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                                         </button>
                                         <button onclick="setThemeDirect('dark', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeDark">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
                                         </button>
-                                        <button onclick="setThemeDirect('light', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeLight">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                                        </button>
                                         <button onclick="setThemeDirect('amoled', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeAmoled">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2V4a8 8 0 100 16z" /></svg>
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
                                         </button>
                                     </div>
                                 </div>
-                                <div onclick="toggleHaptics()"
+                                <div data-haptics-toggle onclick="toggleHaptics()"
                                     class="w-full cursor-pointer px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-gray-800 dark:text-gray-200 transition">
-                                    <span class="font-medium">Вибрация</span>
+                                    <span class="flex flex-col">
+                                        <span class="font-medium">{{ web_vibration_label }}</span>
+                                        <span data-haptics-unsupported hidden class="text-xs">{{ web_haptics_unsupported }}</span>
+                                    </span>
                                     <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation(); event.preventDefault(); toggleHaptics()">
                                         <input type="checkbox" id="mHapticsCheckbox2" class="sr-only peer mHapticsCheckbox">
                                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
                                     </label>
+                                </div>
+                                <div class="w-full px-4 py-2 flex items-center justify-center gap-3 border-t border-gray-100 dark:border-white/5">
+                                    <button data-action="toggle-perf-mode" title="{{ web_toggle_perf_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-yellow-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    </button>
+                                    <button data-action="toggle-a11y-mode" title="{{ web_toggle_a11y_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-blue-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    </button>
+                                    <button data-action="toggle-holiday-mode" title="{{ web_toggle_holiday_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-sky-400 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95 hidden">
+                                        <i class="icon icon-snowflake h-5 w-5"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -498,7 +501,7 @@
                                            bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 
                                            rounded-xl transition-all duration-300
                                            active:scale-95 active:bg-red-100 dark:active:bg-red-900/30
-                                           /* АДАПТИВНОСТЬ РАЗМЕРОВ: */
+                                           /* RESPONSIVE SIZING: */
                                            flex-1 py-2 px-1.5 sm:py-3 sm:px-2 md:flex-none md:py-2 md:px-3 
                                            md:hover:pr-4 md:hover:bg-red-100 md:dark:hover:bg-red-900/30">
                                 <div class="flex items-center whitespace-nowrap justify-center">
@@ -527,7 +530,7 @@
                                            bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 
                                            rounded-xl transition-all duration-300
                                            active:scale-95 active:bg-red-100 dark:active:bg-red-900/30
-                                           /* АДАПТИВНОСТЬ РАЗМЕРОВ: */
+                                           /* RESPONSIVE SIZING: */
                                            flex-1 py-2 px-1.5 sm:py-3 sm:px-2 md:flex-none md:py-2 md:px-3 
                                            md:hover:pr-4 md:hover:bg-red-100 md:dark:hover:bg-red-900/30">
                                 <div class="flex items-center whitespace-nowrap justify-center">
@@ -631,11 +634,50 @@
                                     <span class="text-[10px] text-gray-500 mt-1.5 text-center uppercase tracking-wider font-bold" data-i18n="web_notif_btn_nodes_subtitle">{{ web_notif_btn_nodes_subtitle }}</span>
                                 </button>
                             </div>
-                                <div class="mt-5 md:mt-auto pt-2"> <div class="-mb-1.5 p-2 bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50 rounded-xl flex items-start gap-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                                <p class="text-sm text-blue-800 dark:text-blue-300 leading-relaxed">{{ web_notif_menu_desc }}</p>
+
+                            <!-- Web Push Section -->
+                            <div class="mt-4 md:mt-auto pt-4">
+                                <div class="p-4 rounded-xl bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/5 transition-all flex flex-col justify-between">
+                                    <div class="flex items-center justify-between gap-3 mb-2.5">
+                                        <div class="flex items-center gap-2.5 min-w-0 flex-nowrap overflow-hidden">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                            </svg>
+                                            <span class="text-sm font-bold text-gray-900 dark:text-white whitespace-nowrap shrink-0" data-i18n="web_push_title">{{ web_push_title }}</span>
+                                            <span id="pushStatusBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap">...</span>
+                                        </div>
+                                        <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                                            <input type="checkbox" id="pushNotificationToggle" class="sr-only peer" onchange="togglePushNotifications(this)">
+                                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                                            <div id="pushToggleSpinner" class="hidden absolute top-[4px] left-[4px] w-4 h-4 peer-checked:translate-x-[20px] transition-transform duration-200 flex items-center justify-center pointer-events-none z-10">
+                                                <svg class="animate-spin h-3.5 w-3.5 text-blue-600 dark:text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <p class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed mb-3" data-i18n="web_push_desc">{{ web_push_desc }}</p>
+                                    <div class="pt-3 border-t border-gray-200/60 dark:border-white/5 flex flex-col sm:flex-row gap-2 sm:gap-3.5 w-full">
+                                        <button id="revokePushBtn"
+                                                onclick="revokeAllPushSubscriptions(this)"
+                                                class="flex-1 w-full sm:w-auto min-h-[38px] py-2 px-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-xl text-xs font-semibold sm:font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] select-none text-center"
+                                                title="{{ web_push_btn_revoke }}">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                            <span class="leading-tight break-words whitespace-normal sm:whitespace-nowrap" data-i18n="web_push_btn_revoke">{{ web_push_btn_revoke }}</span>
+                                        </button>
+                                        <button id="sendTestPushBtn"
+                                                onclick="sendTestPushNotification(this)"
+                                                class="flex-1 w-full sm:w-auto min-h-[38px] py-2 px-3 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-400 dark:text-gray-500 hover:bg-gray-200/60 dark:hover:bg-white/10 rounded-xl text-xs font-semibold sm:font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] select-none text-center"
+                                                title="{{ web_push_btn_test }}">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                            </svg>
+                                            <span class="leading-tight break-words whitespace-normal sm:whitespace-nowrap" data-i18n="web_push_btn_test">{{ web_push_btn_test }}</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -7,30 +7,45 @@ function acceptCookies() {
     if (banner) banner.classList.add('translate-y-full');
 }
 
-// --- Telegram Auth Widget ---
-async function onTelegramAuth(user) {
-    console.log("Telegram Auth", user);
+// --- Telegram Auth Widget (OIDC / Legacy) ---
+async function onTelegramAuth(data) {
+    if (!data) return;
+    if (data.error) {
+        if (data.error === 'popup_closed') {
+            console.log("Telegram login popup closed by user.");
+            return;
+        }
+        console.error("Telegram Auth error:", data.error);
+        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Auth Error";
+        if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, errTitle);
+        else alert(errTitle + ": " + data.error);
+        return;
+    }
+    console.log("Telegram Auth", data);
     acceptCookies();
     try {
+        const payload = data.id_token ? { id_token: data.id_token, user: data.user } : data;
         const response = await fetch('/api/auth/telegram', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(user)
+            body: JSON.stringify(payload)
         });
         
         if (response.ok) {
-            window.location.reload();
+            window.location.replace('/');
         } else {
             const d = await response.json();
+            const userObj = (data && data.user) ? data.user : (data || {});
+            const uid = userObj.id || userObj.sub || "";
+            const uname = userObj.preferred_username || userObj.username || uid;
             
             if (response.status === 403) {
                 const title = (typeof I18N !== 'undefined' && I18N.login_access_denied) ? I18N.login_access_denied : "Access Denied";
                 let msgTemplate = (typeof I18N !== 'undefined' && I18N.login_unauthorized) ? I18N.login_unauthorized : "User <b>@{username}</b> is not authorized.<br><br>Please ask the administrator to add your ID: <b>{id}</b>";
                 
-                const username = user.username || user.id;
-                const msg = msgTemplate.replace('{username}', username).replace('{id}', user.id);
+                const msg = msgTemplate.replace('{username}', uname).replace('{id}', uid);
                 
                 if (window.showModalAlert) {
                     await window.showModalAlert(msg, title);
@@ -49,6 +64,25 @@ async function onTelegramAuth(user) {
         if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 }
+window.onTelegramAuth = onTelegramAuth;
+
+function toggleTelegramLoginMode(mode) {
+    if (localStorage.getItem('telegram_only_mode') === '1' || (typeof TELEGRAM_ONLY_MODE !== 'undefined' && TELEGRAM_ONLY_MODE)) {
+        return;
+    }
+    const container = document.getElementById('telegram-widget-container');
+    const magicForm = document.getElementById('magic-link-form');
+    if (!container || !magicForm) return;
+
+    if (mode === 'id') {
+        container.classList.add('hidden');
+        magicForm.classList.remove('hidden');
+    } else {
+        magicForm.classList.add('hidden');
+        container.classList.remove('hidden');
+    }
+}
+window.toggleTelegramLoginMode = toggleTelegramLoginMode;
 
 // --- UI Logic: Language & Slider ---
 
@@ -139,11 +173,6 @@ function setLoginLanguage(lang) {
 }
 window.setLoginLanguage = setLoginLanguage;
 
-function toggleLoginLanguage(checkbox) {
-    const lang = checkbox.checked ? 'en' : 'ru';
-    setLoginLanguage(lang);
-}
-
 // --- UI Logic: Modals ---
 function openSupportModal() {
     const modal = document.getElementById('support-modal');
@@ -174,7 +203,7 @@ function toggleForms(target) {
     const errorBlock = document.getElementById('reset-error-block');
     const backArrow = document.getElementById('back-arrow');
 
-    [magic, password, reset, setPass].forEach(el => el?.classList.add('hidden'));
+    [magic, password, reset, setPass].forEach(el => { el?.classList.add('hidden'); });
     if (errorBlock) errorBlock.classList.add('hidden');
 
     const show = (el) => {
@@ -377,7 +406,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }).then(res => res.json().then(data => ({ status: res.status, ok: res.ok, body: data })))
           .then(res => {
             if (res.ok) {
-                window.location.reload();
+                window.location.replace('/');
             } else {
                 const failMsg = (typeof I18N !== 'undefined' && I18N.login_webapp_auth_failed) ? I18N.login_webapp_auth_failed : "Web App auth failed";
                 throw new Error(res.body.error || failMsg);
@@ -394,6 +423,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const loginOrSeparator = document.getElementById('login-or-separator');
     const passwordLoginToggleBtn = document.getElementById('password-login-toggle-btn');
+    const switchToIdBtn = document.getElementById('switch-to-id-btn');
+    const switchToWidgetBtnContainer = document.getElementById('switch-to-widget-btn-container');
 
     const applyTelegramOnlyMode = (enabled) => {
         if (loginOrSeparator) {
@@ -401,6 +432,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (passwordLoginToggleBtn) {
             passwordLoginToggleBtn.classList.toggle('hidden', enabled);
+        }
+        if (switchToIdBtn) {
+            switchToIdBtn.classList.toggle('hidden', enabled);
+        }
+        if (switchToWidgetBtnContainer) {
+            switchToWidgetBtnContainer.classList.toggle('hidden', enabled);
+        }
+        if (enabled) {
+            const cont = document.getElementById('telegram-widget-container');
+            const mForm = document.getElementById('magic-link-form');
+            if (mForm) mForm.classList.add('hidden');
+            if (cont) cont.classList.remove('hidden');
         }
     };
 
@@ -473,6 +516,28 @@ document.addEventListener("DOMContentLoaded", () => {
         toggleForms('set-password');
     }
 
+    // 4.1. Check Session Expired parameter or storage flag
+    const isSessionExpired = urlParams.get('expired') === '1' || urlParams.get('reason') === 'expired' || sessionStorage.getItem('session_expired_popup') === '1';
+    if (isSessionExpired) {
+        sessionStorage.removeItem('session_expired_popup');
+        localStorage.removeItem('session_expired_popup');
+        if (urlParams.has('expired') || urlParams.has('reason')) {
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+        }
+        const expiredTitle = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
+        const expiredMsg = (typeof I18N !== 'undefined' && I18N.web_session_expired_desc) 
+            ? I18N.web_session_expired_desc 
+            : ((typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Время вашей сессии истекло или доступ был отозван. Пожалуйста, выполните вход повторно.");
+        setTimeout(() => {
+            if (window.showModalAlert) {
+                window.showModalAlert(expiredMsg, expiredTitle);
+            } else {
+                alert(`${expiredTitle}\n\n${expiredMsg}`);
+            }
+        }, 150);
+    }
+
     // 5. Check Cookie Consent
     if (!localStorage.getItem('cookie_consent')) {
         setTimeout(() => {
@@ -481,7 +546,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 1000);
     }
 
-    // 6. Init Telegram Widget
+    // 6. Init Telegram Login
+    const tgClientId = (typeof TG_CLIENT_ID !== 'undefined' && TG_CLIENT_ID) ? TG_CLIENT_ID : "";
     const botUsername = (typeof BOT_USERNAME !== 'undefined') ? BOT_USERNAME : "";
     const container = document.getElementById('telegram-widget-container');
     const magicForm = document.getElementById('magic-link-form');
@@ -490,7 +556,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const isLocalhost = window.location.hostname === 'localhost';
     const isHttps = window.location.protocol === 'https:';
 
-    if (botUsername && !isIp && !isLocalhost && isHttps && container && magicForm) {
+    if (tgClientId && container && magicForm) {
+        container.classList.remove('hidden');
+        magicForm.classList.add('hidden');
+    } else if (botUsername && !isIp && !isLocalhost && isHttps && container && magicForm) {
         const script = document.createElement('script');
         script.async = true;
         script.src = "https://telegram.org/js/telegram-widget.js?22";
@@ -504,8 +573,12 @@ document.addEventListener("DOMContentLoaded", () => {
         magicForm.classList.add('hidden');
     }
 
+    const serverTelegramOnly = (typeof TELEGRAM_ONLY_MODE !== 'undefined') ? Boolean(TELEGRAM_ONLY_MODE) : false;
     const storedMode = localStorage.getItem('telegram_only_mode');
-    if (storedMode === '1' || storedMode === '0') {
+    if (serverTelegramOnly) {
+        applyTelegramOnlyMode(true);
+        localStorage.setItem('telegram_only_mode', '1');
+    } else if (storedMode === '1' || storedMode === '0') {
         applyTelegramOnlyMode(storedMode === '1');
     }
 

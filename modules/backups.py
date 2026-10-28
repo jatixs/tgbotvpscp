@@ -100,7 +100,10 @@ def _create_zip_from_dir(backup_dir: str, prefix: str, source_dir: str, skip_dir
             for name in files:
                 full_path = os.path.join(root, name)
                 rel_path = os.path.relpath(full_path, source_dir)
-                zf.write(full_path, arcname=rel_path)
+                try:
+                    zf.write(full_path, arcname=rel_path)
+                except Exception as exc:
+                    logging.warning(f"Failed to add {full_path} to backup {filepath}: {exc}")
 
     return filepath
 
@@ -111,6 +114,7 @@ def _create_backup_file(backup_type: str):
         rx, tx = traffic_module.get_current_traffic_total()
         timestamp = int(time.time())
         traffic_module.save_backup_file(rx, tx)
+        _rotate_backups("traffic")
         expected = os.path.join(config.TRAFFIC_BACKUP_DIR, f"traffic_backup_{timestamp}.json")
         if os.path.exists(expected):
             return expected
@@ -136,9 +140,15 @@ def _create_backup_file(backup_type: str):
         legacy_nodes_json = os.path.join(config.CONFIG_DIR, "nodes.json")
         with zipfile.ZipFile(filepath, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             if os.path.exists(nodes_db_path):
-                zf.write(nodes_db_path, arcname="nodes.db")
+                try:
+                    zf.write(nodes_db_path, arcname="nodes.db")
+                except Exception as exc:
+                    logging.warning(f"Failed to write nodes.db to backup: {exc}")
             if os.path.exists(legacy_nodes_json):
-                zf.write(legacy_nodes_json, arcname="nodes.json")
+                try:
+                    zf.write(legacy_nodes_json, arcname="nodes.json")
+                except Exception as exc:
+                    logging.warning(f"Failed to write nodes.json to backup: {exc}")
         created = filepath
     else:
         return None
@@ -386,18 +396,22 @@ def start_background_tasks(_bot) -> list[asyncio.Task]:
 
 
 async def periodic_backups_task():
+    elapsed = 0
     while True:
+        await asyncio.sleep(5)
         interval = int(getattr(config, "BACKUP_INTERVAL", 0) or 0)
         if interval < BACKUP_INTERVAL_STEP:
-            await asyncio.sleep(BACKUP_INTERVAL_STEP)
+            elapsed = 0
             continue
 
-        await asyncio.sleep(interval)
-        for backup_type in ("config", "logs", "nodes"):
-            try:
-                await asyncio.to_thread(_create_backup_file, backup_type)
-            except Exception as exc:
-                logging.error(f"Auto-backup failed for {backup_type}: {exc}")
+        elapsed += 5
+        if elapsed >= interval:
+            elapsed = 0
+            for backup_type in ("traffic", "config", "logs", "nodes"):
+                try:
+                    await asyncio.to_thread(_create_backup_file, backup_type)
+                except Exception as exc:
+                    logging.error(f"Auto-backup failed for {backup_type}: {exc}")
 
 def get_button() -> KeyboardButton:
     return KeyboardButton(text=get_text(BUTTON_KEY, config.DEFAULT_LANGUAGE))
@@ -747,5 +761,5 @@ async def close_menu_handler(callback: types.CallbackQuery):
     await callback.answer()
     try:
         await callback.message.delete()
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to delete backup menu message: %s", exc)

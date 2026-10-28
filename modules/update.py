@@ -169,6 +169,16 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
             details={"branch": branch, "source": restart_source},
             severity="CRITICAL"
         )
+
+        # Pre-update integrity check & automatic backup of modified files
+        try:
+            from core.integrity import backup_modified_files
+            success, backup_dir, backed_up = backup_modified_files(repo_root=config.BASE_DIR, branch=branch)
+            if backed_up:
+                logging.info(f"Created pre-update backup of {len(backed_up)} modified files in {backup_dir}")
+        except Exception as be:
+            logging.warning(f"Pre-update backup warning: {be}")
+
         code, _, err = await run_command("git", "fetch", "origin")
         code, _, err = await run_command("git", "reset", "--hard", f"origin/{branch}")
         if code != 0:

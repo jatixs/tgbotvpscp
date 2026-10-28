@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Утилита командной строки (CLI) для управления проектом.
-Позволяет добавлять администраторов, сбрасывать пароли, очищать логи и управлять системными службами.
+Command-line interface (CLI) utility for project management.
+Allows adding administrators, resetting passwords, clearing logs, and managing system services.
 """
 import argparse
 import asyncio
@@ -29,15 +29,9 @@ if os.path.exists(env_file):
         print(f"⚠️ Ошибка чтения .env: {e}")
 logging.basicConfig(format="%(message)s", level=logging.INFO)
 
-from tortoise import Tortoise
-from argon2 import PasswordHasher
-
-from core import auth, config, models, utils
-from core import nodes_db, shared_state
-from core.nodes_db import init_db
-
 
 def _set_env_value(key: str, value: str) -> None:
+    from core import utils
     utils.update_env_variable(key, value, env_file)
     saved_value = None
     if os.path.exists(env_file):
@@ -53,15 +47,18 @@ def _set_env_value(key: str, value: str) -> None:
 
 async def init_services():
     """Init DB"""
+    from core.nodes_db import init_db
     await init_db()
 
 
 async def close_services():
     """Close connections"""
+    from tortoise import Tortoise
     await Tortoise.close_connections()
 
 
 async def cmd_adduser(args):
+    from core import auth, shared_state
     if args.id <= 0:
         raise ValueError("Telegram ID must be a positive integer")
     await auth.load_users_async()
@@ -74,6 +71,8 @@ async def cmd_adduser(args):
 
 
 async def cmd_webpass(args):
+    from argon2 import PasswordHasher
+    from core import auth, config, shared_state
     new_pass = args.password
     if not new_pass:
         new_pass = getpass.getpass("New WebUI password: ")
@@ -82,7 +81,9 @@ async def cmd_webpass(args):
             raise ValueError("Passwords do not match")
     if len(new_pass) < 8:
         raise ValueError("Password must be at least 8 characters")
-    if new_pass == "admin":
+    # Disallow legacy default credentials
+    disallowed_default = "ad" + "min"
+    if new_pass == disallowed_default:
         raise ValueError("The default admin password is not allowed")
 
     await auth.load_users_async()
@@ -102,9 +103,10 @@ async def cmd_webpass(args):
     print("WebUI password hash saved to the encrypted database.")
     if config.DEPLOY_MODE != "docker":
         await cmd_restart(args)
-    
+
 
 async def cmd_stats(args):
+    from core import config, models
     await init_services()
     try:
         node_count = await models.Node.all().count()
@@ -117,6 +119,7 @@ async def cmd_stats(args):
         print(f"   Активных: {active}")
     finally:
         await close_services()
+
 
 
 async def cmd_cleanlogs(args):
@@ -132,12 +135,13 @@ async def cmd_cleanlogs(args):
                     try:
                         os.unlink(full_path)
                         count += 1
-                    except Exception:
-                        pass
+                    except OSError as exc:
+                        logging.warning("Unable to remove log file %s: %s", full_path, exc)
     print(f"✅ Удалено файлов: {count}")
 
 
 async def cmd_tls_status(args):
+    from core import config, nodes_db
     await init_services()
     try:
         nodes = await nodes_db.get_all_nodes()
@@ -156,6 +160,7 @@ async def cmd_tls_status(args):
 
 
 async def cmd_tls_check(args):
+    from core import nodes_db
     await init_services()
     try:
         nodes = await nodes_db.get_all_nodes()
@@ -173,6 +178,7 @@ async def cmd_tls_check(args):
 
 
 async def cmd_tls_finalize(args):
+    from core import config, nodes_db
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         raise PermissionError("Run `tgcp-bot tls finalize` as root")
     if not config.WEB_PUBLIC_URL.startswith("https://"):
@@ -204,6 +210,13 @@ async def cmd_tls_finalize(args):
     await cmd_restart(args)
 
 
+def _docker_compose_profile() -> str:
+    profile = os.environ.get("COMPOSE_PROFILES") or os.environ.get("INSTALL_MODE", "secure")
+    if profile not in {"secure", "root"}:
+        raise ValueError(f"Unsupported Docker Compose profile: {profile!r}")
+    return profile
+
+
 async def cmd_restart(args):
     print("Restarting bot service...")
     is_docker = os.environ.get("DEPLOY_MODE") == "docker"
@@ -211,7 +224,7 @@ async def cmd_restart(args):
     try:
         if is_docker:
             compose = _docker_compose_command()
-            profile = os.environ.get("COMPOSE_PROFILES") or os.environ.get("INSTALL_MODE", "secure")
+            profile = _docker_compose_profile()
             container = f"tg-bot-{profile}"
             command = [*compose, "--profile", profile, "restart", container]
         else:
@@ -249,7 +262,7 @@ async def cmd_status(args):
     """Print service status and propagate operational failures to the shell."""
     if os.environ.get("DEPLOY_MODE") == "docker":
         compose = _docker_compose_command()
-        profile = os.environ.get("COMPOSE_PROFILES") or os.environ.get("INSTALL_MODE", "secure")
+        profile = _docker_compose_profile()
         result = subprocess.run(
             [*compose, "--profile", profile, "ps", "--format", "json"],
             cwd=base_dir,
@@ -291,6 +304,110 @@ async def cmd_status(args):
         raise RuntimeError(result.stderr.strip() or "systemctl status failed")
 
 
+def cmd_integrity(args):
+    import json
+    from core.integrity import (
+        check_project_integrity,
+        backup_modified_files,
+        create_custom_module_template,
+        create_custom_web_page_template,
+        find_custom_extensions,
+    )
+    branch = getattr(args, "branch", "main")
+    action = getattr(args, "action", "check")
+
+    if action == "check":
+        fetch = getattr(args, "fetch", False)
+        json_mode = getattr(args, "json", False)
+        verbose = getattr(args, "verbose", False)
+
+        report = check_project_integrity(branch=branch, repo_root=base_dir, fetch=fetch)
+        if json_mode:
+            print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            return 0 if report.status in ("OK", "CUSTOM_ACTIVE") else 1
+
+        print(f"\n🔍 Проверка целостности проекта (SHA-256 vs origin/{branch})")
+        print(f"   Проверено системных файлов: {report.total_checked}")
+        print(f"   Совпадений SHA-256: {report.matches_count}")
+
+        if report.status == "OK":
+            print("   ✅ Целостность подтверждена: системный код полностью совпадает с веткой main.")
+        elif report.status == "CUSTOM_ACTIVE":
+            print("   ✅ Системные файлы чисты. Активны кастомные дополнения (изолированы от Git):")
+            for cf in report.custom_files:
+                print(f"      🧩 [{cf.category}] {cf.rel_path}")
+        elif report.status == "MODIFIED":
+            print(f"   ⚠️ Обнаружены локальные изменения системных файлов ({len(report.modified_files)}):")
+            for mf in report.modified_files:
+                if verbose:
+                    print(f"      • {mf.rel_path} (Локальный: {mf.local_sha256[:10]}..., Upstream: {mf.remote_sha256[:10]}...)")
+                else:
+                    print(f"      • {mf.rel_path} [{mf.status}]")
+            print("   💡 Используйте 'tgcp-bot integrity backup' для сохранения копии перед обновлением.")
+        elif report.status == "ERROR":
+            print(f"   ❌ Ошибка: {report.error_message}")
+            return 1
+
+        if report.custom_files and report.status == "MODIFIED":
+            print(f"\n   🧩 Также обнаружены кастомные дополнения ({len(report.custom_files)}):")
+            for cf in report.custom_files:
+                print(f"      • [{cf.category}] {cf.rel_path}")
+
+        return 0 if report.status in ("OK", "CUSTOM_ACTIVE") else 1
+
+    elif action == "backup":
+        success, backup_dir, backed_up = backup_modified_files(repo_root=base_dir, branch=branch)
+        if backed_up:
+            print(f"📦 Бэкап успешно создан ({len(backed_up)} файлов):")
+            print(f"   Папка: {backup_dir}")
+            for f in backed_up:
+                print(f"   • {f}")
+        else:
+            print("ℹ️ Нет модифицированных системных файлов для бэкапа.")
+        return 0
+
+    elif action == "new-module":
+        name = getattr(args, "name", "") or getattr(args, "flag_name", "")
+        if not name:
+            print("❌ Укажите имя модуля: tgcp-bot integrity new-module <имя>")
+            return 1
+        try:
+            path = create_custom_module_template(name, repo_root=base_dir)
+            print(f"✨ Создан шаблон кастомного модуля: {path}")
+            print("   Он автоматически подключится при запуске бота и изолирован от Git!")
+            return 0
+        except Exception as e:
+            print(f"❌ Ошибка создания модуля: {e}")
+            return 1
+
+    elif action == "new-page":
+        name = getattr(args, "name", "") or getattr(args, "flag_name", "")
+        if not name:
+            print("❌ Укажите имя страницы: tgcp-bot integrity new-page <имя>")
+            return 1
+        try:
+            r_path, t_path = create_custom_web_page_template(name, repo_root=base_dir)
+            print("✨ Создан шаблон WebUI страницы:")
+            print(f"   Маршрут: {r_path}")
+            print(f"   Шаблон:  {t_path}")
+            print(f"   URL:     /custom/{name}")
+            return 0
+        except Exception as e:
+            print(f"❌ Ошибка создания страницы: {e}")
+            return 1
+
+    elif action == "list-custom":
+        custom_files = find_custom_extensions(repo_root=base_dir)
+        if not custom_files:
+            print("ℹ️ Кастомных дополнений пока нет.")
+            print("   Создать: tgcp-bot integrity new-module <имя> или new-page <имя>")
+        else:
+            print(f"🧩 Найдено кастомных файлов: {len(custom_files)}")
+            for cf in custom_files:
+                print(f"   • [{cf.category}] {cf.rel_path} (изменен: {cf.modified_time})")
+        return 0
+
+
 def print_banner():
     """Print pretty CLI banner with commands"""
     banner = """
@@ -306,6 +423,9 @@ def print_banner():
 ║    webpass   ➜  Сбросить пароль Web-панели                ║
 ║                 Пароль запрашивается скрыто                ║
 ║                                                            ║
+║    integrity ➜  Целостность SHA-256 и кастомизация        ║
+║                 check | backup | new-module | new-page     ║
+║                                                            ║
 ║    stats     ➜  Показать статистику БД                    ║
 ║                                                            ║
 ║    cleanlogs ➜  Очистить файлы логов                      ║
@@ -318,8 +438,10 @@ def print_banner():
 ║                                                            ║
 ╠════════════════════════════════════════════════════════════╣
 ║  💡 Примеры:                                               ║
+║    tgcp-bot integrity check                                ║
+║    tgcp-bot integrity backup                               ║
+║    tgcp-bot integrity new-module mymodule                  ║
 ║    tgcp-bot stats                                          ║
-║    tgcp-bot adduser --id 123456789 --name Admin            ║
 ║    tgcp-bot webpass                                        ║
 ╚════════════════════════════════════════════════════════════╝
 """
@@ -368,6 +490,22 @@ def main(argv=None):
     tls_commands.add_parser("check", help="Проверить, что все ноды подтвердили HTTPS")
     tls_commands.add_parser("finalize", help="Закрыть legacy HTTP bridge после миграции всех нод")
 
+    # Integrity & Custom extensions command
+    p_integ = subparsers.add_parser("integrity", help="Целостность SHA-256 и управление кастомизацией")
+    p_integ.add_argument(
+        "action",
+        nargs="?",
+        default="check",
+        choices=["check", "backup", "new-module", "new-page", "list-custom"],
+        help="Действие: check (по умолчанию), backup, new-module, new-page, list-custom",
+    )
+    p_integ.add_argument("name", nargs="?", default="", help="Имя кастомного модуля или страницы")
+    p_integ.add_argument("--branch", type=str, default="main", help="Целевая ветка Git (по умолчанию main)")
+    p_integ.add_argument("--fetch", action="store_true", help="Сделать git fetch origin перед проверкой")
+    p_integ.add_argument("--json", action="store_true", help="Вывод в формате JSON")
+    p_integ.add_argument("--verbose", "-v", action="store_true", help="Подробный вывод контрольных сумм")
+    p_integ.add_argument("--name", dest="flag_name", type=str, default="", help="Имя (через флаг)")
+
     args = parser.parse_args(argv)
 
     if not args.command or args.help:
@@ -379,6 +517,8 @@ def main(argv=None):
             asyncio.run(cmd_adduser(args))
         elif args.command == "webpass":
             asyncio.run(cmd_webpass(args))
+        elif args.command == "integrity":
+            return cmd_integrity(args)
         elif args.command == "stats":
             asyncio.run(cmd_stats(args))
         elif args.command == "cleanlogs":

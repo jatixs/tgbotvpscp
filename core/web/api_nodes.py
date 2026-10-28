@@ -1,6 +1,6 @@
 """
-REST API контроллеры для управления нодами.
-Обрабатывают запросы веб-интерфейса, связанные с метриками, логами и конфигурацией удаленных серверов.
+REST API controllers for node management.
+Handles WebUI requests related to metrics, logs, and remote server configuration.
 """
 from __future__ import annotations
 
@@ -207,8 +207,12 @@ async def process_node_result_background(
                         reply_markup=stop_kb,
                         parse_mode="HTML",
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug(
+                        "Could not update final traffic-monitor message for user %s: %s",
+                        user_id,
+                        exc,
+                    )
                 return
 
         if cmd == "speedtest":
@@ -506,7 +510,7 @@ async def handle_node_add(request: web.Request) -> web.StreamResponse:
         script = "deploy_en.sh" if lang == "en" else "deploy.sh"
         command = (
             f"bash <(wget -qO- https://raw.githubusercontent.com/jatixs/tgbotvpscp/main/{script}) "
-            f"--agent={shlex.quote(public_base_url)} --token={shlex.quote(token)}"
+            f"--lang={lang} --agent={shlex.quote(public_base_url)} --token={shlex.quote(token)}"
         )
 
         return encrypted_json_response(

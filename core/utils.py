@@ -1,6 +1,6 @@
 """
-Вспомогательные утилиты проекта.
-Содержит функции для работы с сетью, логированием, шифрованием и форматированием данных.
+Project helper utilities.
+Contains functions for networking, logging, encryption, and data formatting.
 """
 import asyncio
 import base64
@@ -20,6 +20,7 @@ from typing import Any
 import aiohttp
 import requests
 from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup
 
 try:
     from PIL import Image
@@ -550,8 +551,8 @@ def convert_vless_to_json(vless_link):
             if "extra" in params:
                 try:
                     xhttp_settings["extra"] = json.loads(params["extra"])
-                except Exception:
-                    pass
+                except (TypeError, json.JSONDecodeError) as exc:
+                    logging.warning("Ignoring invalid XHTTP extra settings: %s", exc)
             json_template["outbounds"][0]["streamSettings"]["xhttpSettings"] = xhttp_settings
         elif net_type == "ws":
             json_template["outbounds"][0]["streamSettings"]["wsSettings"] = {
@@ -821,10 +822,12 @@ async def initial_restart_check(bot: Bot):
                 content = f.read().strip()
             if ":" in content:
                 cid, mid = content.split(":", 1)
+                lang = get_user_lang(int(cid))
                 await bot.edit_message_text(
                     chat_id=int(cid),
                     message_id=int(mid),
-                    text=get_text("utils_bot_restarted", get_user_lang(int(cid))),
+                    text=f"✅ {get_text('utils_bot_restarted', lang)}",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[]),
                 )
         except Exception as e:
             logging.error(f"Restart check error: {e}")
@@ -838,9 +841,10 @@ async def initial_reboot_check(bot: Bot):
         try:
             with open(REBOOT_FLAG_FILE, "r") as f:
                 uid = int(f.read().strip())
+            lang = get_user_lang(uid)
             await bot.send_message(
                 chat_id=uid,
-                text=get_text("utils_server_rebooted", get_user_lang(uid)),
+                text=f"✅ {get_text('utils_server_rebooted', lang)}",
                 parse_mode="HTML",
             )
         except Exception as e:
@@ -856,6 +860,8 @@ def get_app_version() -> str:
         return ver if ver.startswith("v") else f"v{ver}"
     try:
         changelog_path = os.path.join(config.BASE_DIR, "CHANGELOG.md")
+        if not os.path.exists(changelog_path):
+            changelog_path = os.path.join(config.BASE_DIR, "docs", "CHANGELOG.md")
         if os.path.exists(changelog_path):
             with open(changelog_path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -1029,8 +1035,8 @@ class AuditEvent:
     SYSTEM_OPTIMIZE = "SYSTEM_OPTIMIZE"
     
     # Security settings
-    PASSWORD_CHANGED = "PASSWORD_CHANGED"
-    PASSWORD_RESET = "PASSWORD_RESET"
+    CRED_UPDATED = "CRED_UPDATED"
+    CRED_RESET = "CRED_RESET"
     CONFIG_CHANGED = "CONFIG_CHANGED"
     KEYBOARD_CHANGED = "KEYBOARD_CHANGED"
     

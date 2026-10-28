@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.26.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.27.0</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -65,7 +65,7 @@
 ### 🌍 Multi-Server Management
 - **Unlimited Nodes** — scalable architecture
 - **Real-time Metrics** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
-- **Web Terminal (SSH)** — browser terminal access with host-key verification
+- **Web Terminal (SSH)** — browser console access with host-key verification, encrypted SSH key support (passphrase modal), and mobile virtual keyboard (Ctrl, Alt, Tab, Esc, arrows)
 - **System Optimization** — interactive VPS tuning module (BBR, Swap, cache cleanup)
 
 ### 💳 Billing & Rental System
@@ -81,9 +81,11 @@
 
 ### 🛡️ Enterprise-Grade Security
 - **Web protections** — security headers, CSRF, rate limiting, and suspicious-request filtering
+- **Telegram Login (OIDC)** — modern passwordless OpenID Connect authentication via the official widget with cryptographic JWT RS256 (Telegram JWKS) verification and Telegram-only mode
 - **Rate Limiting & Brute-force Protection** — DDoS and password-guessing protection
 - **Audit Logging** — detailed logs of all security events
-- **Data Encryption** — Fernet (AES) + AES-256-CBC + Argon2 for passwords
+- **Data Encryption** — Fernet (AES-128) for stored passwords and terminal SSH keys + AES-256-CBC + Argon2 for passwords
+- **Core Integrity Check** — built-in SHA-256 verification of system files
 - **DOMPurify** — strict client-side content sanitization
 
 ### 🎨 Modern Web Interface
@@ -104,11 +106,13 @@
 - **Auto DB Migrations** — via \ erich\, ensuring zero data loss
 
 ### 🔔 Smart Notifications
+- **Web Push Notifications (PWA & Desktop)** — background Push notifications (VAPID / RFC 8291) on mobile (Android, iOS 16.4+ PWA) and PC even when app is closed
+- **Push Subscription Management** — settings toggle, instant test alerts, and one-click revocation across all devices
 - **Customizable Thresholds** — CPU/RAM/Disk limits
 - **Downtime Alerts** — intelligent server unavailability detection
 - **SSH Monitoring** — login notifications (including SSH keys)
 - **Fail2Ban Integration** — blocking suspicious IPs
-- **Alert-bot** — is an auxiliary relay bot for notifications and news.
+- **Alert-bot** — auxiliary relay bot for notifications and news
 
 ### 🌐 Internationalization
 - **Russian** — full localization
@@ -177,7 +181,15 @@
 
 1. Get a bot token from [@BotFather](https://t.me/BotFather)
 2. Find your Telegram ID via [@userinfobot](https://t.me/userinfobot)
-3. Ensure `curl` and `git` are installed:
+3. Configure the **Telegram Login Widget (OIDC)** in [@BotFather](https://t.me/BotFather) for web dashboard access:
+   - Send `/mybots` and select your bot.
+   - Go to **Bot Settings** ➔ **Login Widget** (or open BotFather's web interface via the menu button).
+   - **Client ID**: numeric ID of your bot (equals the bot token digits before the colon `:`, e.g. `1234567890`).
+   - **Client Secret**: click **Generate Secret** (or **View Secret**) in the Login Widget settings and copy the generated secret key.
+   - Under **Allowed URLs**, add the exact URL of your panel login page:
+     `https://<your_domain_or_ip>/login` (e.g. `https://dashboard.example.com/login`), as well as the root origin `https://<your_domain_or_ip>/`.
+     > ⚠️ **Important:** Telegram OIDC strictly verifies `redirect_uri`. If the exact address with `/login` is not added to Allowed URLs, Telegram will fail on login with `redirect_uri required`.
+4. Ensure `curl` and `git` are installed:
    ```bash
    sudo apt update && sudo apt install -y curl git
    ```
@@ -200,7 +212,7 @@ Managed TLS accepts a domain or globally routable public IPv4. Let's Encrypt IP 
 ### 3️⃣ Connect Remote Servers (Nodes)
 
 1. In Telegram, open **Nodes** → **Add Node**, name the node, and keep the generated secret token.
-2. Run the installer on the remote server and select **7) NODE (Client)**.
+2. Run the installer on the remote server and select **5) NODE (Client)**.
 3. Enter the master's HTTPS origin, such as `https://panel.example.com` or `https://203.0.113.10`, and the node token.
 
 For existing agents, update the master first, then update each node. The agent validates a same-host HTTPS endpoint and persists its new URL; the temporary HTTP bridge only accepts discovery/bootstrap and HMAC-protected heartbeats. Check progress with `sudo tgcp-bot tls status`; after all nodes confirm, close the bridge with `sudo tgcp-bot tls finalize`.
@@ -208,6 +220,23 @@ For existing agents, update the master first, then update each node. The agent v
 ### 🔑 WebUI Access
 
 Open the HTTPS origin selected during installation, for example `https://panel.example.com/`. The installer generates and displays a random initial password at completion; there is no shared `admin` password. Change it with `sudo tgcp-bot webpass`.
+
+#### 📲 Sign In with Telegram (Telegram Login / OIDC)
+The web dashboard supports one-click authorization via the official Telegram Login Widget (OIDC):
+- **Client ID** and **Client Secret** are requested during installation/upgrade by `deploy_en.sh` or can be configured manually in `.env` (`TG_CLIENT_ID` and `TG_CLIENT_SECRET`).
+- If `TG_CLIENT_SECRET` is not provided, backwards compatibility with legacy hash validation via bot token is used.
+- When **Telegram-only mode** (`telegram_only_mode`) is enabled, password entry and one-time magic link options are hidden, providing maximum security.
+
+##### 📋 Step-by-Step: Obtaining Client ID and Client Secret in @BotFather:
+1. Open [@BotFather](https://t.me/BotFather) in Telegram and send `/mybots`.
+2. Select your dashboard bot.
+3. Go to **Bot Settings** ➔ **Login Widget**.
+4. **Client ID**: numeric ID of your bot. It is displayed in widget settings and equals the digits before the colon `:` in your bot token (e.g., if token is `1234567890:AAFn...`, Client ID is `1234567890`).
+5. **Client Secret**: click **Generate Secret** (or **View/Reset Secret**) in the Login Widget menu. Copy the generated secret key.
+6. **Allowed URLs**: click **Allowed URLs** (or **Link Domain**) and add:
+   - `https://<panel_domain>/login` (e.g. `https://dashboard.example.com/login`)
+   - `https://<panel_domain>/`
+   *(If the exact URL with `/login` is omitted, Telegram will return the `redirect_uri required` error on login attempts)*.
 
 Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token; `GET /api/node/bootstrap` accepts the token in `X-Node-Token`; `POST /api/heartbeat` accepts HMAC-signed heartbeats.
 
@@ -306,6 +335,14 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 - `POST /api/services/{action}` — service action (`start|stop|restart`)
 - `POST /api/services/manage` — add or remove service from monitoring
 
+**Web Push API:**
+- `GET /api/push/vapid-key` — retrieve public VAPID key for browser push subscription
+- `GET /api/push/status` — push subscription status and active device count
+- `POST /api/push/subscribe` — register browser Web Push subscription (endpoint, p256dh, auth)
+- `POST /api/push/unsubscribe` — unsubscribe current browser device
+- `POST /api/push/revoke-all` — revoke all Web Push subscriptions across all devices
+- `POST /api/push/test` — dispatch a test Push alert to user devices
+
 **Streaming / Internal API:**
 - `GET /api/events` — main dashboard SSE stream
 - `GET /api/events/logs` — logs SSE stream
@@ -400,6 +437,7 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 │   ├── tls_config.py        # TLS endpoint validation and Certbot arguments
 │   ├── config.py            # Configuration loader
 │   ├── auth.py              # Authorization
+│   ├── integrity.py         # System integrity verification (SHA-256)
 │   ├── i18n.py              # Multilingual
 │   ├── keyboards.py         # UI generator
 │   ├── messaging.py         # Notifications
@@ -416,8 +454,9 @@ Set `WEB_PUBLIC_URL` to an `https://` origin. With an external reverse proxy, th
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
 │   │   ├── api_nodes.py     # aiohttp-based node API
 │   │   ├── api_system.py    # aiohttp-based system API
-│   │   ├── streaming.py     # SSE streams
-│   │   └── views.py         # Jinja2 HTML pages
+│   │   ├── streaming.py     # SSE streams & WebSocket terminal
+│   │   ├── views.py         # Jinja2 HTML pages
+│   │   └── webpush.py       # Web Push API (subscriptions & VAPID delivery)
 │   ├── static/              # CSS, JS
 │   └── templates/           # HTML templates
 ├── modules/                 # Functional modules (20 modules)
@@ -615,8 +654,8 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.26.0 (Build 93)<br>
-  <b>Release Date:</b> October 7, 2026<br>
+  <b>Version:</b> 1.27.0 (Build 95)<br>
+  <b>Release Date:</b> October 21, 2026<br>
   <b>License:</b> GPL-3.0 license<br>
   <b>Status:</b> Release<br>
   <br>

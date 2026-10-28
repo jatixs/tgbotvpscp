@@ -43,8 +43,8 @@ window.initSettings = function () {
     initSystemSettingsTracking();
     renderKeyboardConfig();
     updateBulkButtonsUI();
-    initChangePasswordUI();
     fetchSessions();
+    initPushNotificationsUI();
 
     // initInputScrollLogic(); 
 
@@ -720,13 +720,13 @@ function renderUsers() {
                 </td>
             </tr>`;
         }).join('');
-        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>');
-        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
+        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>', { RETURN_DOM_FRAGMENT: true });
+        tbody.replaceChildren(...safeTable.querySelector('tbody').childNodes);
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
         const noUsers = (typeof I18N !== 'undefined' && I18N.web_no_users) ? I18N.web_no_users : "No users";
-        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + noUsers + '</td></tr></tbody></table>');
-        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
+        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + noUsers + '</td></tr></tbody></table>', { RETURN_DOM_FRAGMENT: true });
+        tbody.replaceChildren(...safeTable.querySelector('tbody').childNodes);
     }
 }
 
@@ -831,8 +831,17 @@ function renderNodes() {
                         <button data-action="cancel-node-rename" data-token="${nodeId}" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
                     </div>
                 </div>
+            <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                <div class="ip-copy-container inline-flex items-center gap-1.5 group/ip" data-copy-ip="${escapeHtml(decryptedIp || '')}">
+                    <span class="ip-copy-text font-mono select-all" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">${escapeHtml(decryptedIp) || 'Unknown'}</span>
+                    ${decryptedIp && decryptedIp !== 'Unknown' && decryptedIp !== '-' ? `
+                    <button type="button" class="ip-copy-btn p-0.5 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(decryptedIp)}" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">
+                        <svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>` : ''}
+                </div>
             </td>
-            <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${escapeHtml(decryptedIp) || 'Unknown'}</td>
             <td class="px-2 sm:px-4 py-3 text-right">
                 <button data-action="delete-node" data-token="${nodeId}" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -840,12 +849,12 @@ function renderNodes() {
             </td>
         </tr>`;
         }).join('');
-        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>');
-        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
+        const safeTable = DOMPurify.sanitize('<table><tbody>' + rawHtml + '</tbody></table>', { RETURN_DOM_FRAGMENT: true });
+        tbody.replaceChildren(...safeTable.querySelector('tbody').childNodes);
         if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
     } else {
-        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + I18N.web_no_nodes + '</td></tr></tbody></table>');
-        tbody.innerHTML = safeTable.replace(/<\/?table[^>]*>/ig, '').replace(/<\/?tbody[^>]*>/ig, '');
+        const safeTable = DOMPurify.sanitize('<table><tbody><tr><td colspan="4" class="px-4 py-3 text-center text-gray-500 text-xs">' + I18N.web_no_nodes + '</td></tr></tbody></table>', { RETURN_DOM_FRAGMENT: true });
+        tbody.replaceChildren(...safeTable.querySelector('tbody').childNodes);
     }
 }
 window.startNodeRename = function (token) {
@@ -1020,6 +1029,331 @@ async function changePassword() {
     btn.disabled = false;
     btn.innerText = origText;
 }
+
+// --- WEB PUSH NOTIFICATIONS LOGIC ---
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+function arrayBufferToBase64Url(buffer) {
+    if (!buffer) return '';
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+async function getSwRegistration() {
+    if (window.swRegistration) return window.swRegistration;
+    if ('serviceWorker' in navigator) {
+        try {
+            return await navigator.serviceWorker.ready;
+        } catch (e) {
+            console.debug('Failed to get SW ready:', e);
+        }
+    }
+    return null;
+}
+
+function updatePushTestButtonState(isActive) {
+    const btn = document.getElementById('sendTestPushBtn');
+    if (!btn) return;
+    const icon = btn.querySelector('svg');
+    btn.disabled = false;
+    if (isActive) {
+        btn.className = 'flex-1 w-full sm:w-auto min-h-[38px] py-2 px-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl text-xs font-semibold sm:font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] select-none text-center';
+        if (icon) icon.className = 'h-4 w-4 shrink-0 text-blue-500';
+    } else {
+        btn.className = 'flex-1 w-full sm:w-auto min-h-[38px] py-2 px-3 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-400 dark:text-gray-500 hover:bg-gray-200/60 dark:hover:bg-white/10 rounded-xl text-xs font-semibold sm:font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.98] select-none text-center';
+        if (icon) icon.className = 'h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500';
+    }
+}
+window.updatePushTestButtonState = updatePushTestButtonState;
+
+async function initPushNotificationsUI() {
+    const toggle = document.getElementById('pushNotificationToggle');
+    const badge = document.getElementById('pushStatusBadge');
+    const warning = document.getElementById('pushHintWarning');
+
+    if (!toggle || !badge) return;
+
+    const isSupported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+    const isSecure = window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    if (!isSupported || !isSecure) {
+        toggle.disabled = true;
+        updatePushTestButtonState(false);
+        badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_unsupported) ? I18N.web_push_status_unsupported : 'Unsupported / HTTPS required';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 shrink-0 whitespace-nowrap';
+        if (warning) {
+            warning.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_unsupported) ? I18N.web_push_status_unsupported : 'Web Push requires HTTPS or localhost';
+            warning.classList.remove('hidden');
+        }
+        return;
+    }
+
+    if (Notification.permission === 'denied') {
+        toggle.checked = false;
+        toggle.disabled = false;
+        updatePushTestButtonState(false);
+        badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_blocked) ? I18N.web_push_status_blocked : 'Blocked';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 shrink-0 whitespace-nowrap';
+        if (warning) {
+            warning.textContent = (typeof I18N !== 'undefined' && I18N.web_push_permission_denied) ? I18N.web_push_permission_denied : 'Permission denied in browser settings';
+            warning.classList.remove('hidden');
+        }
+        return;
+    }
+
+    try {
+        const reg = await getSwRegistration();
+        const sub = reg ? await reg.pushManager.getSubscription() : null;
+        if (sub) {
+            toggle.checked = true;
+            updatePushTestButtonState(true);
+            badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_active) ? I18N.web_push_status_active : 'Active';
+            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 shrink-0 whitespace-nowrap';
+            if (warning) warning.classList.add('hidden');
+        } else {
+            toggle.checked = false;
+            updatePushTestButtonState(false);
+            badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
+            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap';
+            if (warning) warning.classList.add('hidden');
+        }
+    } catch (e) {
+        console.debug('Error checking push subscription:', e);
+    }
+}
+window.initPushNotificationsUI = initPushNotificationsUI;
+
+async function togglePushNotifications(checkbox) {
+    const badge = document.getElementById('pushStatusBadge');
+    const warning = document.getElementById('pushHintWarning');
+    const spinner = document.getElementById('pushToggleSpinner');
+
+    checkbox.disabled = true;
+    if (spinner) spinner.classList.remove('hidden');
+
+    if (checkbox.checked) {
+        if (badge) {
+            badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_waiting)
+                ? I18N.web_push_status_waiting
+                : ((typeof CURRENT_LANG !== 'undefined' && CURRENT_LANG === 'en') ? 'Waiting for confirmation' : 'Ожидание подтверждения');
+            badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 shrink-0 whitespace-nowrap';
+        }
+
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                checkbox.checked = false;
+                updatePushTestButtonState(false);
+                if (badge) {
+                    badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_blocked) ? I18N.web_push_status_blocked : 'Blocked';
+                    badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 shrink-0 whitespace-nowrap';
+                }
+                if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_permission_denied) ? I18N.web_push_permission_denied : 'Permission denied', 'warning');
+                return;
+            }
+
+            const resp = await fetch('/api/push/vapid-key');
+            const data = await resp.json();
+            if (!data || !data.publicKey) {
+                throw new Error(data?.error || 'Failed to get VAPID key');
+            }
+
+            const reg = await getSwRegistration();
+            if (!reg) throw new Error('Service Worker not ready');
+
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(data.publicKey)
+            });
+
+            const subPayload = {
+                endpoint: sub.endpoint,
+                keys: {
+                    p256dh: arrayBufferToBase64Url(sub.getKey('p256dh')),
+                    auth: arrayBufferToBase64Url(sub.getKey('auth'))
+                }
+            };
+
+            const saveResp = await fetch('/api/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(subPayload)
+            });
+
+            if (saveResp.ok) {
+                if (badge) {
+                    badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_active) ? I18N.web_push_status_active : 'Active';
+                    badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 shrink-0 whitespace-nowrap';
+                }
+                updatePushTestButtonState(true);
+                if (warning) warning.classList.add('hidden');
+                if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_subscribed) ? I18N.web_push_subscribed : 'Push notifications enabled!');
+            } else {
+                throw new Error('Failed to save push subscription');
+            }
+        } catch (e) {
+            console.error('Push subscribe error:', e);
+            checkbox.checked = false;
+            updatePushTestButtonState(false);
+            if (badge) {
+                badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap';
+            }
+            if (window.showToast) window.showToast(String(e.message || e), 'error');
+        } finally {
+            if (spinner) spinner.classList.add('hidden');
+            checkbox.disabled = false;
+        }
+    } else {
+        try {
+            const reg = await getSwRegistration();
+            if (reg) {
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) {
+                    const endpoint = sub.endpoint;
+                    await sub.unsubscribe();
+                    await fetch('/api/push/unsubscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ endpoint })
+                    });
+                }
+            }
+            if (badge) {
+                badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap';
+            }
+            updatePushTestButtonState(false);
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_unsubscribed) ? I18N.web_push_unsubscribed : 'Push notifications disabled');
+        } catch (e) {
+            console.error('Push unsubscribe error:', e);
+            if (window.showToast) window.showToast(String(e.message || e), 'error');
+        } finally {
+            if (spinner) spinner.classList.add('hidden');
+            checkbox.disabled = false;
+        }
+    }
+}
+window.togglePushNotifications = togglePushNotifications;
+
+async function sendTestPushNotification(btn) {
+    if (!btn) return;
+    const toggle = document.getElementById('pushNotificationToggle');
+    if (!toggle || !toggle.checked) {
+        const defaultHint = (typeof CURRENT_LANG !== 'undefined' && CURRENT_LANG === 'en')
+            ? 'Cannot send test notification: please enable Web Push first'
+            : 'Невозможно отправить тестовое уведомление: включите Web Push';
+        const hint = (typeof I18N !== 'undefined' && I18N.web_push_test_disabled_hint)
+            ? I18N.web_push_test_disabled_hint
+            : defaultHint;
+        if (window.showToast) window.showToast(hint, 'warning');
+        return;
+    }
+    const originalNodes = Array.from(btn.childNodes);
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4 text-blue-500 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+    try {
+        const resp = await fetch('/api/push/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (data && data.status === 'ok') {
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_test_success) ? I18N.web_push_test_success : 'Test notification sent!');
+        } else if (data && data.status === 'no_subscriptions') {
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_test_fail) ? I18N.web_push_test_fail : 'No active subscriptions', 'warning');
+        } else {
+            throw new Error(data?.error || 'Failed to send test push');
+        }
+    } catch (e) {
+        console.error('Test push error:', e);
+        if (window.showToast) window.showToast(String(e.message || e), 'error');
+    } finally {
+        btn.replaceChildren(...originalNodes);
+        btn.disabled = false;
+    }
+}
+window.sendTestPushNotification = sendTestPushNotification;
+
+async function revokeAllPushSubscriptions(btn) {
+    if (!btn) return;
+    const confirmMsg = (typeof I18N !== 'undefined' && I18N.web_push_revoke_confirm)
+        ? I18N.web_push_revoke_confirm
+        : 'Revoke all push subscriptions across all your devices?';
+    const confirmTitle = (typeof I18N !== 'undefined' && I18N.modal_title_confirm)
+        ? I18N.modal_title_confirm
+        : 'Confirm';
+
+    if (window.showModalConfirm) {
+        if (!await window.showModalConfirm(confirmMsg, confirmTitle)) return;
+    } else if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    const originalNodes = Array.from(btn.childNodes);
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="animate-spin h-4 w-4 text-red-500 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+
+    try {
+        try {
+            const reg = await getSwRegistration();
+            if (reg) {
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) await sub.unsubscribe();
+            }
+        } catch (swErr) {
+            console.debug('Error unsubscribing current device:', swErr);
+        }
+
+        const resp = await fetch('/api/push/revoke-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (data && data.status === 'ok') {
+            const toggle = document.getElementById('pushNotificationToggle');
+            const badge = document.getElementById('pushStatusBadge');
+            if (toggle) toggle.checked = false;
+            updatePushTestButtonState(false);
+            if (badge) {
+                badge.textContent = (typeof I18N !== 'undefined' && I18N.web_push_status_inactive) ? I18N.web_push_status_inactive : 'Disabled';
+                badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 shrink-0 whitespace-nowrap';
+            }
+            if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_push_revoked_success) ? I18N.web_push_revoked_success : 'All push subscriptions revoked!');
+        } else {
+            throw new Error(data?.error || 'Failed to revoke subscriptions');
+        }
+    } catch (e) {
+        console.error('Revoke push error:', e);
+        if (window.showToast) window.showToast(String(e.message || e), 'error');
+    } finally {
+        btn.replaceChildren(...originalNodes);
+        btn.disabled = false;
+    }
+}
+window.revokeAllPushSubscriptions = revokeAllPushSubscriptions;
 
 // --- NOTIFICATIONS MENU LOGIC ---
 let currentNodeForNotif = null;
@@ -2168,7 +2502,7 @@ document.addEventListener('app:action:revoke-session', e => {
 document.addEventListener('app:change:trigger-auto-save', e => {
     triggerAutoSave(e.detail.target.getAttribute('data-view'));
 });
-document.addEventListener('app:change:trigger-keyboard-save', e => {
+document.addEventListener('app:change:trigger-keyboard-save', () => {
     triggerKeyboardSave();
 });
 

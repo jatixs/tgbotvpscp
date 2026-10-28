@@ -292,10 +292,10 @@ async def get_user_name(bot: Bot, user_id: int) -> str:
         from .i18n import get_user_lang
 
         lang = get_user_lang(user_id)
-    except ImportError:
-        pass
-    except Exception:
-        pass
+    except ImportError as exc:
+        logging.debug("User language support unavailable while naming user %s: %s", user_id, exc)
+    except Exception as exc:
+        logging.debug("Could not resolve language for user %s: %s", user_id, exc)
     new_user_prefix = _("default_new_user_name", lang, uid="").split("_")[0]
     id_user_prefix = _("default_id_user_name", lang, uid="").split(" ")[0]
     if (
@@ -375,4 +375,3 @@ def check_user_password(user_id: int, password: str) -> bool:
     except Exception as e:
         logging.error(f"Error verifying password for {user_id}: {e}")
         return False
-

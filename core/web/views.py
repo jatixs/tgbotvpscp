@@ -1,11 +1,12 @@
 """
-Контроллеры (Views) для HTML страниц веб-панели.
-Обрабатывают GET-запросы и рендерят шаблоны для дашборда, настроек и мониторинга.
+Controllers (Views) for WebUI HTML pages.
+Handles GET requests and renders templates for dashboard, settings, and node monitoring.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import secrets
 import socket
 import time
@@ -26,14 +27,19 @@ from ..rbac import is_admin as _is_admin
 from ..rbac import is_root as _is_root
 from ..utils import encrypt_for_web, generate_favicons, get_app_version
 
-# Lazy import traffic_module when needed
 from . import auth as web_auth
+# Lazy import traffic_module when needed
+from .avatar import get_avatar_html as _get_avatar_html
 
 routes = web.RouteTableDef()
 
 TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "core" / "templates"
+CUSTOM_TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "custom" / "web" / "templates"
+
+_template_paths: list[str] = [str(CUSTOM_TEMPLATE_DIR), str(TEMPLATE_DIR)] if CUSTOM_TEMPLATE_DIR.is_dir() else [str(TEMPLATE_DIR)]
+
 JINJA_ENV = Environment(
-    loader=FileSystemLoader(str(TEMPLATE_DIR)),
+    loader=FileSystemLoader(_template_paths),
     autoescape=select_autoescape(["html", "xml"]),
 )
 APP_VERSION: Final[str] = get_app_version()
@@ -61,18 +67,7 @@ ASSET_VER: Final[str] = _compute_asset_version()
 JINJA_ENV.globals["asset_ver"] = ASSET_VER
 
 
-def _get_avatar_html(user: dict[str, Any]) -> str:
-    raw = str(user.get("photo_url", ""))
-    if raw.startswith("http"):
-        return f'<img src="{raw}" alt="ava" class="w-6 h-6 rounded-full flex-shrink-0">'
-    return f'<span class="text-lg leading-none select-none">{raw}</span>'
-
-
-def _agent_ip() -> str:
-    return str(getattr(shared_state, "AGENT_IP_CACHE", "Loading..."))
-
-
-def _collect_ipv4_addresses() -> list[str]:
+def _collect_raw_ipv4_addresses() -> list[str]:
     ips: list[str] = []
 
     try:
@@ -86,20 +81,37 @@ def _collect_ipv4_addresses() -> list[str]:
                         ip = str(addr_info.get("addr", "")).strip()
                         if ip and ip != "127.0.0.1" and not ip.startswith("169.254.") and not ip.startswith("172.17.0.1"):
                             ips.append(ip)
-            except Exception:
+            except Exception as exc:
+                logging.debug("Could not collect interface addresses for %s: %s", iface, exc)
                 continue
-    except Exception:
+    except Exception as exc:
+        logging.debug("Could not enumerate network interfaces: %s", exc)
         try:
             hostname = socket.gethostname()
             for addr in socket.getaddrinfo(hostname, None, socket.AF_INET):
                 ip = str(addr[4][0]).strip()
                 if ip and ip != "127.0.0.1" and not ip.startswith("169.254."):
                     ips.append(ip)
-        except Exception:
-            pass
+        except OSError as fallback_exc:
+            logging.debug("Could not resolve local IPv4 addresses: %s", fallback_exc)
 
+    return list(dict.fromkeys(ips))
+
+
+def _agent_ip() -> str:
+    cached = str(getattr(shared_state, "AGENT_IP_CACHE", "")).strip()
+    if cached and cached not in {"Loading...", "Unknown", "-", "None"}:
+        return cached
+    local_ips = _collect_raw_ipv4_addresses()
+    if local_ips:
+        return local_ips[0]
+    return "127.0.0.1"
+
+
+def _collect_ipv4_addresses() -> list[str]:
+    ips = _collect_raw_ipv4_addresses()
     primary_ip = _agent_ip()
-    if primary_ip not in {"", "Loading...", "Unknown", "-"}:
+    if primary_ip not in {"", "Loading...", "Unknown", "-", "None"}:
         ips.insert(0, primary_ip)
 
     return list(dict.fromkeys(ips))
@@ -137,6 +149,9 @@ async def _ensure_generated_favicons() -> None:
 
 
 def _render_html_response(template_name: str, context: dict[str, Any], request: web.Request) -> web.Response:
+    if "web_toggle_holiday_mode" not in context:
+        lang = context.get("lang") or DEFAULT_LANGUAGE
+        context["web_toggle_holiday_mode"] = _("web_toggle_holiday_mode", lang)
     template = JINJA_ENV.get_template(template_name)
     response = web.Response(text=template.render(**context), content_type="text/html")
     if hasattr(web_auth, "_set_csrf_cookie"):
@@ -203,6 +218,18 @@ async def handle_manifest(request: web.Request) -> web.StreamResponse:
     return web.json_response(manifest, content_type="application/manifest+json")
 
 
+@routes.get("/sw.js")
+async def handle_service_worker(request: web.Request) -> web.StreamResponse:
+    sw_path = Path(BASE_DIR) / "core" / "static" / "js" / "sw.js"
+    if sw_path.exists():
+        response = web.FileResponse(sw_path)
+        response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        response.headers["Service-Worker-Allowed"] = "/"
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+    return web.Response(text="// Service Worker not found", status=404, content_type="application/javascript")
+
+
 @routes.get("/api/agent/ipv4")
 async def handle_agent_ipv4(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
@@ -227,12 +254,15 @@ async def handle_agent_ipv4(request: web.Request) -> web.StreamResponse:
 async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
-        raise web.HTTPFound("/login")
+        had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
+        raise web.HTTPFound("/login?expired=1" if had_cookie else "/login")
     if not _is_admin(user):
         raise web.HTTPFound("/")
 
     lang = get_user_lang(int(user["id"]))
-    prefill_ip = request.query.get("ip", "")
+    prefill_ip = request.query.get("ip", "").strip()
+    if not prefill_ip or prefill_ip in {"Loading...", "Unknown", "-", "None"}:
+        prefill_ip = _agent_ip()
     custom_title = getattr(current_config, "WEB_METADATA", {}).get("title", "")
     page_title = custom_title if custom_title else f"{_('web_terminal_title', lang)} - {TG_BOT_NAME}"
 
@@ -255,11 +285,43 @@ async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
         "web_terminal_key_auth": _("web_terminal_key_auth", lang),
         "web_terminal_key": _("web_terminal_key", lang),
         "web_terminal_key_select": _("web_terminal_key_select", lang),
+        "web_terminal_passphrase": _("web_terminal_passphrase", lang),
+        "web_terminal_passphrase_title": _("web_terminal_passphrase_title", lang),
+        "web_terminal_passphrase_desc": _("web_terminal_passphrase_desc", lang),
+        "web_terminal_passphrase_submit": _("web_terminal_passphrase_submit", lang),
+        "web_terminal_passphrase_set": _("web_terminal_passphrase_set", lang),
+        "web_terminal_passphrase_clear": _("web_terminal_passphrase_clear", lang),
+        "modal_btn_cancel": _("modal_btn_cancel", lang),
         "web_terminal_remember": _("web_terminal_remember", lang),
         "web_terminal_status_disconnected": _("web_terminal_status_disconnected", lang),
         "web_terminal_status_connecting": _("web_terminal_status_connecting", lang),
         "web_terminal_status_connected": _("web_terminal_status_connected", lang),
         "web_terminal_error": _("web_terminal_error", lang),
+        "web_terminal_copy": _("web_terminal_copy", lang),
+        "web_terminal_cut": _("web_terminal_cut", lang),
+        "web_terminal_paste": _("web_terminal_paste", lang),
+        "web_hotkey_rmb": _("web_hotkey_rmb", lang),
+        "web_hotkey_context_menu": _("web_hotkey_context_menu", lang),
+        "web_btn_got_it": _("web_btn_got_it", lang),
+        "web_optional": _("web_optional", lang),
+        "web_toggle_visibility": _("web_toggle_visibility", lang),
+        "web_terminal_banner": _("web_terminal_banner", lang),
+        "web_terminal_welcome_hint": _("web_terminal_welcome_hint", lang),
+        "web_terminal_connecting_to": _("web_terminal_connecting_to", lang),
+        "web_terminal_connection_closed": _("web_terminal_connection_closed", lang),
+        "web_terminal_err_ws": _("web_terminal_err_ws", lang),
+        "web_terminal_err_ws_short": _("web_terminal_err_ws_short", lang),
+        "web_terminal_err_invalid_ip": _("web_terminal_err_invalid_ip", lang),
+        "web_terminal_err_invalid_user": _("web_terminal_err_invalid_user", lang),
+        "web_terminal_err_missing_host_user": _("web_terminal_err_missing_host_user", lang),
+        "web_terminal_err_access_denied": _("web_terminal_err_access_denied", lang),
+        "web_terminal_err_invalid_key": _("web_terminal_err_invalid_key", lang),
+        "web_terminal_err_bcrypt_required": _("web_terminal_err_bcrypt_required", lang),
+        "web_terminal_err_passphrase_required": _("web_terminal_err_passphrase_required", lang),
+        "web_terminal_passphrase_placeholder": _("web_terminal_passphrase_placeholder", lang),
+        "web_terminal_unit_hour": _("web_terminal_unit_hour", lang),
+        "web_terminal_unit_min": _("web_terminal_unit_min", lang),
+        "asset_ver": ASSET_VER,
         "prefill_ip": prefill_ip,
     }
 
@@ -270,7 +332,8 @@ async def handle_terminal_page(request: web.Request) -> web.StreamResponse:
 async def handle_dashboard(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
-        raise web.HTTPFound("/login")
+        had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
+        raise web.HTTPFound("/login?expired=1" if had_cookie else "/login")
 
     if web_auth.is_default_password_active(int(user["id"])):
         token = secrets.token_urlsafe(32)
@@ -314,34 +377,6 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
 
     clean_version = APP_VERSION.lstrip("v")
     display_version = f"v{clean_version}"
-    users_json = "null"
-    nodes_json = "null"
-    if is_admin:
-        ulist = [
-            {
-                "id": uid,
-                "name": shared_state.USER_NAMES.get(str(uid), f"ID: {uid}"),
-                "role": (
-                    shared_state.ALLOWED_USERS[uid].get("group", "users")
-                    if isinstance(shared_state.ALLOWED_USERS[uid], dict)
-                    else shared_state.ALLOWED_USERS[uid]
-                ),
-            }
-            for uid in shared_state.ALLOWED_USERS
-            if uid != ADMIN_USER_ID
-        ]
-        nlist = [
-            {
-                "id": node["id"],
-                "name": node.get("name", "Unknown"),
-                "ip": encrypt_for_web(node.get("ip", "Unknown")),
-                "billing_amount": node.get("billing_amount"),
-                "currency": node.get("currency", "$"),
-                "next_payment_date": node.get("next_payment_date").isoformat() if hasattr(node.get("next_payment_date"), "isoformat") else str(node.get("next_payment_date")) if node.get("next_payment_date") else None,
-                "provider_name": node.get("provider_name", "Unknown")
-            }
-            for token, node in all_nodes.items()
-        ]
 
     vnc_nodes = [{"name": _("web_notif_global_group_agent", lang), "ip": _agent_ip()}]
     for node_token, node in all_nodes.items():
@@ -366,6 +401,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "meta_locked": meta_locked,
         "web_toggle_perf_mode": _("web_toggle_perf_mode", lang),
         "web_toggle_a11y_mode": _("web_toggle_a11y_mode", lang),
+        "web_toggle_holiday_mode": _("web_toggle_holiday_mode", lang),
         "web_edit_ui": _("web_edit_ui", lang),
         "web_vnc_terminal_title": _("web_vnc_terminal_title", lang),
         "web_brand_name": TG_BOT_NAME,
@@ -409,6 +445,8 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_node_mgmt_title": _("web_node_mgmt_title", lang),
         "web_monitor_btn": _("web_monitor_btn", lang),
         "web_monitor_title": _("web_monitor_title", lang),
+        "web_vibration_label": _("web_vibration_label", lang),
+        "web_haptics_unsupported": _("web_haptics_unsupported", lang),
         "web_filter_sort_name": _("web_nodes_monitor_filter_sort_name", lang),
         "web_filter_sort_ping": _("web_nodes_monitor_filter_sort_ping", lang),
         "web_filter_sort_custom": _("web_nodes_monitor_filter_sort_custom", lang),
@@ -432,6 +470,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_node_token": _("web_node_token", lang),
         "web_node_cmd": _("web_node_cmd", lang),
         "web_copied": _("web_copied", lang),
+        "web_copy_ip": _("web_copy_ip", lang),
         "web_resources_chart": _("web_resources_chart", lang),
         "web_network_chart": _("web_network_chart", lang),
         "web_node_id_label": _("web_node_id_label", lang),
@@ -477,6 +516,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_log_empty": _("web_log_empty", lang),
             "web_access_denied": _("web_access_denied", lang),
             "web_copied": _("web_copied", lang),
+            "web_copy_ip": _("web_copy_ip", lang),
             "web_no_notifications": _("web_no_notifications", lang),
             "web_notif_source_agent": _("web_notif_source_agent", lang),
             "web_notif_source_node": _("web_notif_source_node", lang),
@@ -513,6 +553,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "unit_gbps": _("unit_gbps", lang),
             "web_haptics_on": _("web_haptics_on", lang),
             "web_haptics_off": _("web_haptics_off", lang),
+            "web_haptics_unsupported": _("web_haptics_unsupported", lang),
             "web_search_nothing_found": _("web_search_nothing_found", lang),
             "web_node_modal_loading": _("web_node_modal_loading", lang),
             "web_node_status_online": _("web_node_status_online", lang),
@@ -551,6 +592,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_log_connecting": _("web_log_connecting", lang),
             "web_status_restart": _("web_status_restart", lang),
             "web_session_expired": _("web_session_expired", lang),
+            "web_session_expired_desc": _("web_session_expired_desc", lang),
             "web_please_relogin": _("web_please_relogin", lang),
             "web_login_btn": _("web_login_btn", lang),
             "web_weak_conn": _("web_weak_conn", lang),
@@ -558,11 +600,24 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_refresh_stream": _("web_refresh_stream", lang),
             "web_fatal_conn": _("web_fatal_conn", lang),
             "web_server_rebooting": _("web_server_rebooting", lang),
+            "web_server_rebooting_desc": _("web_server_rebooting_desc", lang),
+            "web_server_restored": _("web_server_restored", lang),
+            "web_panel_unreachable": _("web_panel_unreachable", lang),
+            "web_panel_unreachable_desc": _("web_panel_unreachable_desc", lang),
+            "web_client_offline": _("web_client_offline", lang),
+            "web_client_offline_desc": _("web_client_offline_desc", lang),
+            "web_client_online": _("web_client_online", lang),
+            "web_slow_connection": _("web_slow_connection", lang),
+            "web_slow_connection_desc": _("web_slow_connection_desc", lang),
+            "web_check_again": _("web_check_again", lang),
             "web_reloading_page": _("web_reloading_page", lang),
             "web_perf_mode_on": _("web_perf_mode_on", lang),
             "web_perf_mode_off": _("web_perf_mode_off", lang),
             "web_a11y_mode_on": _("web_a11y_mode_on", lang),
             "web_a11y_mode_off": _("web_a11y_mode_off", lang),
+            "web_toggle_holiday_mode": _("web_toggle_holiday_mode", lang),
+            "web_holiday_mode_on": _("web_holiday_mode_on", lang),
+            "web_holiday_mode_off": _("web_holiday_mode_off", lang),
             "web_node_rename_success": _("web_node_rename_success", lang),
             "web_node_rename_error": _("web_node_rename_error", lang),
             "web_traffic_reset_confirm": _("web_traffic_reset_confirm", lang),
@@ -605,7 +660,8 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
 async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
-        raise web.HTTPFound("/login")
+        had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
+        raise web.HTTPFound("/login?expired=1" if had_cookie else "/login")
 
     user_id = int(user["id"])
     lang = get_user_lang(user_id)
@@ -635,6 +691,13 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
     from core.config import get_bot_config
     mb_config = await get_bot_config("master_billing") or {}
 
+    all_nodes = await nodes_db.get_all_nodes()
+    vnc_nodes = [{"name": _("web_notif_global_group_agent", lang), "ip": _agent_ip()}]
+    for node_token, node in all_nodes.items():
+        ip = str(node.get("ip", "")).strip()
+        if ip and ip not in {"Unknown", "Loading...", "-"}:
+            vnc_nodes.append({"name": node.get("name", "Unknown"), "ip": ip})
+
     settings_btn = ""
     if is_admin:
         settings_btn = f'<a href="/settings" class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400" title="{_("web_settings_button", lang)}"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></a>'
@@ -652,6 +715,9 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "user_role_level": get_role_level(user_id),
         "user_is_admin": is_admin,
         "role_badge": role_badge_html,
+        "vnc_nodes": vnc_nodes,
+        "web_vnc_select_server": _("web_vnc_select_server", lang),
+        "web_vnc_terminal_title": _("web_vnc_terminal_title", lang),
         "web_monitor_title": _("web_nodes_monitor_title", lang),
         "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
         "web_select_all": _("web_nodes_monitor_select_all", lang),
@@ -668,6 +734,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_filter_restarting": _("web_nodes_monitor_filter_restarting", lang),
         "web_filter_btn": _("web_nodes_monitor_filter_btn", lang),
         "web_filter_title": _("web_nodes_monitor_filter_title", lang),
+        "web_vibration_label": _("web_vibration_label", lang),
+        "web_haptics_unsupported": _("web_haptics_unsupported", lang),
         "web_filter_status": _("web_nodes_monitor_filter_status", lang),
         "web_filter_cpu_load": _("web_nodes_monitor_filter_cpu_load", lang),
         "web_filter_high": _("web_nodes_monitor_filter_high", lang),
@@ -694,6 +762,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_cpu": _("web_nodes_monitor_cpu", lang),
         "web_ram": _("web_nodes_monitor_ram", lang),
         "web_disk": _("web_nodes_monitor_disk", lang),
+        "web_copy_ip": _("web_copy_ip", lang),
         "web_show_more": _("web_show_more", lang),
         "web_show_less": _("web_show_less", lang),
         "web_node_details": _("web_nodes_monitor_details", lang),
@@ -791,10 +860,13 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
             "unit_gbps": _("unit_gbps", lang),
             "web_haptics_on": _("web_haptics_on", lang),
             "web_haptics_off": _("web_haptics_off", lang),
+            "web_haptics_unsupported": _("web_haptics_unsupported", lang),
             "web_copied": _("web_copied", lang),
+            "web_copy_ip": _("web_copy_ip", lang),
             "web_error_short": _("web_error_short", lang),
             "web_weak_conn": _("web_weak_conn", lang),
             "web_session_expired": _("web_session_expired", lang),
+            "web_session_expired_desc": _("web_session_expired_desc", lang),
             "web_please_relogin": _("web_please_relogin", lang),
             "web_login_btn": _("web_login_btn", lang),
             "web_conn_problem": _("web_conn_problem", lang),
@@ -802,6 +874,16 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
             "web_fatal_conn": _("web_fatal_conn", lang),
             "web_reloading_page": _("web_reloading_page", lang),
             "web_server_rebooting": _("web_server_rebooting", lang),
+            "web_server_rebooting_desc": _("web_server_rebooting_desc", lang),
+            "web_server_restored": _("web_server_restored", lang),
+            "web_panel_unreachable": _("web_panel_unreachable", lang),
+            "web_panel_unreachable_desc": _("web_panel_unreachable_desc", lang),
+            "web_client_offline": _("web_client_offline", lang),
+            "web_client_offline_desc": _("web_client_offline_desc", lang),
+            "web_client_online": _("web_client_online", lang),
+            "web_slow_connection": _("web_slow_connection", lang),
+            "web_slow_connection_desc": _("web_slow_connection_desc", lang),
+            "web_check_again": _("web_check_again", lang),
             "web_nodes_monitor_filter_reset": _("web_nodes_monitor_filter_reset", lang),
             "modal_btn_ok": _("modal_btn_ok", lang),
             "modal_btn_cancel": _("modal_btn_cancel", lang),
@@ -827,7 +909,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
 async def handle_settings_page(request: web.Request) -> web.StreamResponse:
     user = web_auth.get_current_user(request)
     if not user:
-        raise web.HTTPFound("/login")
+        had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
+        raise web.HTTPFound("/login?expired=1" if had_cookie else "/login")
 
     user_id = int(user["id"])
     role = str(user.get("role", ROLE_USER))
@@ -888,6 +971,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_saved_btn": _("web_saved_btn", lang),
         "web_haptics_on": _("web_haptics_on", lang),
         "web_haptics_off": _("web_haptics_off", lang),
+        "web_haptics_unsupported": _("web_haptics_unsupported", lang),
         "web_save_btn": _("web_save_btn", lang),
         "web_change_btn": _("web_change_btn", lang),
         "notifications_alert_name_res": _("notifications_alert_name_res", lang),
@@ -969,6 +1053,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_click_copy": _("web_click_copy", lang),
         "web_server_name_placeholder": _("web_server_name_placeholder", lang),
         "web_session_expired": _("web_session_expired", lang),
+        "web_session_expired_desc": _("web_session_expired_desc", lang),
         "web_please_relogin": _("web_please_relogin", lang),
         "web_login_btn": _("web_login_btn", lang),
         "web_add_user_prompt": _("web_add_user_prompt", lang),
@@ -977,6 +1062,16 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_refresh_stream": _("web_refresh_stream", lang),
         "web_fatal_conn": _("web_fatal_conn", lang),
         "web_server_rebooting": _("web_server_rebooting", lang),
+        "web_server_rebooting_desc": _("web_server_rebooting_desc", lang),
+        "web_server_restored": _("web_server_restored", lang),
+        "web_panel_unreachable": _("web_panel_unreachable", lang),
+        "web_panel_unreachable_desc": _("web_panel_unreachable_desc", lang),
+        "web_client_offline": _("web_client_offline", lang),
+        "web_client_offline_desc": _("web_client_offline_desc", lang),
+        "web_client_online": _("web_client_online", lang),
+        "web_slow_connection": _("web_slow_connection", lang),
+        "web_slow_connection_desc": _("web_slow_connection_desc", lang),
+        "web_check_again": _("web_check_again", lang),
         "web_reloading_page": _("web_reloading_page", lang),
         "web_perf_mode_on": _("web_perf_mode_on", lang),
         "web_perf_mode_off": _("web_perf_mode_off", lang),
@@ -1013,6 +1108,23 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_billing_status": _("web_billing_status", lang),
         "web_ping_target_internal": _("web_ping_target_internal", lang),
         "web_ping_target_no_nodes": _("web_ping_target_no_nodes", lang),
+        "web_push_title": _("web_push_title", lang),
+        "web_push_desc": _("web_push_desc", lang),
+        "web_push_status_active": _("web_push_status_active", lang),
+        "web_push_status_inactive": _("web_push_status_inactive", lang),
+        "web_push_status_waiting": _("web_push_status_waiting", lang),
+        "web_push_status_blocked": _("web_push_status_blocked", lang),
+        "web_push_status_unsupported": _("web_push_status_unsupported", lang),
+        "web_push_btn_test": _("web_push_btn_test", lang),
+        "web_push_btn_revoke": _("web_push_btn_revoke", lang),
+        "web_push_revoke_confirm": _("web_push_revoke_confirm", lang),
+        "web_push_revoked_success": _("web_push_revoked_success", lang),
+        "web_push_test_success": _("web_push_test_success", lang),
+        "web_push_test_fail": _("web_push_test_fail", lang),
+        "web_push_test_disabled_hint": _("web_push_test_disabled_hint", lang),
+        "web_push_subscribed": _("web_push_subscribed", lang),
+        "web_push_unsubscribed": _("web_push_unsubscribed", lang),
+        "web_push_permission_denied": _("web_push_permission_denied", lang),
     }
     for btn_key, conf_key in BTN_CONFIG_MAP.items():
         i18n_data[f"lbl_{conf_key}"] = _(btn_key, lang)
@@ -1094,6 +1206,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_save_btn": _("web_save_btn", lang),
         "web_users_section": _("web_users_section", lang),
         "web_add_user_btn": _("web_add_user_btn", lang),
+        "web_vibration_label": _("web_vibration_label", lang),
+        "web_haptics_unsupported": _("web_haptics_unsupported", lang),
         "web_user_id": _("web_user_id", lang),
         "web_user_name": _("web_user_name", lang),
         "web_user_role": _("web_user_role", lang),
@@ -1165,6 +1279,10 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "billing_toggle_reminder": _("billing_toggle_reminder", lang),
         "user_alerts": user_alerts,
         "user_alerts_json": json.dumps(user_alerts),
+        "web_push_title": _("web_push_title", lang),
+        "web_push_desc": _("web_push_desc", lang),
+        "web_push_btn_test": _("web_push_btn_test", lang),
+        "web_push_btn_revoke": _("web_push_btn_revoke", lang),
         "i18n_json": json.dumps(i18n_data),
     }
 
@@ -1229,6 +1347,8 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "login_secure_gateway",
         "login_telegram_id_label",
         "login_via_telegram_btn",
+        "login_or_id_link",
+        "login_or_tg_button",
         "web_save_btn",
         "web_saving_btn",
         "web_logging_in",
@@ -1245,6 +1365,15 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "web_perf_mode_off",
         "web_a11y_mode_on",
         "web_a11y_mode_off",
+        "web_session_expired",
+        "web_session_expired_desc",
+        "web_please_relogin",
+        "web_server_rebooting",
+        "web_server_rebooting_desc",
+        "web_server_restored",
+        "web_client_offline",
+        "web_client_offline_desc",
+        "web_client_online",
     ]
     i18n_all: dict[str, dict[str, str]] = {}
     for locale in ["ru", "en"]:
@@ -1257,6 +1386,9 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
     injection = f"{json.dumps(current_data)};\n        const I18N_ALL = {json.dumps(i18n_all)}"
     is_default_pass = web_auth.is_default_password_active(ADMIN_USER_ID)
 
+    security_settings = await current_config.get_bot_config("security_settings", {})
+    telegram_only_mode = bool(security_settings.get("telegram_only_mode", False))
+
     context = {
         "web_title": page_title,
         "web_favicon": web_meta.get("favicon", "/static/favicon.ico"),
@@ -1266,17 +1398,23 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "web_default_pass_alert": _("web_default_pass_alert", lang),
         "error_block": "",
         "bot_username": web_auth.BOT_USERNAME_CACHE or "",
+        "tg_client_id": current_config.get_telegram_client_id(),
+        "telegram_only_mode": telegram_only_mode,
         "web_version": CACHE_VER,
         "current_lang": lang,
         "i18n_json": injection,
         "login_telegram_id_label": _("login_telegram_id_label", lang),
         "login_via_telegram_btn": _("login_via_telegram_btn", lang),
+        "login_or_id_link": _("login_or_id_link", lang),
+        "login_or_tg_button": _("login_or_tg_button", lang),
         "web_toggle_perf_mode": _("web_toggle_perf_mode", lang),
         "web_toggle_a11y_mode": _("web_toggle_a11y_mode", lang),
     }
 
     template = JINJA_ENV.get_template("login.html")
     response = web.Response(text=template.render(**context), content_type="text/html")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
     if hasattr(web_auth, "_set_csrf_cookie"):
         web_auth._set_csrf_cookie(response, request)
     return response

@@ -28,6 +28,32 @@ TRAFFIC_OFFSET = {"rx": 0, "tx": 0}
 STARTUP_TIME = time.time()
 # Flag: was it a server reboot (True) or just a bot restart (False)
 IS_SERVER_REBOOT = True 
+_state_loaded = False
+
+TRAFFIC_MONITORS_FILE = os.path.join(config.CONFIG_DIR, "traffic_active_monitors.json")
+
+
+def _load_active_monitors() -> dict[int, int]:
+    """Loads active traffic monitor message IDs (user_id -> message_id)."""
+    try:
+        if os.path.exists(TRAFFIC_MONITORS_FILE):
+            with open(TRAFFIC_MONITORS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return {int(k): int(v) for k, v in data.items()}
+    except Exception as exc:
+        logging.debug("Unable to load active traffic monitors: %s", exc)
+    return {}
+
+
+def _save_active_monitors(monitors: dict[int, int]) -> None:
+    """Saves active traffic monitor message IDs to disk."""
+    try:
+        os.makedirs(os.path.dirname(TRAFFIC_MONITORS_FILE), exist_ok=True)
+        with open(TRAFFIC_MONITORS_FILE, "w", encoding="utf-8") as f:
+            json.dump({str(k): v for k, v in monitors.items()}, f, indent=2)
+    except Exception as exc:
+        logging.debug("Unable to save active traffic monitors: %s", exc)
 
 
 def get_button() -> KeyboardButton:
@@ -47,9 +73,22 @@ def register_handlers(dp: Dispatcher):
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     load_traffic_state()
+    saved_monitors = _load_active_monitors()
+    if saved_monitors:
+        shared_state.TRAFFIC_MESSAGE_IDS.update(saved_monitors)
     monitor_task = asyncio.create_task(traffic_monitor(bot), name="TrafficMonitor")
     backup_task = asyncio.create_task(periodic_backup_task(), name="TrafficBackup")
     return [monitor_task, backup_task]
+
+
+def save_current_traffic_backup() -> None:
+    """Saves current traffic to disk immediately."""
+    try:
+        rx, tx = get_current_traffic_total()
+        save_backup_file(rx, tx)
+        logging.info("Traffic backup saved successfully.")
+    except Exception as exc:
+        logging.debug("Failed to save traffic backup: %s", exc)
 
 
 def get_current_traffic_total():
@@ -57,6 +96,8 @@ def get_current_traffic_total():
     Returns tuple (rx_total, tx_total) considering offset.
     Used here, in WebUI, and selftest.
     """
+    if not _state_loaded:
+        load_traffic_state()
     counters = psutil.net_io_counters()
     rx_total = TRAFFIC_OFFSET["rx"] + counters.bytes_recv
     tx_total = TRAFFIC_OFFSET["tx"] + counters.bytes_sent
@@ -66,7 +107,8 @@ def get_current_traffic_total():
 
 def load_traffic_state():
     """Loads the last backup and calculates offset at startup."""
-    global IS_SERVER_REBOOT
+    global IS_SERVER_REBOOT, _state_loaded
+    _state_loaded = True
     try:
         backups = sorted(glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json")))
         if not backups:
@@ -170,8 +212,8 @@ async def traffic_handler(message: types.Message):
         if msg_id:
             try:
                 await message.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.debug("Unable to delete previous traffic monitor message: %s", exc)
     await delete_previous_message(user_id, command, chat_id, message.bot)
 
     try:
@@ -190,6 +232,7 @@ async def traffic_handler(message: types.Message):
             msg_text, reply_markup=keyboard, parse_mode="HTML"
         )
         shared_state.TRAFFIC_MESSAGE_IDS[user_id] = sent_message.message_id
+        _save_active_monitors(shared_state.TRAFFIC_MESSAGE_IDS)
         MESSAGE_EDIT_THROTTLE[sent_message.message_id] = time.time()
     except Exception as e:
         logging.error(f"Error starting traffic monitor for {user_id}: {e}")
@@ -203,6 +246,7 @@ async def stop_traffic_handler(callback: types.CallbackQuery):
     lang = get_user_lang(user_id)
     bot = callback.bot
     message_id_to_delete = shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+    _save_active_monitors(shared_state.TRAFFIC_MESSAGE_IDS)
     shared_state.TRAFFIC_PREV.pop(user_id, None)
     if message_id_to_delete:
         try:
@@ -289,9 +333,11 @@ async def traffic_monitor(bot: Bot):
                 if "message is not modified" in str(e).lower():
                     continue
                 shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+                _save_active_monitors(shared_state.TRAFFIC_MESSAGE_IDS)
             except Exception as e:
                 logging.error(f"Traffic monitor generic error: {e}")
                 shared_state.TRAFFIC_MESSAGE_IDS.pop(user_id, None)
+                _save_active_monitors(shared_state.TRAFFIC_MESSAGE_IDS)
         await asyncio.sleep(1)
 
 
@@ -309,7 +355,7 @@ async def reset_stats_handler(callback: types.CallbackQuery):
         files = glob.glob(os.path.join(config.TRAFFIC_BACKUP_DIR, "traffic_backup_*.json"))
         for f in files:
             os.remove(f)
-    except Exception:
-        pass
+    except OSError as exc:
+        logging.warning("Unable to remove old traffic backups after reset: %s", exc)
     
     await callback.answer(get_text("traffic_reset_done", get_user_lang(callback.from_user.id)))

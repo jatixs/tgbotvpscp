@@ -5,12 +5,22 @@ AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
 AUTO_MODE=false
 MIGRATE_ARGS=""
+CLI_LANG=""
+ORIGINAL_ARGS=("$@")
 
-for arg in "$@"; do
-    case $arg in
+for ((i=1; i<=$#; i++)); do
+    arg="${!i}"
+    case "$arg" in
         --agent=*) AUTO_AGENT_URL="${arg#*=}"; AUTO_MODE=true ;;
         --token=*) AUTO_NODE_TOKEN="${arg#*=}"; AUTO_MODE=true ;;
         --branch=*) GIT_BRANCH="${arg#*=}" ;;
+        --lang=*) CLI_LANG="${arg#*=}" ;;
+        --lang|-l)
+            next_idx=$((i+1))
+            if [ $next_idx -le $# ]; then
+                CLI_LANG="${!next_idx}"
+            fi
+            ;;
         main|develop) GIT_BRANCH="$arg" ;;
     esac
 done
@@ -50,6 +60,120 @@ GITHUB_REPO_URL="https://github.com/${GITHUB_REPO}.git"
 
 C_RESET='\033[0m'; C_RED='\033[0;31m'; C_GREEN='\033[0;32m'; C_YELLOW='\033[0;33m'; C_BLUE='\033[0;34m'; C_CYAN='\033[0;36m'; C_BOLD='\033[1m'
 msg_info() { echo -e "${C_CYAN}🔵 $1${C_RESET}"; }; msg_success() { echo -e "${C_GREEN}✅ $1${C_RESET}"; }; msg_warning() { echo -e "${C_YELLOW}⚠️  $1${C_RESET}"; }; msg_error() { echo -e "${C_RED}❌ $1${C_RESET}"; };
+
+# --- Language Selection and Dispatch ---
+TARGET_LANG=""
+
+# 1. Check CLI parameter --lang
+if [ -n "$CLI_LANG" ]; then
+    case "${CLI_LANG,,}" in
+        ru|russian) TARGET_LANG="ru" ;;
+        en|english) TARGET_LANG="en" ;;
+    esac
+fi
+
+# 2. Check environment variables
+if [ -z "$TARGET_LANG" ]; then
+    for env_val in "$DEFAULT_LANGUAGE" "$DEPLOY_LANG" "$TG_DEFAULT_LANGUAGE"; do
+        if [ -n "$env_val" ]; then
+            case "${env_val,,}" in
+                ru|russian) TARGET_LANG="ru"; break ;;
+                en|english) TARGET_LANG="en"; break ;;
+            esac
+        fi
+    done
+fi
+
+# 3. Check active .env file
+if [ -z "$TARGET_LANG" ] && [ -f "${ENV_FILE}" ]; then
+    val=$( (sudo grep -E '^[[:space:]]*DEFAULT_LANGUAGE=' "${ENV_FILE}" 2>/dev/null || grep -E '^[[:space:]]*DEFAULT_LANGUAGE=' "${ENV_FILE}" 2>/dev/null) | tail -n 1 | cut -d'=' -f2- | tr -d '"'\'' ' | tr -d '\r\n')
+    case "${val,,}" in
+        ru|russian) TARGET_LANG="ru" ;;
+        en|english) TARGET_LANG="en" ;;
+    esac
+fi
+
+# 4. Check backup .env file
+if [ -z "$TARGET_LANG" ] && [ -f "${ENV_BACKUP_FILE}" ]; then
+    val=$( (sudo grep -E '^[[:space:]]*DEFAULT_LANGUAGE=' "${ENV_BACKUP_FILE}" 2>/dev/null || grep -E '^[[:space:]]*DEFAULT_LANGUAGE=' "${ENV_BACKUP_FILE}" 2>/dev/null) | tail -n 1 | cut -d'=' -f2- | tr -d '"'\'' ' | tr -d '\r\n')
+    case "${val,,}" in
+        ru|russian) TARGET_LANG="ru" ;;
+        en|english) TARGET_LANG="en" ;;
+    esac
+fi
+
+# 5. Interactive prompt if not detected in ENV
+if [ -z "$TARGET_LANG" ]; then
+    if [ "$AUTO_MODE" = true ] || [ ! -t 0 ]; then
+        TARGET_LANG="en"
+    else
+        clear 2>/dev/null || true
+        echo -e "${C_CYAN}╔═══════════════════════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_CYAN}║         VPS Manager Bot — Deployment Wizard           ║${C_RESET}"
+        echo -e "${C_CYAN}╚═══════════════════════════════════════════════════════╝${C_RESET}"
+        echo -e "  ${C_BOLD}Select installation language / Выберите язык установки:${C_RESET}"
+        echo "--------------------------------------------------------"
+        echo -e "  1) ${C_GREEN}English${C_RESET} [Default / По умолчанию]"
+        echo -e "  2) ${C_GREEN}Русский${C_RESET} (Russian)"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Your choice / Ваш выбор [1-2] (default: 1): ${C_RESET}")" lang_choice
+        case "$lang_choice" in
+            2|[rR][uU]|[rR][uU][sS]*) TARGET_LANG="ru" ;;
+            *) TARGET_LANG="en" ;;
+        esac
+    fi
+fi
+
+export DEFAULT_LANGUAGE="$TARGET_LANG"
+
+# If Russian is selected in deploy_en.sh, switch to deploy.sh
+if [ "$TARGET_LANG" = "ru" ]; then
+    FORWARD_ARGS=()
+    skip_next=false
+    for arg in "${ORIGINAL_ARGS[@]}"; do
+        if [ "$skip_next" = true ]; then
+            skip_next=false
+            continue
+        fi
+        case "$arg" in
+            --lang=*) ;;
+            --lang|-l) skip_next=true ;;
+            *) FORWARD_ARGS+=("$arg") ;;
+        esac
+    done
+    FORWARD_ARGS=("--lang=ru" "${FORWARD_ARGS[@]}")
+
+    local_script=""
+    if [ -n "${BASH_SOURCE[0]}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+        if [ -f "${script_dir}/deploy.sh" ]; then
+            local_script="${script_dir}/deploy.sh"
+        fi
+    fi
+    if [ -z "$local_script" ] && [ -f "./deploy.sh" ]; then
+        local_script="./deploy.sh"
+    elif [ -z "$local_script" ] && [ -f "${BOT_INSTALL_PATH}/deploy.sh" ]; then
+        local_script="${BOT_INSTALL_PATH}/deploy.sh"
+    fi
+
+    if [ -n "$local_script" ]; then
+        exec bash "$local_script" "${FORWARD_ARGS[@]}"
+    else
+        raw_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/deploy.sh"
+        tmp_script=$(mktemp /tmp/tgbot_deploy_XXXXXX.sh 2>/dev/null || echo "/tmp/tgbot_deploy_ru.sh")
+        if command -v wget >/dev/null 2>&1; then
+            wget -qO "$tmp_script" "$raw_url"
+        elif command -v curl >/dev/null 2>&1; then
+            curl -fsSL -o "$tmp_script" "$raw_url"
+        else
+            msg_error "Neither wget nor curl found to download deploy.sh."
+            exit 1
+        fi
+        chmod +x "$tmp_script"
+        exec bash "$tmp_script" "${FORWARD_ARGS[@]}"
+    fi
+fi
+# --- End Language Selection ---
 
 msg_question() {
     local prompt="$1"
@@ -217,6 +341,62 @@ agent_install_header() {
     op_header "AGENT ${verb} ($(mode_label "$1" "$2"))"
 }
 
+ensure_integrity_tools_available() {
+    # 1. If BOT_INSTALL_PATH already has updated manage.py with integrity, we're good
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        return 0
+    fi
+    # 2. If BOT_INSTALL_PATH has core/integrity.py that can be run directly, we're good
+    if [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        return 0
+    fi
+
+    # 3. If running deploy.sh from a directory that has core/integrity.py and manage.py
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+    if [ -f "${script_dir}/core/integrity.py" ] && [ -f "${script_dir}/manage.py" ] && grep -q "integrity" "${script_dir}/manage.py" 2>/dev/null; then
+        sudo mkdir -p "${BOT_INSTALL_PATH}/core" 2>/dev/null || true
+        sudo cp -f "${script_dir}/core/integrity.py" "${BOT_INSTALL_PATH}/core/integrity.py" 2>/dev/null || true
+        sudo cp -f "${script_dir}/manage.py" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null || true
+        if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+            sudo chown ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/core/integrity.py" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null || true
+        fi
+        return 0
+    fi
+
+    # 4. If BOT_INSTALL_PATH has git, fetch and checkout manage.py and core/integrity.py from origin/$GIT_BRANCH
+    if [ -d "${BOT_INSTALL_PATH}/.git" ]; then
+        cd "${BOT_INSTALL_PATH}" || return 1
+        local exec_cmd=""
+        if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then exec_cmd="sudo -u ${SERVICE_USER}"; fi
+        $exec_cmd git fetch origin "$GIT_BRANCH" >/dev/null 2>&1 || true
+        $exec_cmd git checkout "origin/${GIT_BRANCH}" -- manage.py core/integrity.py >/dev/null 2>&1 || true
+        cd - >/dev/null 2>&1 || true
+    fi
+
+    # 5. Check again
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        return 0
+    fi
+    if [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        return 0
+    fi
+
+    return 1
+}
+
+run_integrity_cmd() {
+    local py_bin="python3"
+    if [ -x "${VENV_PATH}/bin/python3" ]; then py_bin="${VENV_PATH}/bin/python3"; fi
+
+    if [ -f "${BOT_INSTALL_PATH}/manage.py" ] && grep -q "integrity" "${BOT_INSTALL_PATH}/manage.py" 2>/dev/null; then
+        $py_bin "${BOT_INSTALL_PATH}/manage.py" integrity "$@"
+    elif [ -f "${BOT_INSTALL_PATH}/core/integrity.py" ]; then
+        $py_bin "${BOT_INSTALL_PATH}/core/integrity.py" "$@" --repo-root "${BOT_INSTALL_PATH}"
+    else
+        return 1
+    fi
+}
+
 check_integrity() {
     INTEGRITY_STATUS=""
     if [ ! -d "${BOT_INSTALL_PATH}" ] || [ ! -f "${ENV_FILE}" ]; then
@@ -230,20 +410,39 @@ check_integrity() {
         INTEGRITY_STATUS="${C_GREEN}🛡️ NODE Mode (Git not required)${C_RESET}"
     elif [ -d "${BOT_INSTALL_PATH}/.git" ]; then
         cd "${BOT_INSTALL_PATH}" || return
-        git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
-        local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py"
-        local EXISTING_FILES=""
-        for f in $FILES_TO_CHECK; do
-            if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
-        done
-        if [ -z "$EXISTING_FILES" ]; then
-            INTEGRITY_STATUS="${C_YELLOW}⚠️ Files not found${C_RESET}"
-        else
-            local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
-            if [ -n "$DIFF" ]; then
-                INTEGRITY_STATUS="${C_RED}⚠️ INTEGRITY VIOLATED (Files modified locally)${C_RESET}"
+        local json_report=""
+        if ensure_integrity_tools_available; then
+            json_report=$(run_integrity_cmd check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        fi
+
+        if [ -n "$json_report" ]; then
+            local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
+            local mod_count=$(echo "$json_report" | grep -oP '"rel_path"' | wc -l)
+            if [ "$status" == "OK" ]; then
+                INTEGRITY_STATUS="${C_GREEN}🛡️ SHA-256 verified (${GIT_BRANCH})${C_RESET}"
+            elif [ "$status" == "CUSTOM_ACTIVE" ]; then
+                INTEGRITY_STATUS="${C_GREEN}🛡️ SHA-256 verified + 🧩 Custom active${C_RESET}"
+            elif [ "$status" == "MODIFIED" ]; then
+                INTEGRITY_STATUS="${C_YELLOW}⚠️ Local modifications (${mod_count} files)${C_RESET}"
             else
                 INTEGRITY_STATUS="${C_GREEN}🛡️ Code verified${C_RESET}"
+            fi
+        else
+            git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+            local FILES_TO_CHECK="core modules bot.py watchdog.py migrate.py manage.py network_validation.py"
+            local EXISTING_FILES=""
+            for f in $FILES_TO_CHECK; do
+                if [ -e "${BOT_INSTALL_PATH}/$f" ]; then EXISTING_FILES="$EXISTING_FILES $f"; fi
+            done
+            if [ -z "$EXISTING_FILES" ]; then
+                INTEGRITY_STATUS="${C_YELLOW}⚠️ Files not found${C_RESET}"
+            else
+                local DIFF=$(git diff --name-only HEAD -- $EXISTING_FILES 2>/dev/null | grep -v '^core/static/vendor/')
+                if [ -n "$DIFF" ]; then
+                    INTEGRITY_STATUS="${C_YELLOW}⚠️ Files modified locally${C_RESET}"
+                else
+                    INTEGRITY_STATUS="${C_GREEN}🛡️ Code verified${C_RESET}"
+                fi
             fi
         fi
         cd - >/dev/null
@@ -1220,9 +1419,16 @@ install_ookla_speedtest() {
 
 ask_env_details() {
     msg_info "Entering .env data..."
-    msg_question "Bot Token: " T; msg_question "Admin ID: " A; msg_question "Username (opt): " U; msg_question "Bot Name (opt): " N
+    msg_question "Bot Token: " T; msg_question "Admin ID: " A; msg_question "Username (optional): " U; msg_question "Bot Name (optional): " N
+    local default_cid=""
+    if [ -n "$T" ] && [[ "$T" =~ ^([0-9]+): ]]; then
+        default_cid="${BASH_REMATCH[1]}"
+    fi
+    msg_question "Telegram Client ID (@BotFather -> Login Widget) [${default_cid}]: " CID_INPUT
+    TG_CLIENT_ID="${CID_INPUT:-$default_cid}"
+    msg_question "Telegram Client Secret (optional): " TG_CLIENT_SECRET
     msg_question "Internal Web Port [8080]: " P; if [ -z "$P" ]; then WEB_PORT="8080"; else WEB_PORT="$P"; fi
-    msg_question "Sentry DSN (opt): " SENTRY_DSN
+    msg_question "Sentry DSN (optional): " SENTRY_DSN
 
     msg_question "Enable Web-UI? (y/n) [y]: " W
     if [[ "$W" =~ ^[Nn]$ ]]; then
@@ -1285,7 +1491,7 @@ ask_env_details() {
         }
     fi
     ensure_data_encryption_key
-    export T A U N WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PUBLIC_URL WEB_TLS_MODE GEN_PASS SENTRY_DSN
+    export T A U N TG_CLIENT_ID TG_CLIENT_SECRET WEB_PORT ENABLE_WEB SETUP_HTTPS HTTPS_DOMAIN HTTPS_EMAIL HTTPS_PORT WEB_PUBLIC_URL WEB_TLS_MODE GEN_PASS SENTRY_DSN
 }
 
 write_env_file() {
@@ -1316,6 +1522,8 @@ TG_BOT_TOKEN="${T}"
 TG_ADMIN_ID="${A}"
 TG_ADMIN_USERNAME="${U}"
 TG_BOT_NAME="${N}"
+TG_CLIENT_ID="${TG_CLIENT_ID}"
+TG_CLIENT_SECRET="${TG_CLIENT_SECRET}"
 DATA_ENCRYPTION_KEY="${DATA_ENCRYPTION_KEY}"
 WEB_SERVER_HOST="${web_server_host}"
 WEB_SERVER_PORT="${WEB_PORT}"
@@ -1334,6 +1542,7 @@ DEBUG="${debug_setting}"
 SENTRY_DSN="${SENTRY_DSN}"
 INSTALLED_VERSION="${ver}"
 COMPOSE_PROFILES="${compose_profile}"
+DEFAULT_LANGUAGE="${TARGET_LANG:-en}"
 EOF
     sudo chmod 600 "${ENV_FILE}"
 
@@ -1374,17 +1583,13 @@ ensure_env_variables() {
         "ENABLE_WEB_UI|true|Enable web interface"
         "DEBUG|false|Debug mode"
         "TG_BOT_NAME|VPS Bot|Bot name"
+        "DEFAULT_LANGUAGE|${TARGET_LANG:-en}|Default language"
     )
 
     if ! is_node_context; then
         ENV_VARS=("DATA_ENCRYPTION_KEY||Data encryption key" "${ENV_VARS[@]}")
     fi
 
-    if grep -q '^WEB_SERVER_HOST=' "${ENV_FILE}"; then
-        sudo sed -i "s|^WEB_SERVER_HOST=.*|WEB_SERVER_HOST=\"${default_web_host}\"|" "${ENV_FILE}"
-        changes_made=true
-    fi
-    
     for var_entry in "${ENV_VARS[@]}"; do
         local var_name=$(echo "$var_entry" | cut -d'|' -f1)
         local default_val=$(echo "$var_entry" | cut -d'|' -f2)
@@ -1406,6 +1611,36 @@ ensure_env_variables() {
         fi
     done
     
+    if ! grep -q "^TG_CLIENT_ID=" "${ENV_FILE}"; then
+        local current_tok=$(grep '^TG_BOT_TOKEN=' "${ENV_FILE}" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        local default_cid=""
+        if [ -n "$current_tok" ] && [[ "$current_tok" =~ ^([0-9]+): ]]; then
+            default_cid="${BASH_REMATCH[1]}"
+        fi
+        local cid_val="$default_cid"
+        if [ -t 0 ] && [ "$AUTO_MODE" != "true" ]; then
+            echo ""
+            msg_info "New authentication method: Telegram Login (OIDC)!"
+            echo -e "${C_CYAN}In @BotFather select your bot -> Bot Settings -> Login Widget, specify Allowed URLs.${C_RESET}"
+            read -p "$(echo -e "${C_BOLD}Enter Telegram Client ID [${default_cid}]: ${C_RESET}")" cid_in
+            cid_val="${cid_in:-$default_cid}"
+        fi
+        sudo bash -c "echo 'TG_CLIENT_ID=\"${cid_val}\"' >> ${ENV_FILE}"
+        echo -e "${C_YELLOW}  + Added variable TG_CLIENT_ID=${cid_val}${C_RESET}"
+        changes_made=true
+    fi
+
+    if ! grep -q "^TG_CLIENT_SECRET=" "${ENV_FILE}"; then
+        local csecret_val=""
+        if [ -t 0 ] && [ "$AUTO_MODE" != "true" ]; then
+            read -p "$(echo -e "${C_BOLD}Enter Telegram Client Secret (optional, press Enter to skip): ${C_RESET}")" csecret_in
+            csecret_val="${csecret_in}"
+        fi
+        sudo bash -c "echo 'TG_CLIENT_SECRET=\"${csecret_val}\"' >> ${ENV_FILE}"
+        echo -e "${C_YELLOW}  + Added variable TG_CLIENT_SECRET=\"${csecret_val}\"${C_RESET}"
+        changes_made=true
+    fi
+
     # Add optional variables if not present (with empty defaults)
     local OPTIONAL_VARS=(
         "SENTRY_DSN"
@@ -1418,6 +1653,8 @@ ensure_env_variables() {
         "HTTPS_EMAIL"
         "WEB_TLS_MODE"
         "LEGACY_NODE_BRIDGE"
+        "TG_CLIENT_ID"
+        "TG_CLIENT_SECRET"
     )
     
     for var_name in "${OPTIONAL_VARS[@]}"; do
@@ -1456,19 +1693,46 @@ create_docker_compose_yml() {
 create_and_start_service() {
     local svc=$1; local script=$2; local mode=$3; local desc=$4
     local user="root"; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; fi
+
+    if [ "$svc" == "$WATCHDOG_SERVICE_NAME" ]; then
+        # Watchdog is an event-driven OnFailure crash handler (Type=oneshot).
+        # Consumes 0 MB RAM in idle and only triggers if tg-bot crashes unexpectedly.
+        sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
+[Unit]
+Description=${desc}
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=${BOT_INSTALL_PATH}
+EnvironmentFile=${BOT_INSTALL_PATH}/.env
+ExecStart=${VENV_PATH}/bin/python ${script} --crash-alert
+TimeoutStartSec=30
+EOF
+        sudo systemctl daemon-reload
+        sudo systemctl stop "${svc}" >/dev/null 2>&1 || true
+        sudo systemctl disable "${svc}" >/dev/null 2>&1 || true
+        msg_info "✓ Crash alert service ${svc} (${desc}) configured (OnFailure, 0 MB RAM idle)"
+        return 0
+    fi
+
     sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
 [Unit]
 Description=${desc}
 After=network.target
+OnFailure=tg-watchdog.service
+
 [Service]
 Type=simple
 User=${user}
 WorkingDirectory=${BOT_INSTALL_PATH}
 EnvironmentFile=${BOT_INSTALL_PATH}/.env
 ExecStart=${VENV_PATH}/bin/python ${script}
-Restart=always
-RestartSec=10
+Restart=on-failure
+RestartSec=5
 TimeoutStopSec=20
+
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -1645,11 +1909,25 @@ install_node_logic() {
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
-    run_with_spinner "Installing iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
     setup_repo_and_dirs "root"
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
-    run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests PyYAML
+    run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
+
+    # Detect node location and install appropriate speedtest tool
+    # (must run after setup_repo_and_dirs so config/ directory exists for .speedtest_mode)
+    msg_info "Detecting node geolocation..."
+    NODE_COUNTRY=$(get_country_code_by_ip)
+    
+    if [ "$NODE_COUNTRY" == "RU" ]; then
+        msg_info "Node is located in Russia - using iperf3"
+        run_with_spinner "Installing iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
+    else
+        msg_info "Node is outside Russia - installing Ookla Speedtest CLI"
+        install_ookla_speedtest
+        # Also install iperf3 as fallback
+        run_with_spinner "Installing iperf3" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q iperf3
+    fi
     load_cached_env
     msg_question "Agent URL (http://IP:8080): " AGENT_URL
     msg_question "Token: " NODE_TOKEN
@@ -1671,6 +1949,7 @@ NODE_NAME="${initial_node_name}"
 NODE_NAME_SYNC_MODE="${initial_node_name_sync_mode:-agent}"
 NODE_UPDATE_INTERVAL=5
 INSTALLED_VERSION="${ver}"
+DEFAULT_LANGUAGE="${TARGET_LANG:-en}"
 EOF
     
     # Check and restore/configure agent monitoring variables if settings were restored
@@ -1780,17 +2059,62 @@ update_bot() {
 
     cd "${BOT_INSTALL_PATH}"
     if ! run_with_spinner "Git fetch" $exec_cmd git fetch origin; then return 1; fi
+
+    if ensure_integrity_tools_available; then
+        local json_report=$(run_integrity_cmd check --branch "$GIT_BRANCH" --json 2>/dev/null || true)
+        local status=$(echo "$json_report" | grep -oP '"status":\s*"\K[^"]+' | head -n 1)
+        if [ "$status" == "MODIFIED" ]; then
+            echo ""
+            msg_warning "Warning! Local modifications to system files detected."
+            run_integrity_cmd check --branch "$GIT_BRANCH"
+            echo ""
+            echo "  1) Create automatic backup in .backups/ and proceed (Recommended)"
+            echo "  2) Show Git diff"
+            echo "  3) Cancel update"
+            read -p "$(echo -e "${C_BOLD}Your choice [1/2/3]: ${C_RESET}")" mod_choice
+            case $mod_choice in
+                2)
+                    git diff "origin/${GIT_BRANCH}" | less -R
+                    read -p "Proceed with update and backup? (y/n): " c_after_diff
+                    if [[ ! "$c_after_diff" =~ ^[Yy]$ ]]; then
+                        msg_info "Update cancelled."
+                        return 0
+                    fi
+                    run_integrity_cmd backup --branch "$GIT_BRANCH"
+                    ;;
+                3)
+                    msg_info "Update cancelled by user."
+                    return 0
+                    ;;
+                *)
+                    run_integrity_cmd backup --branch "$GIT_BRANCH"
+                    ;;
+            esac
+        fi
+    fi
+
     if ! run_with_spinner "Git reset" $exec_cmd git reset --hard "origin/${GIT_BRANCH}"; then return 1; fi
     
-    if [ -f "$README_FILE" ]; then
-        local new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
-        if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
-             if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
-                 sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
-             else
-                 sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
-             fi
-        fi
+    local new_ver=""
+    
+    if echo "$GIT_BRANCH" | grep -q "release/"; then
+        new_ver=$(echo "$GIT_BRANCH" | grep -oP 'release/\K[\d\.]+')
+    fi
+    
+    if [ -z "$new_ver" ] && [ -f "${BOT_INSTALL_PATH}/CHANGELOG.md" ]; then
+        new_ver=$(grep -oP '^## \[\K[\d\.]+' "${BOT_INSTALL_PATH}/CHANGELOG.md" | head -n 1)
+    fi
+    
+    if [ -z "$new_ver" ] && [ -f "$README_FILE" ]; then
+        new_ver=$(grep -oP 'img\.shields\.io/badge/version-v\K[\d\.]+' "$README_FILE")
+    fi
+
+    if [ -n "$new_ver" ] && [ -f "${ENV_FILE}" ]; then
+         if grep -q "^INSTALLED_VERSION=" "${ENV_FILE}"; then
+             sudo sed -i "s/^INSTALLED_VERSION=.*/INSTALLED_VERSION=\"${new_ver}\"/" "${ENV_FILE}"
+         else
+             sudo bash -c "echo 'INSTALLED_VERSION=\"${new_ver}\"' >> ${ENV_FILE}"
+         fi
     fi
 
     # Check and add missing environment variables
@@ -2100,6 +2424,93 @@ manage_alert_module() {
     fi
 }
 
+manage_custom_modules() {
+    if ! ensure_integrity_tools_available; then
+        echo ""
+        msg_warning "Integrity module is not yet installed in ${BOT_INSTALL_PATH}."
+        echo "  To use SHA-256 audit and custom modules, please update the bot first."
+        echo "  Select option 1 (Update $(target_label)) in the main menu."
+        echo ""
+        read -p "Press Enter to return..."
+        return
+    fi
+
+    while true; do
+        clear
+        echo -e "${C_BLUE}${C_BOLD}╔═══════════════════════════════════════════════════════╗${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}║      Custom Modules & SHA-256 Integrity Audit         ║${C_RESET}"
+        echo -e "${C_BLUE}${C_BOLD}╚═══════════════════════════════════════════════════════╝${C_RESET}"
+        echo "  Directory custom/ is isolated from Git and protected from overwrite during updates."
+        echo "--------------------------------------------------------"
+        echo "  1) Full SHA-256 integrity audit (against origin/${GIT_BRANCH})"
+        echo "  2) List active custom modules & WebUI pages"
+        echo "  3) Create custom bot module template (custom/modules/)"
+        echo "  4) Create custom WebUI page template (route + template)"
+        echo "  5) Backup modified system files (.backups/)"
+        echo "  6) Show Git diff with origin/${GIT_BRANCH}"
+        echo "  0) Back to main menu"
+        echo "--------------------------------------------------------"
+        read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" c_choice
+        case $c_choice in
+            1)
+                cd "${BOT_INSTALL_PATH}" || return
+                run_integrity_cmd check --branch "$GIT_BRANCH" -v
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                cd "${BOT_INSTALL_PATH}" || return
+                run_integrity_cmd list-custom
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                cd "${BOT_INSTALL_PATH}" || return
+                read -p "$(echo -e "${C_BOLD}Enter module name (e.g. my_vpn): ${C_RESET}")" mod_name
+                if [ -n "$mod_name" ]; then
+                    run_integrity_cmd new-module "$mod_name"
+                    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+                        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
+                    fi
+                    read -p "Restart bot to apply? (y/n): " r_choice
+                    if [[ "$r_choice" =~ ^[Yy]$ ]]; then
+                        sudo systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+                        msg_success "Service restarted!"
+                    fi
+                fi
+                read -p "Press Enter..."
+                ;;
+            4)
+                cd "${BOT_INSTALL_PATH}" || return
+                read -p "$(echo -e "${C_BOLD}Enter page name (e.g. custom_stats): ${C_RESET}")" page_name
+                if [ -n "$page_name" ]; then
+                    run_integrity_cmd new-page "$page_name"
+                    if [ -f "${ENV_FILE}" ] && grep -q "INSTALL_MODE=secure" "${ENV_FILE}"; then
+                        sudo chown -R ${SERVICE_USER}:${SERVICE_USER} "${BOT_INSTALL_PATH}/custom" 2>/dev/null || true
+                    fi
+                    read -p "Restart bot to apply? (y/n): " r_choice
+                    if [[ "$r_choice" =~ ^[Yy]$ ]]; then
+                        sudo systemctl restart "${SERVICE_NAME}" 2>/dev/null || true
+                        msg_success "Service restarted!"
+                    fi
+                fi
+                read -p "Press Enter..."
+                ;;
+            5)
+                cd "${BOT_INSTALL_PATH}" || return
+                run_integrity_cmd backup --branch "$GIT_BRANCH"
+                read -p "Press Enter to continue..."
+                ;;
+            6)
+                cd "${BOT_INSTALL_PATH}" || return
+                git fetch origin "$GIT_BRANCH" >/dev/null 2>&1
+                git diff "origin/${GIT_BRANCH}" | less -R
+                ;;
+            0)
+                break
+                ;;
+        esac
+    done
+}
+
 main_menu() {
     local local_version=$(get_local_version)
     while true; do
@@ -2124,21 +2535,15 @@ main_menu() {
         echo "  6) Reinstall (Docker - Root)"
         if [ "$IS_NODE" == "yes" ]; then
             echo -e "${C_GREEN}  7) Install NODE (Client)${C_RESET}"
-        fi
-        
-        # Show agent monitoring option only for nodes
-        if [ "$IS_NODE" == "yes" ]; then
             local monitoring_status=$(check_agent_monitoring_status)
             echo -e "${C_YELLOW}  8) Agent Monitoring (${monitoring_status})${C_RESET}"
-        fi
-
-        # Alert Module option — only for non-node mode
-        if [ "$IS_NODE" != "yes" ]; then
+        else
             local alert_status="not active"
             if [ -f "${ENV_FILE}" ] && grep -q '^ALERT_BOT_TOKEN=' "${ENV_FILE}"; then
                 alert_status="${C_GREEN}active${C_RESET}"
             fi
-            echo -e "  9) Manage Alert Module (${alert_status})"
+            echo -e "  7) Manage Alert Module (${alert_status})"
+            echo -e "  8) Custom Modules & SHA-256 Integrity Audit"
         fi
 
         echo "  0) Exit"
@@ -2151,9 +2556,20 @@ main_menu() {
             4) install_systemd_logic "root"; read -p "Press Enter..." ;;
             5) install_docker_logic "secure"; read -p "Press Enter..." ;;
             6) install_docker_logic "root"; read -p "Press Enter..." ;;
-            7) if [ "$IS_NODE" == "yes" ]; then install_node_logic; read -p "Press Enter..."; else msg_error "Option available in NODE mode only."; sleep 2; fi ;;
-            8) if [ "$IS_NODE" == "yes" ]; then toggle_agent_monitoring; read -p "Press Enter..."; fi ;;
-            9) if [ "$IS_NODE" != "yes" ]; then manage_alert_module; read -p "Press Enter..."; fi ;;
+            7)
+                if [ "$IS_NODE" == "yes" ]; then
+                    install_node_logic; read -p "Press Enter..."
+                else
+                    manage_alert_module; read -p "Press Enter..."
+                fi
+                ;;
+            8)
+                if [ "$IS_NODE" == "yes" ]; then
+                    toggle_agent_monitoring; read -p "Press Enter..."
+                else
+                    manage_custom_modules
+                fi
+                ;;
             0) break ;;
         esac
     done
@@ -2174,7 +2590,7 @@ if [ "$INSTALL_TYPE" == "NONE" ]; then
     echo "  2) AGENT (Systemd - Root)    [Full access]"
     echo "  3) AGENT (Docker - Secure)   [Isolation]"
     echo "  4) AGENT (Docker - Root)     [Docker + Host]"
-    echo -e "${C_GREEN}  7) NODE (Client)${C_RESET}"
+    echo -e "${C_GREEN}  5) NODE (Client)${C_RESET}"
     echo "  0) Exit"
     echo "--------------------------------------------------------"
     read -p "$(echo -e "${C_BOLD}Your choice: ${C_RESET}")" ch
@@ -2183,7 +2599,7 @@ if [ "$INSTALL_TYPE" == "NONE" ]; then
         2) install_systemd_logic "root"; read -p "Press Enter..." ;;
         3) install_docker_logic "secure"; read -p "Press Enter..." ;;
         4) install_docker_logic "root"; read -p "Press Enter..." ;;
-        7) install_node_logic; read -p "Press Enter..." ;;
+        5|7) install_node_logic; read -p "Press Enter..." ;;
         0) exit 0 ;;
         *) msg_error "Invalid choice."; sleep 2 ;;
     esac

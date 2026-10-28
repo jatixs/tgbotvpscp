@@ -52,20 +52,24 @@ async def sshlog_handler(message: types.Message):
         if log_file:
             src_txt = _("selftest_ssh_source", lang, source=os.path.basename(log_file))
             proc = await asyncio.create_subprocess_exec(
-                "tail", "-n", "200", log_file,
+                "grep", "-E", "--", r"Accepted .* for .* from |Failed .* for .* from ", log_file,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             out, stderr_dummy = await proc.communicate()
-            lines = out.decode("utf-8", "ignore").split("\n")
+            if proc.returncode not in (0, 1):
+                raise RuntimeError(f"SSH log read failed ({proc.returncode}): {stderr_dummy.decode('utf-8', 'replace').strip()}")
+            lines = out.decode("utf-8", "ignore").splitlines()[-200:]
         else:
             src_txt = _("selftest_ssh_source_journal", lang)
             proc = await asyncio.create_subprocess_exec(
-                "journalctl", "-u", "ssh", "-n", "100", "--no-pager", "-o", "short-precise",
+                "journalctl", "-n", "200", "--no-pager", "-o", "short-iso", "_COMM=sshd", "+", "_COMM=sshd-session",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             out, stderr_dummy = await proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(f"SSH journal read failed ({proc.returncode}): {stderr_dummy.decode('utf-8', 'replace').strip()}")
             lines = out.decode("utf-8", "ignore").split("\n")
         entries = []
         count = 0
@@ -76,11 +80,11 @@ async def sshlog_handler(message: types.Message):
             if "sshd" not in line:
                 continue
             dt = None
-            match_iso = re.search("(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})", line)
+            match_iso = re.search("(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2})", line)
             match_sys = re.search("(\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2})", line)
             try:
                 if match_iso:
-                    dt = datetime.strptime(match_iso.group(1), "%Y-%m-%dT%H:%M:%S")
+                    dt = datetime.fromisoformat(match_iso.group(1))
                 elif match_sys:
                     dt = datetime.strptime(match_sys.group(1), "%b %d %H:%M:%S")
                     dt = dt.replace(year=datetime.now().year)

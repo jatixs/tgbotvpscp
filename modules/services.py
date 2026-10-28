@@ -186,8 +186,8 @@ def discover_all_docker_containers():
                 for line in result.stdout.strip().split("\n"):
                     if line.strip():
                         containers.append(line.strip())
-        except Exception:
-            pass
+        except (OSError, subprocess.SubprocessError) as exc:
+            logging.debug("Docker CLI discovery is unavailable: %s", exc)
     except Exception as e:
         logging.debug(f"Docker not available: {e}")
     return containers
@@ -436,8 +436,8 @@ def get_systemd_service_info(service_name):
                         info["memory"] = f"{mem_bytes / (1024*1024):.1f} MB"
                     else:
                         info["memory"] = f"{mem_bytes / 1024:.1f} KB"
-                except Exception:
-                    pass
+                except ValueError as exc:
+                    logging.debug("Invalid systemd memory value %r: %s", mem, exc)
             
             # Uptime from ActiveEnterTimestamp
             timestamp = props.get("ActiveEnterTimestamp")
@@ -458,8 +458,8 @@ async def get_docker_image_from_container(container_name):
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             return result.stdout.strip()
-    except Exception:
-        pass
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        logging.debug("Unable to inspect managed Docker image: %s", exc)
     return None
 
 async def get_docker_hub_description(image_name):
@@ -702,8 +702,8 @@ async def cq_services_page(callback: types.CallbackQuery):
             kb, page, total_pages = result
             text = _("services_title", lang)
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to refresh services keyboard: %s", exc)
     await callback.answer()
 
 async def cq_services_refresh(callback: types.CallbackQuery):
@@ -728,8 +728,8 @@ async def cq_services_refresh(callback: types.CallbackQuery):
             kb, page, total_pages = result
             text = _("services_title", lang) 
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("Unable to refresh services keyboard: %s", exc)
     await callback.answer(_("btn_refresh", lang))
 
 async def cq_service_action(callback: types.CallbackQuery):

@@ -5,11 +5,11 @@
 <h1 align="center">🤖 VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.26.1</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.27.0</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.26.1-blue?style=flat-square" alt="Version 1.26.1"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-94-purple?style=flat-square" alt="Build 94"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
@@ -23,9 +23,9 @@
 
 1. [О проекте](#ℹ%EF%B8%8F-о-проекте)
 2. [Ключевые возможности](#-ключевые-возможности)
-3. [Архитектура](#%EF%B8%8F-архитектура)
+3. [Архитектура](#ℹ%EF%B8%8F-архитектура)
 4. [Быстрый старт](#-быстрый-старт)
-5. [Веб-интерфейс](#%EF%B8%8F-веб-интерфейс)
+5. [Веб-интерфейс](#ℹ%EF%B8%8F-веб-интерфейс)
 6. [Безопасность](#-безопасность)
 7. [Структура проекта](#-структура-проекта)
 8. [Документация](#-документация)
@@ -65,7 +65,7 @@
 ### 🌍 Мульти-серверное управление
 - **Неограниченное количество нод** — масштабируемая архитектура
 - **Метрики в реальном времени** — CPU, RAM, Disk, Network (HTTP / ICMP ping)
-- **Веб-терминал (SSH)** — доступ к терминалу через WebUI с проверкой ключа хоста
+- **Веб-терминал (SSH)** — доступ к консоли через WebUI с поддержкой проверки ключа хоста, зашифрованных SSH-ключей (с кодовой фразой/passphrase) и виртуальной клавиатурой для мобильных устройств (Ctrl, Alt, Tab, Esc, стрелки)
 - **Оптимизация системы** — интерактивный модуль настройки VPS (BBR, Swap, очистка кэша)
 
 ### 💳 Система биллинга и аренды
@@ -81,9 +81,11 @@
 
 ### 🛡️ Безопасность Enterprise-класса
 - **Web-защита** — заголовки безопасности, CSRF, ограничение частоты запросов и фильтрация подозрительных запросов
+- **Telegram Login (OIDC)** — беспарольная авторизация OpenID Connect через официальный виджет с валидацией JWT RS256 (JWKS Telegram) и поддержкой режима Telegram-only
 - **Защита от DDoS и перебора паролей (Rate Limiting & Brute-force)** 
 - **Журналирование аудита (Audit Logging)** — детальные логи всех событий
-- **Шифрование данных** — Fernet (AES) + AES-256-CBC + Argon2 для паролей
+- **Шифрование данных** — Fernet (AES-128) для паролей и SSH-ключей терминала + AES-256-CBC + Argon2 для паролей
+- **Контроль целостности ядра** — встроенный аудит SHA-256 для проверки системных файлов
 - **DOMPurify** — строгая фильтрация контента на стороне клиента
 
 ### 🎨 Современный веб-интерфейс
@@ -104,11 +106,13 @@
 - **Автоматические миграции БД** — через \ erich\, без потери данных
 
 ### 🔔 Умные уведомления
+- **Web Push уведомления (PWA и браузер)** — фоновые Push-уведомления (VAPID / RFC 8291) на смартфонах (Android, iOS 16.4+ PWA) и ПК даже при закрытом приложении
+- **Управление Push-подписками** — переключатель в настройках, мгновенные тестовые алерты и кнопка отзыва подписок на всех устройствах
 - **Настраиваемые пороги** — CPU/RAM/Disk по выбору
 - **Уведомления о простоях** — интеллектуальное определение недоступности серверов
 - **SSH мониторинг** — уведомления о входах (в том числе по SSH-ключам)
 - **Интеграция с Fail2Ban** — автоматическая блокировка подозрительных IP
-- **Alert-bot** — вспомогательный бот-ретранслятор для уведомлений/новостей. 
+- **Alert-bot** — вспомогательный бот-ретранслятор для уведомлений/новостей 
 
 ### 🌐 Интернационализация
 - **Русский язык** — полная локализация
@@ -174,7 +178,15 @@
 
 1. Получите токен бота в [@BotFather](https://t.me/BotFather)
 2. Узнайте свой Telegram ID через [@userinfobot](https://t.me/userinfobot)
-3. Убедитесь, что установлены `curl` и `git`:
+3. Настройте **Telegram Login Widget (OIDC)** в [@BotFather](https://t.me/BotFather) для входа в веб-панель:
+   - Отправьте команду `/mybots` и выберите вашего бота.
+   - Перейдите в **Bot Settings** ➔ **Login Widget** (или откройте веб-интерфейс BotFather через кнопку в меню).
+   - **Client ID**: числовой идентификатор вашего бота (совпадает с цифрами токена до двоеточия `:`, например `1234567890`).
+   - **Client Secret**: нажмите **Generate Secret** (или **View Secret**) в настройках Login Widget и скопируйте сгенерированный секретный ключ.
+   - В разделе **Allowed URLs** добавьте точный адрес страницы входа вашей панели:
+     `https://<ваш_домен_или_ip>/login` (например: `https://dashboard.example.com/login`), а также корень `https://<ваш_домен_или_ip>/`.
+     > ⚠️ **Важно:** Telegram OIDC строго проверяет `redirect_uri`. Если точный адрес со страницей `/login` не добавлен в Allowed URLs, при попытке входа Telegram вернет ошибку `redirect_uri required`.
+4. Убедитесь, что установлены `curl` и `git`:
    ```bash
    sudo apt update && sudo apt install -y curl git
    ```
@@ -197,7 +209,7 @@ Managed TLS принимает домен или глобальный публи
 ### 3️⃣ Подключение удаленных серверов (нод)
 
 1. В Telegram откройте **Ноды** → **Добавить ноду**, задайте имя и сохраните выданный секретный token.
-2. На удаленном сервере запустите установщик и выберите **7) НОДА (Клиент)**.
+2. На удаленном сервере запустите установщик и выберите **5) НОДА (Клиент)**.
 3. Укажите HTTPS origin master, например `https://panel.example.com` или `https://203.0.113.10`, и node token.
 
 Для существующих агентов сначала обновите master, затем обновите ноды. Агент проверяет same-host HTTPS endpoint и сохраняет новый URL; временный HTTP bridge принимает только discovery/bootstrap и HMAC-защищенный heartbeat. Проверьте прогресс командой `sudo tgcp-bot tls status`; после подтверждения всех нод закройте bridge: `sudo tgcp-bot tls finalize`.
@@ -205,6 +217,23 @@ Managed TLS принимает домен или глобальный публи
 ### 🔑 Доступ к WebUI
 
 Открывайте HTTPS origin, указанный при установке, например `https://panel.example.com/`. Установщик создает случайный initial password и показывает его в конце установки; общего пароля `admin` нет. Сменить пароль можно командой `sudo tgcp-bot webpass`.
+
+#### 📲 Вход через Telegram (Telegram Login / OIDC)
+Веб-панель поддерживает авторизацию в один клик через официальный виджет Telegram Login (OIDC):
+- **Client ID** и **Client Secret** запрашиваются при установке/обновлении скриптом `deploy.sh` или настраиваются вручную в файле `.env` (`TG_CLIENT_ID` и `TG_CLIENT_SECRET`).
+- Если `TG_CLIENT_SECRET` не задан, используется обратная совместимость со старым алгоритмом проверки хеша через токен бота.
+- При включённом режиме **Telegram-only** (`telegram_only_mode`) форма ввода пароля и вход по одноразовым ссылкам скрываются, обеспечивая максимальный уровень безопасности.
+
+##### 📋 Пошаговое получение Client ID и Client Secret в @BotFather:
+1. Откройте [@BotFather](https://t.me/BotFather) в Telegram и отправьте команду `/mybots`.
+2. Выберите вашего бота для панели.
+3. Перейдите в **Bot Settings** ➔ **Login Widget**.
+4. **Client ID**: это числовой ID вашего бота. Он виден в окне Login Widget, а также совпадает с числовой частью вашего токена бота до двоеточия `:` (например, если токен `1234567890:AAFn...`, то Client ID равен `1234567890`).
+5. **Client Secret**: нажмите **Generate Secret** (или **View/Reset Secret**) в меню Login Widget. Скопируйте полученную строку секрета.
+6. **Allowed URLs (Разрешённые URL)**: нажмите **Allowed URLs** (или **Link Domain**) и укажите:
+   - `https://<домен_панели>/login` (например: `https://dashboard.example.com/login`)
+   - `https://<домен_панели>/`
+   *(Если URL со страницей `/login` не указан, при входе Telegram вернёт ошибку `redirect_uri required`)*.
 
 Agent routes: `GET /api/agent/https` публикует HTTPS origin без токена; `GET /api/node/bootstrap` принимает token через `X-Node-Token`; `POST /api/heartbeat` принимает HMAC-подписанный heartbeat.
 
@@ -303,6 +332,14 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 - `POST /api/services/{action}` — действие над сервисом (`start|stop|restart`)
 - `POST /api/services/manage` — добавить или удалить сервис из мониторинга
 
+**Web Push API:**
+- `GET /api/push/vapid-key` — получение публичного VAPID-ключа для браузера
+- `GET /api/push/status` — статус активности и количество подписок пользователя
+- `POST /api/push/subscribe` — сохранение подписки браузера на Web Push (endpoint, p256dh, auth)
+- `POST /api/push/unsubscribe` — отписка текущего браузера
+- `POST /api/push/revoke-all` — отзыв всех Web Push подписок пользователя на всех устройствах
+- `POST /api/push/test` — отправка тестового Push-уведомления
+
 **Streaming / Internal API:**
 - `GET /api/events` — основной SSE поток dashboard
 - `GET /api/events/logs` — SSE поток логов
@@ -397,6 +434,7 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 │   ├── tls_config.py        # Проверка TLS endpoint и Certbot arguments
 │   ├── config.py            # Загрузка конфигурации
 │   ├── auth.py              # Авторизация
+│   ├── integrity.py         # Аудит целостности системы (SHA-256)
 │   ├── i18n.py              # Мультиязычность
 │   ├── keyboards.py         # UI генератор
 │   ├── messaging.py         # Уведомления
@@ -413,8 +451,9 @@ Agent routes: `GET /api/agent/https` публикует HTTPS origin без то
 │   │   ├── middlewares.py   # WAF, CSRF, Rate Limiting
 │   │   ├── api_nodes.py     # API нод на базе aiohttp
 │   │   ├── api_system.py    # Системный API на базе aiohttp
-│   │   ├── streaming.py     # SSE потоки
-│   │   └── views.py         # Jinja2 HTML страницы
+│   │   ├── streaming.py     # SSE потоки и WebSocket терминал
+│   │   ├── views.py         # Jinja2 HTML страницы
+│   │   └── webpush.py       # Web Push API (подписки и VAPID доставка)
 │   ├── static/              # CSS, JS
 │   └── templates/           # HTML шаблоны
 ├── modules/                 # Функциональные модули (20 модулей)
@@ -612,7 +651,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.26.0 (Build 93)<br>
+  <b>Версия:</b> 1.27.0 (Build 95)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>

@@ -207,8 +207,13 @@ function initNodesMonitor() {
     connectNodesMonitorStream();
     
     // Setup theme
+    const curTheme = (typeof getResolvedTheme === 'function')
+        ? getResolvedTheme()
+        : ((!localStorage.getItem('theme') || localStorage.getItem('theme') === 'system')
+            ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+            : localStorage.getItem('theme'));
     if (typeof applyThemeUI === 'function') {
-        applyThemeUI(localStorage.getItem('theme') || 'system');
+        applyThemeUI(curTheme);
     } else if (typeof updateThemeIcons === 'function') {
         updateThemeIcons();
     }
@@ -403,7 +408,15 @@ function createNodeCard(node) {
                     <div>
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
-                            <span class="text-xs text-gray-500 dark:text-gray-400">${node.ip || '-'}</span>
+                            <div class="ip-copy-container inline-flex items-center gap-1 group/ip" data-copy-ip="${escapeHtml(node.ip || '')}">
+                                <span class="ip-copy-text text-xs text-gray-500 dark:text-gray-400 font-mono select-all" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">${escapeHtml(node.ip || '-')}</span>
+                                ${node.ip && node.ip !== '-' ? `
+                                <button type="button" class="ip-copy-btn p-0.5 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(node.ip)}" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">
+                                    <svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                </button>` : ''}
+                            </div>
                             ${node.ping != null ? (node.ping === 'n/a' ? `<span onclick="window.showPingErrorModal(event)" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer hover:opacity-80 transition-opacity ${getPingBadgeClass(node.ping)}" title="Click for details">n/a</span>` : `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>`) : ''}
                         </div>
                     </div>
@@ -829,7 +842,13 @@ function updateNodeModal(data) {
     
     const newIp = decryptData(data.ip) || '-';
     const ipEl = document.getElementById('modalNodeIp');
-    if (ipEl.textContent !== newIp) ipEl.textContent = newIp;
+    if (ipEl && ipEl.textContent !== newIp) {
+        ipEl.textContent = newIp;
+        const container = document.getElementById('modalNodeIpContainer');
+        if (container) container.setAttribute('data-copy-ip', newIp);
+        const copyBtn = document.getElementById('modalNodeIpCopyBtn');
+        if (copyBtn) copyBtn.setAttribute('data-ip', newIp);
+    }
 
     const nodeIdEl = document.getElementById('modalNodeId');
     if (nodeIdEl) nodeIdEl.textContent = String(data.id ?? '-');
@@ -1442,15 +1461,21 @@ if (typeof toggleTheme === 'undefined') {
 }
 
 function updateThemeIcons() {
-    const theme = localStorage.getItem('theme') || 'system';
+    const theme = (typeof getResolvedTheme === 'function')
+        ? getResolvedTheme()
+        : ((!localStorage.getItem('theme') || localStorage.getItem('theme') === 'system')
+            ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+            : localStorage.getItem('theme'));
+
     if (typeof applyThemeUI === 'function') {
         applyThemeUI(theme);
         return;
     }
-    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.getElementById('iconMoon')?.classList.toggle('hidden', !isDark || theme === 'system');
-    document.getElementById('iconSun')?.classList.toggle('hidden', isDark || theme === 'system');
-    document.getElementById('iconSystem')?.classList.toggle('hidden', theme !== 'system');
+    const isDark = theme === 'dark' || theme === 'amoled';
+    document.getElementById('iconMoon')?.classList.toggle('hidden', !isDark || theme === 'amoled');
+    document.getElementById('iconAmoled')?.classList.toggle('hidden', theme !== 'amoled');
+    document.getElementById('iconSun')?.classList.toggle('hidden', isDark);
+    document.getElementById('iconSystem')?.classList.add('hidden');
 }
 // Global CustomEvent delegation for nodes_monitor.js
 document.addEventListener('app:change:toggle-node-selection', e => {

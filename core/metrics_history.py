@@ -1,8 +1,8 @@
 """
-История метрик (CPU/RAM/диск/сеть) агента и нод для графиков с выбором периода.
+Metrics history (CPU/RAM/disk/network) for the agent and nodes, powering time-range charts.
 
-Хранение многоуровневое, как в RRD: сырые замеры живут ~1 час, минутные
-корзины — сутки, пятиминутные — неделю. Скорость сети хранится в байтах/с.
+Tiered storage pattern similar to RRD: raw samples live ~1 hour, 1-minute
+buckets last 24 hours, and 5-minute buckets last 1 week. Network speed is stored in bytes/sec.
 """
 from __future__ import annotations
 

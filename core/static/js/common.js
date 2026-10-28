@@ -121,7 +121,7 @@ document.addEventListener('keydown', e => {
 
 // Security: Safe HTML helpers
 window.getSecureRandom = function() {
-    return window.crypto.getRandomValues(new Uint32Array(1))[0] / 4294967295;
+    return window.crypto.getRandomValues(new Uint32Array(1))[0] / 0xFFFFFFFF;
 }
 
 function escapeHtml(text) {
@@ -142,7 +142,7 @@ function setSafeText(element, text) {
 
 function setSafeHTML(element, html) {
     if (!element) return;
-    element.innerHTML = DOMPurify.sanitize(html);  // Only use with trusted HTML
+    element.replaceChildren(DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true }));
 }
 
 // Crypto Utilities
@@ -198,7 +198,7 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
     
     if ((uniqueId && window._animatedDecryptions.has(uniqueId)) || 
         element.dataset.decryptedValue === finalHtml) {
-        element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+        setSafeHTML(element, finalHtml);
         if (uniqueId) window._animatedDecryptions.add(uniqueId);
         element.dataset.decryptedValue = finalHtml;
         return;
@@ -218,11 +218,11 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
     }
     
     const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+    setSafeHTML(tempDiv, finalHtml);
     const finalText = tempDiv.textContent || '';
     
     if (!finalText) {
-        element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+        setSafeHTML(element, finalHtml);
         return;
     }
     
@@ -246,7 +246,7 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
         if (iterations > maxIterations) {
             clearInterval(element.decryptionInterval);
             element.decryptionInterval = null;
-            element.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(finalHtml) : finalHtml;
+            setSafeHTML(element, finalHtml);
         }
     }, frameTime);
 };
@@ -297,6 +297,12 @@ function decryptApiResponse(dataObj) {
 }
 
 async function secureFetch(url, options = {}) {
+    const parsedUrl = new URL(url, window.location.origin);
+    if (parsedUrl.origin !== window.location.origin ||
+        !['http:', 'https:'].includes(parsedUrl.protocol) ||
+        parsedUrl.username || parsedUrl.password) {
+        throw new TypeError('secureFetch only supports same-origin HTTP requests without URL credentials.');
+    }
     let reqOptions = { ...options };
     if (reqOptions.method && reqOptions.method.toUpperCase() !== 'GET' && reqOptions.body) {
         try {
@@ -307,8 +313,12 @@ async function secureFetch(url, options = {}) {
         }
     }
     
-    const parsedUrl = new URL(url, window.location.origin);
     const response = await fetch(parsedUrl.toString(), reqOptions);
+    if (response.status === 401 || response.status === 403) {
+        if (typeof handleSessionExpired === 'function') {
+            handleSessionExpired();
+        }
+    }
     const originalJson = response.json.bind(response);
     
     response.json = async function() {
@@ -729,7 +739,16 @@ function getCsrfToken() {
     window.__jsonParsePatched = true;
 })();
 
-let currentTheme = localStorage.getItem('theme') || 'system';
+function getResolvedTheme() {
+    let t = localStorage.getItem('theme');
+    if (!t || t === 'system') {
+        return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    }
+    return t;
+}
+window.getResolvedTheme = getResolvedTheme;
+
+let currentTheme = getResolvedTheme();
 let latestNotificationTime = Math.floor(Date.now() / 1000);
 const pageCache = new Map();
 let sseSource = null;
@@ -767,6 +786,8 @@ function initGlobalLazyLoad() {
     });
 }
 document.addEventListener("DOMContentLoaded", () => {
+    initHapticsFeedback();
+    initHapticsToggle();
     applyThemeUI(currentTheme);
     if (typeof window.parsePageEmojis === 'function') {
         window.parsePageEmojis();
@@ -778,7 +799,6 @@ document.addEventListener("DOMContentLoaded", () => {
     initSSE();
     initSessionSync();
     initHolidayMood();
-    initHapticsToggle();
     initAddNodeLogic();
     initBrandEasterEgg();
     if (document.getElementById('logsContainer')) {
@@ -787,50 +807,108 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Unlock Vibration API on first interaction
-    const unlockHaptics = () => {
-        try { if (navigator.vibrate) navigator.vibrate(0); } catch {}
-        document.body.removeEventListener('touchstart', unlockHaptics);
-        document.body.removeEventListener('click', unlockHaptics);
-    };
-    document.body.addEventListener('touchstart', unlockHaptics, { once: true, passive: true });
-    document.body.addEventListener('click', unlockHaptics, { once: true, passive: true });
+    pageCache.set(window.location.href, document.documentElement.outerHTML);
+});
 
-    window.playHaptic = function(pattern) {
-        if (navigator.vibrate && localStorage.getItem('haptics_enabled') !== 'false') {
-            navigator.vibrate(pattern);
-        }
-    };
-
-    document.body.addEventListener('input', (e) => {
+function initHapticsFeedback() {
+    let pressedControl = null;
+    const rangeFeedback = new WeakMap();
+    function releaseControl() {
+        if (pressedControl) pressedControl.classList.remove('is-control-pressed');
+        pressedControl = null;
+    }
+    document.addEventListener('pointerdown', (e) => {
+        if (!(e.target instanceof Element) || !e.isPrimary || e.button !== 0) return;
+        releaseControl();
+        const label = e.target.closest('label');
+        const control = e.target.matches('input') ? e.target : label?.control;
+        if (!control || control.disabled || !control.matches('input[type="range"], input[type="checkbox"].peer')) return;
+        pressedControl = control;
+        control.classList.add('is-control-pressed');
+    }, { capture: true, passive: true });
+    document.addEventListener('pointerup', releaseControl, { capture: true, passive: true });
+    document.addEventListener('pointercancel', releaseControl, { capture: true, passive: true });
+    window.addEventListener('blur', releaseControl);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) releaseControl();
+    });
+    document.addEventListener('input', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
-            playHaptic(5);
+            const control = e.target;
+            const value = control.valueAsNumber;
+            const previous = rangeFeedback.get(control);
+            if (previous?.value === value) return;
+            const now = performance.now();
+            const atEdge = value === Number(control.min || 0) || value === Number(control.max || 100);
+            if (!atEdge && previous && now - previous.time < 40) return;
+            rangeFeedback.set(control, { value, time: now });
+            playHaptic(atEdge ? 'rangeEdge' : 'range');
         }
     });
 
-    document.body.addEventListener('change', (e) => {
+    document.addEventListener('change', (e) => {
         if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
             if (e.target.checked) {
-                playHaptic([10, 30, 10]); 
+                playHaptic('toggleOn');
             } else {
-                playHaptic(10); 
+                playHaptic('toggleOff');
             }
         }
     });
 
-    pageCache.set(window.location.href, document.documentElement.outerHTML);
-});
+    // Capture clicks before local handlers stop propagation or replace the clicked element.
+    document.addEventListener('click', (e) => {
+        if (!(e.target instanceof Element)) return;
+        const control = e.target.closest('input, label, button, a[href], [role="button"], .ip-copy-btn, .btn, [data-action], [onclick]');
+        if (!control || control.closest('[data-haptics-toggle]') ||
+            control.matches(':disabled, [aria-disabled="true"]') ||
+            control.matches('input, label')) return;
+        playHaptic('press');
+    }, { capture: true, passive: true });
+}
+
+function playHaptic(pattern = [10, 30, 10]) {
+    if (typeof navigator.vibrate !== 'function' || localStorage.getItem('haptics_enabled') === 'false') return;
+    const profiles = {
+        press: 10,
+        toggleOn: [10, 30, 10],
+        toggleOff: 10,
+        range: 5,
+        rangeEdge: 14,
+        modalOpen: [18, 35, 8],
+        modalClose: 8
+    };
+    if (typeof pattern === 'string') {
+        if (!Object.hasOwn(profiles, pattern)) {
+            console.warn('Unknown haptic feedback profile:', pattern);
+            return;
+        }
+        pattern = profiles[pattern];
+    }
+    try {
+        if (!navigator.vibrate(pattern)) {
+            console.debug('Haptic feedback was rejected by the browser.');
+        }
+    } catch (error) {
+        console.warn('Haptic feedback failed:', error);
+    }
+}
 
 function initHapticsToggle() {
     updateHapticsUI();
 }
 
 function toggleHaptics() {
+    if (typeof navigator.vibrate !== 'function') {
+        updateHapticsUI();
+        if (window.showToast) window.showToast(I18N.web_haptics_unsupported);
+        return;
+    }
     const currentState = localStorage.getItem('haptics_enabled') !== 'false';
     localStorage.setItem('haptics_enabled', currentState ? 'false' : 'true');
     updateHapticsUI();
     if (!currentState) {
-        if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+        playHaptic();
         const msgOn = (typeof I18N !== 'undefined' && I18N.web_haptics_on) ? I18N.web_haptics_on : "Haptics: ON";
         if (window.showToast) window.showToast(msgOn);
     } else {
@@ -840,10 +918,22 @@ function toggleHaptics() {
 }
 
 function updateHapticsUI() {
-    const isEnabled = localStorage.getItem('haptics_enabled') !== 'false';
+    const isSupported = typeof navigator.vibrate === 'function';
+    const isEnabled = isSupported && localStorage.getItem('haptics_enabled') !== 'false';
     
     document.querySelectorAll('#mHapticsCheckbox, .mHapticsCheckbox').forEach(checkbox => {
         checkbox.checked = isEnabled;
+        checkbox.disabled = !isSupported;
+    });
+
+    document.querySelectorAll('[data-haptics-toggle]').forEach(row => {
+        row.setAttribute('aria-disabled', String(!isSupported));
+        row.style.opacity = isSupported ? '' : '0.5';
+        row.style.cursor = isSupported ? '' : 'not-allowed';
+        row.querySelector('label').style.cursor = 'inherit';
+        const status = row.querySelector('[data-haptics-unsupported]');
+        status.hidden = isSupported;
+        status.textContent = I18N.web_haptics_unsupported;
     });
     
     const track = document.getElementById('mHapticsTrack');
@@ -862,7 +952,7 @@ function updateHapticsUI() {
 
     const statusText = document.getElementById('mobileHapticsStatus');
     if (statusText) {
-        statusText.innerText = isEnabled ? (I18N?.web_on || 'Вкл') : (I18N?.web_off || 'Выкл');
+        statusText.innerText = !isSupported ? I18N.web_haptics_unsupported : isEnabled ? (I18N?.web_on || 'Вкл') : (I18N?.web_off || 'Выкл');
         statusText.className = isEnabled ? 'text-xs font-bold uppercase text-green-500' : 'text-xs font-bold uppercase text-gray-500';
     }
 }
@@ -1098,6 +1188,9 @@ function copyToken(el) {
 }
 
 function copyTextToClipboard(text) {
+    if (typeof playHaptic === 'function') {
+        playHaptic([10, 30, 10]);
+    }
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(showCopyFeedback);
     } else {
@@ -1120,6 +1213,100 @@ function showCopyFeedback() {
     if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_copied) ? I18N.web_copied : "Copied!");
 }
 window.copyToken = copyToken;
+
+function copyIpWithFeedback(ip, triggerEl, event) {
+    if (event) {
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        if (event.preventDefault) event.preventDefault();
+    }
+    const cleanIp = (ip || '').trim();
+    if (!cleanIp || cleanIp === '-' || cleanIp === 'n/a' || cleanIp === 'Unknown' || cleanIp === '...') return;
+
+    copyTextToClipboard(cleanIp);
+
+    const btn = triggerEl ? (triggerEl.closest('.ip-copy-btn') || triggerEl.querySelector?.('.ip-copy-btn') || triggerEl) : null;
+    const iconSvg = btn ? (btn.querySelector('.ip-copy-icon') || (btn.classList && btn.classList.contains('ip-copy-icon') ? btn : null)) : null;
+
+    if (iconSvg && !btn._isCopying) {
+        btn._isCopying = true;
+        const originalNodes = Array.from(iconSvg.childNodes).map(n => n.cloneNode(true));
+        const originalClass = iconSvg.getAttribute('class') || '';
+
+        // Checkmark path
+        const checkPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        checkPath.setAttribute('stroke-linecap', 'round');
+        checkPath.setAttribute('stroke-linejoin', 'round');
+        checkPath.setAttribute('stroke-width', '2.5');
+        checkPath.setAttribute('d', 'M5 13l4 4L19 7');
+
+        iconSvg.replaceChildren(checkPath);
+        iconSvg.setAttribute('class', originalClass + ' text-emerald-500 dark:text-emerald-400 scale-110');
+
+        setTimeout(() => {
+            iconSvg.replaceChildren(...originalNodes);
+            iconSvg.setAttribute('class', originalClass);
+            btn._isCopying = false;
+        }, 1500);
+    }
+}
+window.copyIpWithFeedback = copyIpWithFeedback;
+
+function isTouchDeviceOrEvent(e) {
+    if (e && (e.pointerType === 'touch' || e.pointerType === 'pen')) return true;
+    if (window.matchMedia && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches)) return true;
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) return true;
+    return false;
+}
+
+// Global Capture delegation for Copying IP (works across desktop click and touchscreen tap)
+document.addEventListener('click', e => {
+    // 1. Explicit Copy Button Click
+    const btn = e.target.closest('.ip-copy-btn, [data-action="copy-ip"]');
+    if (btn) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (e.preventDefault) e.preventDefault();
+        const container = btn.closest('.ip-copy-container');
+        const ip = btn.getAttribute('data-ip') || 
+                   (container && container.getAttribute('data-copy-ip')) || 
+                   (container && container.querySelector('.ip-copy-text')?.textContent.trim()) || 
+                   '';
+        if (ip) {
+            copyIpWithFeedback(ip, btn, e);
+        }
+        return;
+    }
+
+    // 2. Touch screen tap on IP text or container (tablets, phones)
+    const textOrContainer = e.target.closest('.ip-copy-text, .ip-copy-container');
+    if (textOrContainer && isTouchDeviceOrEvent(e)) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (e.preventDefault) e.preventDefault();
+        const container = textOrContainer.closest('.ip-copy-container') || textOrContainer;
+        const textEl = container.querySelector('.ip-copy-text') || textOrContainer;
+        const ip = container.getAttribute('data-copy-ip') || textEl.textContent.trim();
+        const btnEl = container.querySelector('.ip-copy-btn');
+        if (ip) {
+            copyIpWithFeedback(ip, btnEl, e);
+        }
+        return;
+    }
+}, true);
+
+document.addEventListener('app:action:copy-ip', e => {
+    e.detail.originalEvent?.stopPropagation();
+    const btn = e.detail.target;
+    const container = btn.closest('.ip-copy-container');
+    const ip = btn.getAttribute('data-ip') || 
+               (container && container.getAttribute('data-copy-ip')) || 
+               (container && container.querySelector('.ip-copy-text')?.textContent.trim()) || 
+               '';
+    if (ip) {
+        copyIpWithFeedback(ip, btn, e.detail.originalEvent);
+    }
+});
 
 let toastContainer = null;
 
@@ -1446,30 +1633,62 @@ async function addNodeDash() {
 }
 
 function isHolidayPeriod() {
+    try {
+        if (new URLSearchParams(window.location.search).has('holiday')) return true;
+    } catch (_) {}
     const now = new Date();
     return (now.getMonth() === 11 && now.getDate() === 31) || (now.getMonth() === 0 && now.getDate() <= 14);
 }
 let snowInterval = null;
 
 function initHolidayMood() {
-    if (!isHolidayPeriod()) return;
-    const themeBtn = document.getElementById('themeBtn');
-    if (themeBtn && !document.getElementById('holidayBtn')) {
-        const holidayBtn = document.createElement('button');
-        holidayBtn.id = 'holidayBtn';
-        holidayBtn.className = 'flex items-center justify-center w-8 h-8 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 mr-1';
-        holidayBtn.innerHTML = DOMPurify.sanitize(`<svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"></line><line x1="20" y1="12" x2="4" y2="12"></line><line x1="17.66" y1="6.34" x2="6.34" y2="17.66"></line><line x1="17.66" y1="17.66" x2="6.34" y2="6.34"></line><polyline points="9 4 12 7 15 4"></polyline><polyline points="15 20 12 17 9 20"></polyline><polyline points="20 9 17 12 20 15"></polyline><polyline points="4 15 7 12 4 9"></polyline></svg>`);
-        holidayBtn.onclick = toggleHolidayMood;
-        themeBtn.parentNode.insertBefore(holidayBtn, themeBtn);
+    const isHoliday = isHolidayPeriod();
+    const btns = document.querySelectorAll('[data-action="toggle-holiday-mode"], #holidayBtn, #holidayBtnDesktop');
+
+    if (!isHoliday) {
+        btns.forEach(b => {
+            b.classList.add('hidden');
+        });
+        stopHolidayEffects();
+        return;
     }
+
+    // Reveal existing holiday buttons in submenus and headers
+    btns.forEach(b => {
+        b.classList.remove('hidden');
+    });
+
+    // Dynamic fallback: if no button exists yet, insert into the container with toggle-a11y-mode
+    if (btns.length === 0) {
+        const a11yBtns = document.querySelectorAll('[data-action="toggle-a11y-mode"]');
+        a11yBtns.forEach(a11y => {
+            if (a11y.parentNode && !a11y.parentNode.querySelector('[data-action="toggle-holiday-mode"]')) {
+                const isDropdown = a11y.classList.contains('p-2') || a11y.closest('#mobileSettingsDropdown');
+                const btn = document.createElement('button');
+                btn.setAttribute('data-action', 'toggle-holiday-mode');
+                btn.setAttribute('title', (typeof I18N !== 'undefined' && I18N.web_toggle_holiday_mode) || 'Новогоднее настроение');
+                btn.className = isDropdown
+                    ? 'p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-sky-400 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95'
+                    : 'p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-sky-400 hover:text-sky-500 dark:hover:text-sky-300 hover:scale-110 focus:ring-2 focus:ring-sky-400 focus:outline-none';
+                const icon = document.createElement('i');
+                icon.className = `icon icon-snowflake ${isDropdown ? 'h-5 w-5' : 'h-4 w-4 sm:h-5 sm:w-5'}`;
+                btn.appendChild(icon);
+                btn.onclick = toggleHolidayMood;
+                a11y.parentNode.appendChild(btn);
+            }
+        });
+    }
+
     createHolidayStructure();
     window.addEventListener('resize', () => {
         clearTimeout(window.resizeTimer);
         window.resizeTimer = setTimeout(createHolidayStructure, 250);
     });
-    if (localStorage.getItem('holiday_mood') !== 'false') {
+
+    const isEnabled = localStorage.getItem('holiday_mood') !== 'false';
+    updateHolidayUI(isEnabled);
+    if (isEnabled) {
         startHolidayEffects();
-        document.getElementById('holidayBtn')?.classList.add('holiday-btn-active');
     }
 }
 
@@ -1494,18 +1713,38 @@ function createHolidayStructure() {
     }
 }
 
+function updateHolidayUI(isActive) {
+    const btns = document.querySelectorAll('[data-action="toggle-holiday-mode"], #holidayBtn, #holidayBtnDesktop');
+    btns.forEach(btn => {
+        if (isActive) {
+            btn.classList.add('holiday-btn-active');
+        } else {
+            btn.classList.remove('holiday-btn-active');
+        }
+    });
+}
+
 function toggleHolidayMood() {
-    const newState = localStorage.getItem('holiday_mood') === 'false';
-    localStorage.setItem('holiday_mood', newState);
-    const btn = document.getElementById('holidayBtn');
+    const isCurrentlyActive = localStorage.getItem('holiday_mood') !== 'false';
+    const newState = !isCurrentlyActive;
+    localStorage.setItem('holiday_mood', newState ? 'true' : 'false');
+    updateHolidayUI(newState);
     if (newState) {
         startHolidayEffects();
-        btn?.classList.add('holiday-btn-active');
+        if (typeof showToast === 'function') {
+            showToast((typeof I18N !== 'undefined' && I18N.web_holiday_mode_on) || 'Новогоднее настроение включено');
+        }
     } else {
         stopHolidayEffects();
-        btn?.classList.remove('holiday-btn-active');
+        if (typeof showToast === 'function') {
+            showToast((typeof I18N !== 'undefined' && I18N.web_holiday_mode_off) || 'Новогоднее настроение отключено');
+        }
     }
+    if (window.playHaptic) playHaptic([10, 40, 10]);
 }
+
+window.toggleHolidayMood = toggleHolidayMood;
+document.addEventListener('app:action:toggle-holiday-mode', () => toggleHolidayMood());
 
 function startHolidayEffects() {
     startSnow();
@@ -1541,11 +1780,25 @@ function stopSnow() {
     if (document.getElementById('snow-container')) document.getElementById('snow-container').innerHTML = '';
 }
 
+window._isSessionExpired = false;
+let sseReconnectTimer = null;
+
+function dismissAllConnectionAlerts() {
+    const connToast = document.getElementById('conn-error-toast');
+    if (connToast) connToast.remove();
+    const fatalOverlay = document.getElementById('fatal-error-overlay');
+    if (fatalOverlay) fatalOverlay.remove();
+    const offlineToast = document.getElementById('offline-toast');
+    if (offlineToast) offlineToast.remove();
+}
+
 function initSSE() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
+    if (window._isSessionExpired) return;
 
     if (sseSource) {
-        sseSource.close();
+        try { sseSource.close(); } catch (_) { }
+        sseSource = null;
     }
 
     isSseConnected = false;
@@ -1554,24 +1807,23 @@ function initSSE() {
     function resetConnectionWatchdog() {
         if (connectionTimer) clearTimeout(connectionTimer);
         connectionTimer = setTimeout(() => {
-            if (navigator.onLine) {
-                const weakText = (typeof I18N !== 'undefined' && I18N.web_weak_conn) ? I18N.web_weak_conn : "Weak internet connection...";
-                showToast(weakText);
-            } else {
-                handleConnectionError();
-            }
+            diagnoseConnectionIssue(true);
         }, 15000);
-    };
+    }
 
     resetConnectionWatchdog();
 
-    sseSource = new EventSource('/api/events');
+    try {
+        sseSource = new EventSource('/api/events');
+    } catch (e) {
+        diagnoseConnectionIssue(false);
+        return;
+    }
 
     sseSource.onopen = () => {
         isSseConnected = true;
         resetConnectionWatchdog();
-        const errToast = document.getElementById('conn-error-toast');
-        if (errToast) errToast.remove();
+        dismissAllConnectionAlerts();
     };
 
     sseSource.addEventListener('agent_stats', () => {
@@ -1604,19 +1856,118 @@ function initSSE() {
         }
     });
 
-    sseSource.addEventListener('shutdown', (e) => {
-        sseSource.close();
+    sseSource.addEventListener('shutdown', () => {
+        if (sseSource) {
+            try { sseSource.close(); } catch (_) { }
+            sseSource = null;
+        }
         handleServerRestart();
     });
 
     sseSource.onerror = () => {
-        if (isSseConnected) {
-            handleConnectionError();
-        }
+        isSseConnected = false;
+        diagnoseConnectionIssue(false);
     };
 
     window.sseSource = sseSource;
+    window.dispatchEvent(new CustomEvent('sse:ready', { detail: sseSource }));
+    if (typeof window.rebindDashboardSSE === 'function') {
+        window.rebindDashboardSSE();
+    }
 }
+
+async function diagnoseConnectionIssue(isWatchdog = false) {
+    if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
+
+    // 1. Client offline check
+    if (!navigator.onLine) {
+        handleClientOffline();
+        return;
+    }
+
+    // 2. Client is online. Probe server auth and health.
+    try {
+        const authRes = await fetch('/api/auth/status', {
+            method: 'GET',
+            cache: 'no-store'
+        });
+
+        if (authRes.status === 401 || authRes.status === 403) {
+            handleSessionExpired();
+            return;
+        }
+
+        if (authRes.ok) {
+            // Server is active and session is valid!
+            if (isWatchdog) {
+                const slowText = (typeof I18N !== 'undefined' && I18N.web_slow_connection)
+                    ? I18N.web_slow_connection
+                    : "Slow internet connection...";
+                showToast(slowText);
+            } else {
+                dismissAllConnectionAlerts();
+                if (!sseReconnectTimer && !window._isSessionExpired) {
+                    sseReconnectTimer = setTimeout(() => {
+                        sseReconnectTimer = null;
+                        if (!isSseConnected && !window._isSessionExpired) {
+                            initSSE();
+                        }
+                    }, 2000);
+                }
+            }
+            return;
+        }
+    } catch (_) {
+        // Network error fetching /api/auth/status -> Server is restarting or unreachable!
+    }
+
+    // 3. Server failed to answer -> show Server Restarting overlay
+    handleServerRestart();
+}
+
+function handleClientOffline() {
+    if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
+    if (document.getElementById('offline-toast')) return;
+
+    const title = (typeof I18N !== 'undefined' && I18N.web_client_offline) ? I18N.web_client_offline : "Отсутствует подключение к интернету";
+    const desc = (typeof I18N !== 'undefined' && I18N.web_client_offline_desc) ? I18N.web_client_offline_desc : "Проверьте сетевое соединение Wi-Fi или мобильные данные.";
+
+    const toastContainer = getToastContainer();
+    const toast = document.createElement('div');
+    toast.id = 'offline-toast';
+    toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md w-auto max-w-sm transition-all duration-300 transform translate-y-0 opacity-100 mb-2';
+    toast.innerHTML = DOMPurify.sanitize(`
+        <div class="offline-toast-icon p-2 rounded-xl flex-shrink-0 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+            </svg>
+        </div>
+        <div class="flex flex-col text-left flex-1 min-w-0 pr-1">
+            <span class="offline-toast-title text-xs font-bold leading-tight">${escapeHtml(title)}</span>
+            <span class="offline-toast-desc text-[11px] leading-tight mt-0.5">${escapeHtml(desc)}</span>
+        </div>
+        <button type="button" onclick="const t = document.getElementById('offline-toast'); if (t) t.remove();" class="offline-toast-close p-1 rounded-lg transition ml-auto flex-shrink-0" title="Close" aria-label="Close">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    `);
+    toastContainer.appendChild(toast);
+}
+
+window.addEventListener('online', () => {
+    const offlineToast = document.getElementById('offline-toast');
+    if (offlineToast) offlineToast.remove();
+    if (!window._isSessionExpired) {
+        const onlineText = (typeof I18N !== 'undefined' && I18N.web_client_online) ? I18N.web_client_online : "Подключение к сети восстановлено";
+        showToast(onlineText);
+        diagnoseConnectionIssue(false);
+    }
+});
+
+window.addEventListener('offline', () => {
+    handleClientOffline();
+});
 
 function initSessionSync() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
@@ -1625,8 +1976,10 @@ function initSessionSync() {
         if (e.key === 'session_status' && e.newValue && e.newValue.startsWith('logged_out')) {
             handleSessionExpired();
         }
+        if (e.key === 'session_expired_popup' && e.newValue === '1') {
+            handleSessionExpired();
+        }
     });
-
 
     const logoutForms = document.querySelectorAll('form[action="/logout"]');
     logoutForms.forEach(form => {
@@ -1639,8 +1992,8 @@ function initSessionSync() {
 window.checkSessionStatus = function() {
     if (document.getElementById('session-expired-overlay')) return;
 
-    fetch('/api/settings/language', {
-        method: 'HEAD',
+    fetch('/api/auth/status', {
+        method: 'GET',
         cache: 'no-store'
     })
         .then(res => {
@@ -1649,7 +2002,7 @@ window.checkSessionStatus = function() {
             }
         })
         .catch(() => { });
-}
+};
 
 let lastUnreadCount = -1;
 let lastNotificationsJson = "";
@@ -1679,31 +2032,55 @@ function initNotifications() {
 }
 
 function handleSessionExpired() {
-    if (document.getElementById('session-expired-overlay')) return;
+    if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
+    window._isSessionExpired = true;
+
+    try {
+        sessionStorage.setItem('session_expired_popup', '1');
+        localStorage.setItem('session_expired_popup', '1');
+    } catch (_) { }
 
     if (window.sseSource) {
-        window.sseSource.close();
+        try { window.sseSource.close(); } catch (_) { }
         window.sseSource = null;
     }
+    if (window.nodesMonitorSSESource) {
+        try { window.nodesMonitorSSESource.close(); } catch (_) { }
+        window.nodesMonitorSSESource = null;
+    }
+    if (window.servicesSSESource) {
+        try { window.servicesSSESource.close(); } catch (_) { }
+        window.servicesSSESource = null;
+    }
+    if (window.logSSESource) {
+        try { window.logSSESource.close(); } catch (_) { }
+        window.logSSESource = null;
+    }
 
-    const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Session expired";
-    const msg = (typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Please login again";
-    const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Login";
+    dismissAllConnectionAlerts();
+    const restartOverlay = document.getElementById('server-restart-overlay');
+    if (restartOverlay) restartOverlay.remove();
+
+    const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
+    const msg = (typeof I18N !== 'undefined' && I18N.web_session_expired_desc)
+        ? I18N.web_session_expired_desc
+        : ((typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Время вашей сессии истекло или доступ был отозван. Пожалуйста, выполните вход повторно.");
+    const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Войти";
 
     const overlay = document.createElement('div');
     overlay.id = 'session-expired-overlay';
-    overlay.className = 'fixed inset-0 z-[9999] bg-white/30 dark:bg-black/50 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300 opacity-0';
+    overlay.className = 'fixed inset-0 z-[10001] bg-white/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300 opacity-0';
 
     overlay.innerHTML = DOMPurify.sanitize(`
-        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 transform scale-95 transition-transform duration-300">
-            <div class="mb-4 text-red-500 mx-auto bg-red-100 dark:bg-red-900/20 w-16 h-16 flex items-center justify-center rounded-full">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 transform scale-95 transition-transform duration-300">
+            <div class="mb-4 text-amber-500 mx-auto bg-amber-100 dark:bg-amber-900/30 w-16 h-16 flex items-center justify-center rounded-2xl shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
             </div>
             <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
             <p class="text-gray-500 dark:text-gray-400 mb-6 text-sm leading-relaxed">${msg}</p>
-            <a href="/login" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20 active:scale-95">
+            <a href="/login?expired=1" class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20 active:scale-95 text-sm">
                 ${btnText}
             </a>
         </div>
@@ -1716,61 +2093,23 @@ function handleSessionExpired() {
 
     requestAnimationFrame(() => {
         overlay.classList.remove('opacity-0');
-        overlay.querySelector('div').classList.remove('scale-95');
-        overlay.querySelector('div').classList.add('scale-100');
+        const card = overlay.querySelector('div');
+        if (card) {
+            card.classList.remove('scale-95');
+            card.classList.add('scale-100');
+        }
     });
 }
+window.handleSessionExpired = handleSessionExpired;
 
 function handleConnectionError() {
-    if (document.getElementById('connection-error-overlay')) return;
-
-    const msg = (typeof I18N !== 'undefined' && I18N.web_conn_problem) ? I18N.web_conn_problem : "Possible internet connection problems";
-    const btnText = (typeof I18N !== 'undefined' && I18N.web_refresh_stream) ? I18N.web_refresh_stream : "Refresh";
-
-    const toastContainer = getToastContainer();
-    const existing = document.getElementById('conn-error-toast');
-    if (existing) return;
-
-    const toast = document.createElement('div');
-    toast.id = 'conn-error-toast';
-    toast.className = 'pointer-events-auto flex flex-col gap-2 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border bg-red-50/90 dark:bg-red-900/90 border-red-200 dark:border-red-800 w-auto max-w-sm transition-all duration-300 transform translate-y-0 opacity-100 mb-2';
-
-    toast.innerHTML = DOMPurify.sanitize(`
-        <div class="flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span class="text-sm font-bold text-red-900 dark:text-red-100">${msg}</span>
-        </div>
-        <button data-action="retry-sse" class="w-full py-1.5 px-3 bg-red-200 hover:bg-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-red-900 dark:text-red-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            ${btnText}
-        </button>
-    `);
-
-    toastContainer.appendChild(toast);
+    diagnoseConnectionIssue(false);
 }
+window.handleConnectionError = handleConnectionError;
 
 function retrySSEStream() {
-    const toast = document.getElementById('conn-error-toast');
-    if (toast) toast.remove();
-
-    if (sseSource) {
-        sseSource.close();
-        sseSource = null;
-    }
-
-    initSSE();
-
-    setTimeout(() => {
-        if (!isSseConnected) {
-            handleFatalConnectionError();
-        }
-    }, 5000);
+    diagnoseConnectionIssue(false);
 }
-
 window.retrySSEStream = retrySSEStream;
 
 document.addEventListener('app:action:retry-sse', () => {
@@ -1778,59 +2117,118 @@ document.addEventListener('app:action:retry-sse', () => {
 });
 
 function handleFatalConnectionError() {
-    if (document.getElementById('fatal-error-overlay')) return;
-
-    const msg = (typeof I18N !== 'undefined' && I18N.web_fatal_conn) ? I18N.web_fatal_conn : "Internet connection problems...";
-    const reloadMsg = (typeof I18N !== 'undefined' && I18N.web_reloading_page) ? I18N.web_reloading_page : "Reloading page...";
-
-    createBlurOverlay('fatal-error-overlay', `
-        <div class="text-red-500 mb-4 animate-bounce">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
-            </svg>
-        </div>
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${msg}</h2>
-        <p class="text-gray-500 dark:text-gray-400 text-sm">${reloadMsg}</p>
-    `);
-
-    setTimeout(() => {
-        window.location.reload();
-    }, 5000);
+    diagnoseConnectionIssue(false);
 }
+window.handleFatalConnectionError = handleFatalConnectionError;
 
 function handleServerRestart() {
+    if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
     if (document.getElementById('server-restart-overlay')) return;
 
-    const msg = (typeof I18N !== 'undefined' && I18N.web_server_rebooting) ? I18N.web_server_rebooting : "Server/bot went into reboot.";
+    dismissAllConnectionAlerts();
+
+    const title = (typeof I18N !== 'undefined' && I18N.web_server_rebooting) ? I18N.web_server_rebooting : "Восстановление сессии...";
+    const desc = (typeof I18N !== 'undefined' && I18N.web_server_rebooting_desc) ? I18N.web_server_rebooting_desc : "Ожидание восстановления связи с панелью управления...";
+    const checkAgainText = (typeof I18N !== 'undefined' && I18N.web_check_again) ? I18N.web_check_again : "Проверить сейчас";
 
     createBlurOverlay('server-restart-overlay', `
-        <div class="text-blue-500 mb-4 animate-spin">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+        <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 mx-auto">
+            <div class="w-16 h-16 bg-blue-500/10 dark:bg-blue-500/20 rounded-2xl mx-auto flex items-center justify-center mb-4">
+                <svg class="h-8 w-8 text-blue-500 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </div>
+            <h3 id="server-restart-title" class="text-xl font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
+            <p id="server-restart-desc" class="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-4">${desc}</p>
+            <div id="server-restart-badge" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-xs font-semibold">
+                <span class="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+                <span id="server-restart-status">Восстановление подключения...</span>
+            </div>
+            <div id="server-restart-actions" class="mt-4 hidden">
+                <button onclick="checkServerHealth(true)" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-md">
+                    ${checkAgainText}
+                </button>
+            </div>
         </div>
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white">${msg}</h2>
     `);
 
-    function checkServer() {
-        fetch('/api/settings/language', {
-            method: 'HEAD',
-            cache: 'no-store'
-        })
-            .then(res => {
-                if (res.status === 200 || res.status === 401 || res.status === 403) {
-                    window.location.reload();
-                } else {
-                    setTimeout(checkServer, 2000);
-                }
-            })
-            .catch(() => {
-                setTimeout(checkServer, 2000);
-            });
-    };
+    let attempts = 0;
+    let pollTimer = null;
 
-    setTimeout(checkServer, 3000);
+    async function checkServerHealth(manual = false) {
+        if (manual && pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+        }
+
+        attempts++;
+        const statusEl = document.getElementById('server-restart-status');
+        if (statusEl) {
+            statusEl.textContent = `Проверка связи... (попытка ${attempts})`;
+        }
+
+        try {
+            const res = await fetch('/api/auth/status', {
+                method: 'GET',
+                cache: 'no-store'
+            });
+
+            if (res.status === 200) {
+                if (pollTimer) {
+                    clearTimeout(pollTimer);
+                    pollTimer = null;
+                }
+                if (statusEl) {
+                    const restoredText = (typeof I18N !== 'undefined' && I18N.web_server_restored) ? I18N.web_server_restored : "Связь восстановлена!";
+                    statusEl.textContent = restoredText;
+                }
+                const overlay = document.getElementById('server-restart-overlay');
+                if (overlay) {
+                    overlay.classList.add('opacity-0');
+                    setTimeout(() => {
+                        overlay.remove();
+                        document.body.style.overflow = '';
+                        initSSE();
+                    }, 600);
+                }
+                return;
+            }
+
+            if (res.status === 401 || res.status === 403) {
+                if (pollTimer) {
+                    clearTimeout(pollTimer);
+                    pollTimer = null;
+                }
+                const overlay = document.getElementById('server-restart-overlay');
+                if (overlay) {
+                    overlay.remove();
+                    document.body.style.overflow = '';
+                }
+                handleSessionExpired();
+                return;
+            }
+        } catch (_) {
+            // Still unreachable
+        }
+
+        if (attempts >= 15) {
+            const actions = document.getElementById('server-restart-actions');
+            if (actions) actions.classList.remove('hidden');
+            const descEl = document.getElementById('server-restart-desc');
+            if (descEl && typeof I18N !== 'undefined' && I18N.web_panel_unreachable_desc) {
+                descEl.textContent = I18N.web_panel_unreachable_desc;
+            }
+        }
+
+        if (document.getElementById('server-restart-overlay')) {
+            pollTimer = setTimeout(() => checkServerHealth(false), 2000);
+        }
+    }
+    window.checkServerHealth = checkServerHealth;
+
+    pollTimer = setTimeout(() => checkServerHealth(false), 2000);
 }
+window.handleServerRestart = handleServerRestart;
 
 function createBlurOverlay(id, content) {
     const overlay = document.createElement('div');
@@ -1878,9 +2276,28 @@ function updateNotifUI(list, count) {
     if (count > 0) {
         setSafeText(badge, count > 99 ? '99+' : String(count));
         badge.classList.remove('hidden');
-        if (lastUnreadCount !== -1 && count > lastUnreadCount && bellIcon) {
-            bellIcon.classList.add('notif-bell-shake');
-            setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
+        if (lastUnreadCount !== -1 && count > lastUnreadCount) {
+            if (bellIcon) {
+                bellIcon.classList.add('notif-bell-shake');
+                setTimeout(() => bellIcon.classList.remove('notif-bell-shake'), 500);
+            }
+            if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted' && list && list.length > 0) {
+                try {
+                    const rawText = list[0].text || '';
+                    const parsedDoc = new DOMParser().parseFromString(rawText, 'text/html');
+                    const cleanBody = (parsedDoc.body.textContent || '').trim();
+                    if (window.swRegistration && window.swRegistration.showNotification) {
+                        window.swRegistration.showNotification(document.title || 'VPS Control Panel', {
+                            body: cleanBody,
+                            icon: '/static/favicons/android-chrome-192x192.png',
+                            badge: '/static/favicons/favicon-32x32.png',
+                            tag: 'vps-foreground-alert'
+                        });
+                    }
+                } catch (e) {
+                    console.debug('Foreground notif error:', e);
+                }
+            }
         }
     } else badge.classList.add('hidden');
 
@@ -1972,6 +2389,9 @@ function toggleMobileSettings(e) {
     } else {
         if (typeof closeNotifications === 'function') closeNotifications();
         dropdown.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            syncThemeGlider(true);
+        });
     }
 }
 
@@ -1984,59 +2404,129 @@ function closeMobileSettings() {
 window.closeMobileSettings = closeMobileSettings;
 window.toggleMobileSettings = toggleMobileSettings;
 
-window.toggleTheme = function() {
-    const themes = ["system", "dark", "light", "amoled"];
-    let currentTheme = localStorage.getItem("theme");
-    if (!currentTheme) currentTheme = "system";
+function syncThemeGlider(immediate = false) {
+    const segment = document.getElementById('mobileThemeSegment');
+    if (!segment) return;
+
+    let glider = segment.querySelector('.theme-segment-glider');
+    if (!glider) {
+        glider = document.createElement('div');
+        glider.className = 'theme-segment-glider';
+        segment.prepend(glider);
+    }
+
+    const activeEl = segment.querySelector('button.is-active');
+    if (!activeEl) return;
+
+    const width = activeEl.offsetWidth;
+    const height = activeEl.offsetHeight;
+    const left = activeEl.offsetLeft;
+    const top = activeEl.offsetTop;
+
+    if (width === 0 || height === 0) return;
+
+    if (immediate || !glider.classList.contains('glider-ready')) {
+        glider.style.transition = 'none';
+        glider.style.width = `${width}px`;
+        glider.style.height = `${height}px`;
+        glider.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+        glider.style.opacity = '1';
+        void glider.offsetWidth;
+        glider.style.transition = '';
+        glider.classList.add('glider-ready');
+    } else {
+        glider.style.width = `${width}px`;
+        glider.style.height = `${height}px`;
+        glider.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+        glider.style.opacity = '1';
+    }
+}
+window.syncThemeGlider = syncThemeGlider;
+window.addEventListener('resize', () => syncThemeGlider(true));
+
+window.toggleTheme = function(event) {
+    const themes = ["light", "dark", "amoled"];
+    let currentTheme = getResolvedTheme();
 
     const currentIndex = themes.indexOf(currentTheme);
     const nextTheme = themes[(currentIndex + 1) % themes.length];
 
-    setThemeDirect(nextTheme, null);
+    setThemeDirect(nextTheme, event || window.event);
+}
+
+function applyThemeDirect(resolvedTheme) {
+    localStorage.setItem("theme", resolvedTheme);
+    document.documentElement.classList.toggle('dark', resolvedTheme === 'dark' || resolvedTheme === 'amoled');
+    document.documentElement.classList.toggle('amoled', resolvedTheme === 'amoled');
+    applyThemeUI(resolvedTheme);
+    window.dispatchEvent(new Event("themeChanged"));
+    if (typeof playHaptic === 'function') playHaptic('press');
 }
 
 function setThemeDirect(theme, event) {
-    if (event) event.stopPropagation();
-    localStorage.setItem("theme", theme);
-    document.documentElement.classList.toggle('dark', theme === 'dark' || theme === 'amoled' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches));
-    document.documentElement.classList.toggle('amoled', theme === 'amoled');
-    applyThemeUI(theme);
-    window.dispatchEvent(new Event("themeChanged"));
+    const ev = event || window.event;
+    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+
+    const resolvedTheme = (!theme || theme === 'system')
+        ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+        : theme;
+
+    if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.startViewTransition(function() {
+            applyThemeDirect(resolvedTheme);
+        });
+    } else {
+        applyThemeDirect(resolvedTheme);
+    }
 }
+window.setThemeDirect = setThemeDirect;
 
 function applyThemeUI(t) {
-    if (!t) return;
-    ['iconMoon', 'iconSun', 'iconSystem', 'iconAmoled'].forEach(id => { document.getElementById(id)?.classList.add('hidden'); });
+    if (!t || t === 'system') {
+        t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    }
+    ['iconSystem', 'iconSun', 'iconMoon', 'iconAmoled'].forEach(id => { document.getElementById(id)?.classList.add('hidden'); });
     
-    if (t === 'dark') {
-        document.getElementById('iconMoon')?.classList.remove('hidden');
-    } else if (t === 'light') {
+    if (t === 'light') {
         document.getElementById('iconSun')?.classList.remove('hidden');
+    } else if (t === 'dark') {
+        document.getElementById('iconMoon')?.classList.remove('hidden');
     } else if (t === 'amoled') {
         document.getElementById('iconAmoled')?.classList.remove('hidden');
-    } else {
-        document.getElementById('iconSystem')?.classList.remove('hidden');
     }
     
     // Interactive segmented control style for active theme
-    const baseClasses = ["text-gray-500", "hover:text-gray-700", "dark:text-gray-400", "dark:hover:text-gray-200", "hover:bg-gray-200", "dark:hover:bg-gray-800"];
-    const activeClasses = ["bg-white", "dark:bg-gray-600", "shadow-sm", "text-gray-900", "dark:text-white"];
-    
-    ['mThemeSys', 'mThemeDark', 'mThemeLight', 'mThemeAmoled'].forEach(id => {
+    const themeBtnIds = ['mThemeLight', 'mThemeDark', 'mThemeAmoled'];
+    themeBtnIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            el.classList.remove(...activeClasses);
-            el.classList.add(...baseClasses);
+            el.classList.remove('is-active', 'bg-white', 'shadow-sm', 'text-gray-900', 'dark:bg-gray-600', 'dark:text-white', 'hover:bg-gray-200', 'dark:hover:bg-gray-800');
+            el.classList.add('text-gray-500', 'dark:text-gray-400');
         }
     });
 
     const activeEl = document.getElementById(
-        t === 'light' ? 'mThemeLight' : t === 'dark' ? 'mThemeDark' : t === 'amoled' ? 'mThemeAmoled' : 'mThemeSys'
+        t === 'light' ? 'mThemeLight' : t === 'dark' ? 'mThemeDark' : 'mThemeAmoled'
     );
     if (activeEl) {
-        activeEl.classList.remove(...baseClasses);
-        activeEl.classList.add(...activeClasses);
+        activeEl.classList.remove('text-gray-500', 'dark:text-gray-400');
+        activeEl.classList.add('is-active');
+        syncThemeGlider(false);
     }
+}
+window.applyThemeUI = applyThemeUI;
+
+if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        const stored = localStorage.getItem('theme');
+        if (!stored || stored === 'system') {
+            const next = e.matches ? 'dark' : 'light';
+            document.documentElement.classList.toggle('dark', e.matches);
+            document.documentElement.classList.remove('amoled');
+            applyThemeUI(next);
+            window.dispatchEvent(new Event("themeChanged"));
+        }
+    });
 }
 
 function handleVisualViewportResize() {
@@ -2061,8 +2551,7 @@ function handleModalInputClick(e) {
 function animateModalOpen(modal, isInput = false) {
     if (!modal) return;
 
-    // Taptic engine pop-in simulation for modals/hints
-    if (window.playHaptic) playHaptic([8, 40, 10]);
+    if (!openModalSet.has(modal)) playHaptic('modalOpen');
 
     if (modalCloseTimer) {
         clearTimeout(modalCloseTimer);
@@ -2180,6 +2669,7 @@ function animateModalClose(modal) {
     // Only decrement once per modal — guards against double-close calls (overlay click +
     // explicit close button both firing) desyncing the shared lock counter.
     if (openModalSet.has(modal)) {
+        playHaptic('modalClose');
         openModalSet.delete(modal);
         openModalStackCount = Math.max(0, openModalStackCount - 1);
     }
@@ -2262,7 +2752,16 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '', 
 
         const t = (typeof I18N !== 'undefined' && I18N['modal_title_' + type]) ? I18N['modal_title_' + type] : (title || 'Alert');
         document.getElementById('sysModalTitle').innerText = t;
-        document.getElementById('sysModalMessage').innerHTML = message ? String(message).replace(/\n/g, '<br>') : "";
+        const msgEl = document.getElementById('sysModalMessage');
+        if (msgEl) {
+            const lines = String(message || '').split('\n');
+            const nodes = [];
+            lines.forEach((line, idx) => {
+                if (idx > 0) nodes.push(document.createElement('br'));
+                nodes.push(document.createTextNode(line));
+            });
+            msgEl.replaceChildren(...nodes);
+        }
 
         const input = document.getElementById('sysModalInput');
         const cancel = document.getElementById('sysModalCancel');
@@ -2419,10 +2918,11 @@ document.addEventListener('click', async (e) => {
 
                 try {
                     if (typeof parsePageEmojis === 'function') parsePageEmojis();
-                } catch (e) { }
+                } catch (_e) { }
                 initHolidayMood();
                 initGlobalLazyLoad();
                 initNodeModalScaling();
+                initHapticsToggle();
 
                 try {
                     if (url.includes('/settings')) {
@@ -2436,7 +2936,7 @@ document.addEventListener('click', async (e) => {
                         else window.location.reload();
                     }
                     initNotifications();
-                } catch (e) {
+                } catch (_e) {
                     window.location.reload();
                 }
 
@@ -2836,3 +3336,19 @@ window.closeDynamicModal = function(id) {
         }
     }
 };
+
+// --- SERVICE WORKER REGISTRATION (PWA & Web Push) ---
+(function initPwaServiceWorker() {
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then((registration) => {
+                    window.swRegistration = registration;
+                    window.dispatchEvent(new CustomEvent('swReady', { detail: registration }));
+                })
+                .catch((err) => {
+                    console.debug('ServiceWorker registration error:', err);
+                });
+        });
+    }
+})();

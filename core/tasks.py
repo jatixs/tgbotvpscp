@@ -1,6 +1,6 @@
 """
-Система фоновых задач (Background Tasks).
-Обеспечивает периодическое выполнение задач (например, биллинг-уведомления, мониторинг) в асинхронном цикле.
+Background Tasks system.
+Provides periodic background execution (e.g., billing notifications, system monitoring) inside the asyncio event loop.
 """
 from __future__ import annotations
 
@@ -48,8 +48,8 @@ async def _do_icmp_ping(target_ip: str = "8.8.8.8") -> str | None:
         ping_match = re.search(pattern, proc.stdout.decode(errors="ignore"))
         if ping_match:
             return str(round(float(ping_match.group(1)), 1))
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.debug("ICMP ping to %s failed: %s", target_ip, exc)
     return None
 
 async def measure_agent_ping() -> str | None:
@@ -121,7 +121,8 @@ async def measure_agent_ping() -> str | None:
                         await response.read()
                         if response.status in {200, 204, 301, 302, 403, 404, 500}:
                             return str(int((time.time() - started_at) * 1000))
-            except Exception:
+            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                logging.debug("HTTP ping to %s failed: %s", target, exc)
                 continue
 
     # Final fallback if everything else failed

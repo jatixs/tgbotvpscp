@@ -64,8 +64,8 @@ async def get_external_ips_for_selftest() -> tuple[str, str, bool]:
                         return candidate
                     if family == "ipv6" and ":" in candidate:
                         return candidate
-            except Exception:
-                continue
+            except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeError) as exc:
+                logging.debug("External %s lookup failed at %s: %s", family, url, exc)
         return ""
 
     connector = aiohttp.TCPConnector(family=0, ssl=False)
@@ -114,9 +114,8 @@ async def get_last_ssh_login(lang: str):
     for log_file in log_files:
         if os.path.exists(log_file):
             try:
-                # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-shell-audit.dangerous-asyncio-create-shell-audit
-                proc = await asyncio.create_subprocess_shell(
-                    f"tail -n 200 {log_file}",
+                proc = await asyncio.create_subprocess_exec(
+                    "tail", "-n", "200", "--", log_file,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -155,8 +154,8 @@ async def get_last_ssh_login(lang: str):
                                 ip_tz_label = f"GMT{sign}{off_h}"
                                 
                                 time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
-                            except Exception:
-                                pass
+                            except (TypeError, ValueError, OverflowError) as exc:
+                                logging.debug("Invalid SSH login timezone offset %r: %s", offset, exc)
 
                         return _(
                             "selftest_ssh_entry",
@@ -174,11 +173,8 @@ async def get_last_ssh_login(lang: str):
 
     if config.INSTALL_MODE == "root" or config.DEPLOY_MODE != "docker":
         try:
-            cmd = "journalctl -u ssh -n 50 --no-pager -o cat"
-            
-            # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-shell-audit.dangerous-asyncio-create-shell-audit
-            proc = await asyncio.create_subprocess_shell(
-                cmd,
+            proc = await asyncio.create_subprocess_exec(
+                "journalctl", "-u", "ssh", "-n", "50", "--no-pager", "-o", "cat",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -209,7 +205,8 @@ async def get_last_ssh_login(lang: str):
                                 off_h = int(offset / 3600)
                                 sign = "+" if off_h >= 0 else ""
                                 time_str += f" / 📍 {ip_dt.strftime('%H:%M')} (GMT{sign}{off_h})"
-                            except Exception: pass
+                            except (TypeError, ValueError, OverflowError) as exc:
+                                logging.debug("Invalid SSH login timezone offset %r: %s", offset, exc)
 
                         return _(
                             "selftest_ssh_entry",
@@ -283,10 +280,10 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
                     if not os.path.islink(fp):
                         try:
                             total += os.path.getsize(fp)
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+                        except OSError as exc:
+                            logging.debug("Unable to measure file %s: %s", fp, exc)
+        except OSError as exc:
+            logging.debug("Unable to measure directory %s: %s", path, exc)
         return total
     
     bot_disk_bytes = await asyncio.to_thread(get_dir_size, config.BASE_DIR)

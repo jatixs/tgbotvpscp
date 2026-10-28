@@ -334,6 +334,7 @@ async def security_headers_middleware(request: web.Request, handler: Handler) ->
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     response.headers.setdefault("X-XSS-Protection", "0")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
     if request.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
     elif response.content_type == "text/html":

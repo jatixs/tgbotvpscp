@@ -57,10 +57,9 @@ def register_handlers(dp: Dispatcher):
 
 def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
     tasks = [asyncio.create_task(resource_monitor(bot), name="ResourceMonitor")]
-    ssh_cmd = "journalctl -n 0 -f -o cat _COMM=sshd"
     tasks.append(
         asyncio.create_task(
-            reliable_command_monitor(bot, ssh_cmd, "logins", parse_ssh_log_line),
+            reliable_journal_monitor(bot, "logins", parse_ssh_log_line),
             name="LoginsMonitor_Journal",
         )
     )
@@ -420,7 +419,7 @@ async def cq_toggle_node_alert(callback: types.CallbackQuery):
 
 async def get_ip_data(ip: str):
     """
-    Получает флаг страны и смещение часового пояса (в секундах) для IP.
+    Retrieves country flag and timezone offset (in seconds) for an IP address.
     """
     if not ip or ip in ["localhost", "127.0.0.1", "::1"]:
         return "🏠", None
@@ -490,8 +489,8 @@ async def parse_ssh_log_line(line: str) -> dict | None:
                     ip_tz_label = f"GMT{sign}{off_h}"
                     
                     time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
-                except Exception:
-                    pass
+                except (TypeError, ValueError, OverflowError) as exc:
+                    logging.debug("Invalid SSH login timezone offset %r: %s", offset, exc)
 
             return {
                 "key": "alert_ssh_login_detected",
@@ -532,8 +531,8 @@ async def parse_f2b_log_line(line: str) -> dict | None:
                     ip_tz_label = f"GMT{sign}{off_h}"
                     
                     time_str += f" / 📍 {ip_dt.strftime('%H:%M')} ({ip_tz_label})"
-                except Exception:
-                    pass
+                except (TypeError, ValueError, OverflowError) as exc:
+                    logging.debug("Invalid fail2ban timezone offset %r: %s", offset, exc)
 
             return {
                 "key": "alert_f2b_ban_detected",
@@ -666,13 +665,12 @@ async def resource_monitor(bot: Bot):
         await asyncio.sleep(config.RESOURCE_CHECK_INTERVAL)
 
 
-async def reliable_command_monitor(bot, cmd, alert_type, parser):
+async def reliable_journal_monitor(bot, alert_type, parser):
     while True:
         proc = None
         try:
-            # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-shell-audit.dangerous-asyncio-create-shell-audit
-            proc = await asyncio.create_subprocess_shell(
-                cmd,
+            proc = await asyncio.create_subprocess_exec(
+                "journalctl", "-n", "0", "-f", "-o", "cat", "_COMM=sshd", "+", "_COMM=sshd-session",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 start_new_session=True,
@@ -697,6 +695,10 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
                             msg_gen,
                             alert_type,
                         )
+            stderr = await proc.stderr.read()
+            returncode = await proc.wait()
+            if returncode:
+                logging.error("Journal monitor exited (%s): %s", returncode, stderr.decode("utf-8", "replace").strip())
         except asyncio.CancelledError:
             if proc:
                 try:
@@ -709,12 +711,12 @@ async def reliable_command_monitor(bot, cmd, alert_type, parser):
                     logging.error(f"Error killing process group: {e}")
             raise
         except Exception as e:
-            logging.error(f"Command monitor error ({cmd}): {e}")
+            logging.error("Journal monitor error: %s", e)
             if proc:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logging.debug("Unable to stop command monitor process: %s", exc)
             await asyncio.sleep(10)
             
         # Give shutdown sequence time to cancel us before respawning
@@ -728,9 +730,8 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
             continue
         proc = None
         try:
-            # nosemgrep: python.lang.security.audit.dangerous-asyncio-create-shell-audit.dangerous-asyncio-create-shell-audit
-            proc = await asyncio.create_subprocess_shell(
-                f"tail -n 0 -f {path}",
+            proc = await asyncio.create_subprocess_exec(
+                "tail", "-n", "0", "-F", "--", path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 start_new_session=True,
@@ -755,6 +756,10 @@ async def reliable_tail_log_monitor(bot, path, alert_type, parser):
                             msg_gen,
                             alert_type,
                         )
+            stderr = await proc.stderr.read()
+            returncode = await proc.wait()
+            if returncode:
+                logging.error("Tail monitor exited for %s (%s): %s", path, returncode, stderr.decode("utf-8", "replace").strip())
         except asyncio.CancelledError:
             if proc:
                 try:

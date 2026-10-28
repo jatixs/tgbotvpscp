@@ -88,15 +88,15 @@ class SpamThrottleMiddleware(BaseMiddleware):
             if isinstance(event, Message):
                 try:
                     await event.delete()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug("Could not delete throttled message: %s", exc)
             elif (
                 isinstance(event, CallbackQuery) and last_warning_time > last_timestamp
             ):
                 try:
                     await event.answer()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug("Could not acknowledge throttled callback: %s", exc)
             return
         user_last_action_info[user_id] = (current_time, current_action_key)
         return await handler(event, data)
