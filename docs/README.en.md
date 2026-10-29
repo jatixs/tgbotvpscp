@@ -2,12 +2,14 @@
   <a href="../README.md"><img src="https://flagcdn.com/20x15/ru.png" width="16" alt="RU"> Русский</a> | <img src="https://flagcdn.com/20x15/gb.png" width="16" alt="EN"> English
 </p>
 
-<h1 align="center">🤖 VPS Manager Telegram Bot</h1>
+<h1 align="center"><img src="../assets/logo.png" width="32" height="32" alt="Logo" valign="middle"> VPS Manager Telegram Bot</h1>
 
 <p align="center">
   <b>v1.27.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
-  (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
+  (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)
+</p>
 
+<p align="center">
   <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.1-blue?style=flat-square" alt="Version 1.27.1"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-96-purple?style=flat-square" alt="Build 96"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
