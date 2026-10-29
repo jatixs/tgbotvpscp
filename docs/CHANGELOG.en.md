@@ -4,11 +4,21 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/>
-    <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
-    <img src="https://img.shields.io/badge/date-Oct%2026%202026-green?style=flat-square" alt="Date Oct 26 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.27.1-blue?style=flat-square" alt="Version 1.27.1"/>
+    <img src="https://img.shields.io/badge/build-96-purple?style=flat-square" alt="Build 96"/>
+    <img src="https://img.shields.io/badge/date-Oct%2029%202026-green?style=flat-square" alt="Date Oct 29 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.27.1] - 2026-10-29
+
+### 🐛 Fixed
+* **Sticky Navigation Stability During Theme Transitions:**
+  Fixed an issue where the sticky navigation header (`nav.sticky`) vanished during theme switching if the page was scrolled down. The header is now explicitly isolated into its own `main-header` view transition layer (`view-transition-name: main-header`), properly preserving viewport coordinates and stacking hierarchy (`z-index: 40` for the header and `z-index: 50` for the settings dropdown). Added smooth crossfade animations (`themeFadeOut` / `themeFadeIn`) for header background, borders, and icons, eliminating visual jumps or flickering during transitions.
+
+### ✨ Improved
+* **Documentation & UI Asset Showcase:**
+  Refreshed high-resolution visual assets and preview screenshots across documentation (`assets/`), reflecting recent PWA interface updates, responsive dashboard controls, and real-time node monitoring views.
 
 ## [1.27.0] - 2026-10-26
 

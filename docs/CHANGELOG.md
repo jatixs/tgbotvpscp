@@ -4,11 +4,21 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/>
-    <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
-    <img src="https://img.shields.io/badge/date-Октябрь%2026%202026-green?style=flat-square" alt="Date Oct 26 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.27.1-blue?style=flat-square" alt="Version 1.27.1"/>
+    <img src="https://img.shields.io/badge/build-96-purple?style=flat-square" alt="Build 96"/>
+    <img src="https://img.shields.io/badge/date-Октябрь%2029%202026-green?style=flat-square" alt="Date Oct 29 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.27.1] - 2026-10-29
+
+### 🐛 Исправлено
+* **Стабильность закреплённой шапки при смене темы на мобильных устройствах (Sticky Header View Transitions):**
+  Устранено исчезновение навигационной панели (`nav.sticky`) при переключении темы оформления на прокрученной странице. Навигационная шапка изолирована в отдельный независимый слой перехода `main-header` (`view-transition-name: main-header`) с корректной фиксацией координат во вьюпорте и правильным порядком наложения слоёв (`z-index: 40` для шапки и `z-index: 50` для выпадающего меню). Добавлены плавные анимации кроссфейда (`themeFadeOut` / `themeFadeIn`) для фона и границ шапки, исключающие мерцание и скачки интерфейса.
+
+### ✨ Улучшено
+* **Обновление графических материалов и PWA-галереи:**
+  Полностью актуализирована галерея скриншотов проекта в документации (`assets/`) в высоком разрешении: обновлены демонстрационные изображения мобильного PWA-клиента, веб-интерфейса управления, адаптивных графиков метрик и экранов мониторинга удалённых нод.
 
 ## [1.27.0] - 2026-10-26
 

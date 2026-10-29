@@ -2525,8 +2525,21 @@ html.amoled #themeBtn:hover {
 }
 
 /* --- Smooth View Transitions for Theme Switching (Crossfade) --- */
+nav.sticky,
+body > nav {
+    view-transition-name: main-header;
+}
+
 #mobileSettingsDropdown {
     view-transition-name: mobile-settings-dropdown;
+}
+
+::view-transition-group(main-header) {
+    z-index: 40;
+}
+
+::view-transition-group(mobile-settings-dropdown) {
+    z-index: 50;
 }
 
 ::view-transition-old(mobile-settings-dropdown),
@@ -2535,16 +2548,20 @@ html.amoled #themeBtn:hover {
 }
 
 ::view-transition-old(root),
-::view-transition-new(root) {
+::view-transition-new(root),
+::view-transition-old(main-header),
+::view-transition-new(main-header) {
     animation-duration: 0.25s;
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-::view-transition-old(root) {
+::view-transition-old(root),
+::view-transition-old(main-header) {
     animation-name: themeFadeOut;
 }
 
-::view-transition-new(root) {
+::view-transition-new(root),
+::view-transition-new(main-header) {
     animation-name: themeFadeIn;
 }
 
