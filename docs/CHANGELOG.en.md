@@ -13,10 +13,13 @@
 ## [1.27.1] - 2026-10-29
 
 ### 🐛 Fixed
-* **Sticky Navigation Stability During Theme Transitions:**
-  Fixed an issue where the sticky navigation header (`nav.sticky`) vanished during theme switching if the page was scrolled down. The header is now explicitly isolated into its own `main-header` view transition layer (`view-transition-name: main-header`), properly preserving viewport coordinates and stacking hierarchy (`z-index: 40` for the header and `z-index: 50` for the settings dropdown). Added smooth crossfade animations (`themeFadeOut` / `themeFadeIn`) for header background, borders, and icons, eliminating visual jumps or flickering during transitions.
+* **Mobile header disappearing during theme changes:** View Transitions are now skipped on narrow screens, keeping the sticky header visible when changing themes on a scrolled page.
+* **Theme slider in accessibility mode:** the slider position is recalculated after accessibility mode is enabled or disabled, accounting for the updated UI dimensions.
+* **Lazy loading after window resizing:** responsive lazy loading now reconfigures block observation when moving between desktop, tablet, and mobile widths, rather than relying only on the viewport width at initial page load.
+* **Unnecessary watchdog startup during install and upgrade:** the watchdog systemd unit is configured as an event-driven `oneshot` handler before the bot starts; upgrades no longer restart the watchdog as a continuously running service.
 
 ### ✨ Improved
+* **Quick access to log sources:** add systemd services and Docker containers using the shared plus button beside the log tabs. Viewing a service adds its own tab; the close icon removes the only source, while the dropdown arrow opens the selected-services list with per-service removal. The menu overlays the logs with a blurred backdrop and animated loading state.
 * **Documentation & UI Asset Showcase:**
   Refreshed high-resolution visual assets and preview screenshots across documentation (`assets/`), reflecting recent PWA interface updates, responsive dashboard controls, and real-time node monitoring views.
 

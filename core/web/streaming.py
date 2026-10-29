@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from collections import deque
+from datetime import datetime
 from typing import Any, Final
 from urllib.parse import urlsplit
 
@@ -505,6 +506,42 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
         return web.Response(status=403)
 
     log_type = request.query.get("type", "bot")
+    service_name = request.query.get("service", "").strip()
+    service_type = request.query.get("service_type", "systemd").strip()
+    docker_client = None
+    docker_container = None
+    if log_type == "service":
+        if not service_name or len(service_name) > 256 or service_type not in {"systemd", "docker"}:
+            return web.Response(status=400, text="Invalid service")
+        try:
+            from modules.services import get_all_available_services
+
+            available_services = await asyncio.to_thread(get_all_available_services)
+        except Exception:
+            logging.exception("Failed to load services for log stream")
+            return web.Response(status=500)
+        if not any(
+            service.get("type") == service_type and service.get("name") == service_name
+            for service in available_services
+        ):
+            return web.Response(status=404, text="Service not found")
+        if service_type == "docker":
+            try:
+                import docker
+
+                docker_client = docker.from_env()
+                docker_container = await asyncio.to_thread(
+                    docker_client.containers.get,
+                    service_name,
+                )
+            except Exception:
+                logging.exception("Failed to connect to Docker service log stream")
+                if docker_client:
+                    docker_client.close()
+                return web.Response(status=503, text="Docker logs unavailable")
+    elif log_type not in {"bot", "sys"}:
+        return web.Response(status=400, text="Invalid log type")
+
     response = web.StreamResponse(status=200, reason="OK")
     response.headers["Content-Type"] = "text/event-stream"
     response.headers["Cache-Control"] = "no-cache"
@@ -521,8 +558,14 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
         elif os.path.exists("/host/bin/journalctl"):
             journal_bin = ["chroot", "/host", "/bin/journalctl"]
 
-    async def fetch_sys_logs(cursor: str | None = None, lines: int | None = None) -> tuple[list[str], str | None]:
+    async def fetch_sys_logs(
+        cursor: str | None = None,
+        lines: int | None = None,
+        unit: str | None = None,
+    ) -> tuple[list[str], str | None]:
         cmd = journal_bin + ["--no-pager", "--show-cursor"]
+        if unit:
+            cmd.extend(["-u", f"{unit}.service"])
         if cursor:
             cmd.extend(["--after-cursor", cursor])
         elif lines:
@@ -556,11 +599,45 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
             logging.error("Exception in fetch_sys_logs: %s", exc)
             return (["Error: Failed to execute log retrieval"], cursor)
 
+    def read_docker_log_lines(*, tail: int | None = None, since: int | None = None) -> list[str]:
+        kwargs: dict[str, Any] = {"timestamps": True, "stdout": True, "stderr": True}
+        if tail is not None:
+            kwargs["tail"] = tail
+        if since is not None:
+            kwargs["since"] = since
+        output = docker_container.logs(**kwargs)
+        if isinstance(output, bytes):
+            output = output.decode("utf-8", errors="replace")
+        return [line for line in output.splitlines() if line]
+
+    def add_new_docker_log_lines(lines: list[str]) -> list[str]:
+        nonlocal docker_log_since
+        previously_seen = set(docker_seen_log_lines)
+        new_lines: list[str] = []
+        for line in lines:
+            if line not in previously_seen:
+                new_lines.append(line)
+                if line not in docker_seen_log_lines:
+                    docker_seen_log_lines.add(line)
+                    docker_seen_log_order.append(line)
+                    if len(docker_seen_log_order) > 1000:
+                        docker_seen_log_lines.discard(docker_seen_log_order.popleft())
+            timestamp_text = line.split(" ", 1)[0].replace("Z", "+00:00")
+            try:
+                timestamp = datetime.fromisoformat(timestamp_text).timestamp()
+                docker_log_since = max(docker_log_since, int(timestamp))
+            except ValueError:
+                pass
+        return new_lines
+
     bot_log_path = os.path.join(BASE_DIR, "logs", "bot", "bot.log")
     last_pos = 0
     sys_cursor: str | None = None
     last_sent_lines_hash: int | None = None
     last_activity = time.time()
+    docker_log_since = 0
+    docker_seen_log_lines: set[str] = set()
+    docker_seen_log_order: deque[str] = deque()
 
     if log_type == "bot":
         clean_lines: list[str] = []
@@ -586,9 +663,30 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
                 return response
             raise
 
-    elif log_type == "sys":
+    elif log_type == "service" and service_type == "docker":
         try:
-            history_lines, sys_cursor = await fetch_sys_logs(lines=300)
+            history_lines = await asyncio.to_thread(read_docker_log_lines, tail=300)
+            history_lines = add_new_docker_log_lines(history_lines)
+        except Exception as exc:
+            logging.error("Error reading Docker service logs: %s", exc)
+            history_lines = ["Error: Docker service logs are unavailable"]
+
+        try:
+            await _write_sse(response, "logs", {"logs": history_lines})
+            await response.drain()
+            last_activity = time.time()
+        except Exception as exc:
+            if "closing transport" in str(exc):
+                docker_client.close()
+                return response
+            raise
+
+    elif log_type == "sys" or (log_type == "service" and service_type == "systemd"):
+        try:
+            history_lines, sys_cursor = await fetch_sys_logs(
+                lines=300,
+                unit=service_name if log_type == "service" and service_type == "systemd" else None,
+            )
         except Exception as exc:
             logging.error("Error fetching sys logs: %s", exc)
             history_lines = ["Error: System logs temporarily unavailable"]
@@ -645,12 +743,18 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
                     await response.drain()
                     data_sent = True
 
-            elif log_type == "sys":
+            elif log_type == "sys" or (log_type == "service" and service_type == "systemd"):
                 try:
                     if sys_cursor:
-                        new_lines, sys_cursor = await fetch_sys_logs(cursor=sys_cursor)
+                        new_lines, sys_cursor = await fetch_sys_logs(
+                            cursor=sys_cursor,
+                            unit=service_name if log_type == "service" and service_type == "systemd" else None,
+                        )
                     else:
-                        new_lines, sys_cursor = await fetch_sys_logs(lines=10)
+                        new_lines, sys_cursor = await fetch_sys_logs(
+                            lines=10,
+                            unit=service_name if log_type == "service" and service_type == "systemd" else None,
+                        )
                 except Exception as exc:
                     logging.error("Error streaming sys logs: %s", exc)
                     new_lines = ["Error: Connection to system logs lost"]
@@ -661,6 +765,22 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
                         new_lines = []
                     else:
                         last_sent_lines_hash = current_hash
+
+                if new_lines:
+                    await _write_sse(response, "logs", {"logs": new_lines})
+                    await response.drain()
+                    data_sent = True
+
+            elif log_type == "service" and service_type == "docker":
+                try:
+                    new_lines = await asyncio.to_thread(
+                        read_docker_log_lines,
+                        since=max(0, docker_log_since - 1),
+                    )
+                    new_lines = add_new_docker_log_lines(new_lines)
+                except Exception as exc:
+                    logging.error("Error streaming Docker service logs: %s", exc)
+                    new_lines = ["Error: Connection to Docker service logs lost"]
 
                 if new_lines:
                     await _write_sse(response, "logs", {"logs": new_lines})
@@ -696,6 +816,8 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
             except Exception:
                 pass
 
+    if docker_client:
+        await asyncio.to_thread(docker_client.close)
     return response
 
 

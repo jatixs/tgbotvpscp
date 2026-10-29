@@ -678,7 +678,7 @@
                 </div>
             </div>
             <div data-block-id="system_logs" data-default-size="standard" class="dashboard-block relative col-span-12 lg:col-span-6 lg:row-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col overflow-hidden lazy-block transition-all duration-300">
-                <div class="flex justify-between items-center mb-4 flex-wrap gap-2 relative z-10">
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-2 relative z-[60]">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none"
                             viewBox="0 0 24 24" stroke="currentColor">
@@ -723,13 +723,36 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold">
+                        <div id="serviceLogsDock" class="log-source-switcher text-[10px] font-bold">
+                            <button onclick="addServiceLogs(event)" id="addServiceLogsBtn"
+                                class="log-source-button log-source-add"
+                                title="{{ web_logs_add_service }}" aria-label="{{ web_logs_add_service }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m-7-7h14" />
+                                </svg>
+                            </button>
+                            <div id="serviceLogsTab" class="service-log-tab">
+                                <button onclick="switchLogType('service')" id="btnLogService"
+                                    class="log-source-button service-log-name">
+                                    <span id="serviceLogsSelectedName" class="truncate"></span>
+                                </button>
+                                <button onclick="toggleServiceLogsMenu(event)" id="serviceLogsActionBtn"
+                                    class="log-source-button service-log-action"
+                                    aria-label="{{ web_logs_close_service }}" title="{{ web_logs_close_service }}">
+                                    <svg id="serviceLogsCloseIcon" class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    <svg id="serviceLogsChevron" class="hidden h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                            </div>
                             <button onclick="switchLogType('bot')" id="btnLogBot"
-                                class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                                class="log-source-button">
                                 {{ web_logs_btn_bot }}
                             </button>
                             <button onclick="switchLogType('sys')" id="btnLogSys"
-                                class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                                class="log-source-button">
                                 {{ web_logs_btn_sys }}
                             </button>
                         </div>

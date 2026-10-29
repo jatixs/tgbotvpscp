@@ -72,29 +72,6 @@ window.addEventListener('themeChanged', () => {
     });
 });
 
-function initScrollAnimations() {
-    if (window.innerWidth >= 1024) return;
-    const observerOptions = {
-        root: null,
-        rootMargin: '0px',
-        threshold: 0.1
-    };
-
-    const observer = new IntersectionObserver((entries, obs) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('is-visible');
-                obs.unobserve(entry.target);
-            }
-        });
-    }, observerOptions);
-
-    const blocks = document.querySelectorAll('.lazy-block:not(.is-visible)');
-    blocks.forEach(block => {
-        observer.observe(block);
-    });
-}
-
 window.rebindDashboardSSE = function () {
     if (window.sseSource) {
         window.sseSource.removeEventListener('agent_stats', handleSSEAgentStats);
@@ -115,7 +92,7 @@ window.initDashboard = function () {
     cleanupDashboardSources();
     nodesFirstUpdateReceived = false;  // Reset flag on dashboard init
 
-    initScrollAnimations();
+    window.initGlobalLazyLoad?.();
 
     window.rebindDashboardSSE();
 
@@ -141,6 +118,7 @@ window.initDashboard = function () {
         }
     }
     if (document.getElementById('logsContainer')) {
+        renderServiceLogsTab();
         switchLogType('bot');
     }
 
@@ -231,8 +209,6 @@ const handleSSENodesList = (e) => {
 document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById('agentChart') || document.getElementById('nodesList')) {
         window.initDashboard();
-    } else {
-        initScrollAnimations();
     }
 });
 
@@ -1368,6 +1344,354 @@ window.selectLogFilter = function (level) {
     if (menu) menu.classList.add('hidden');
 };
 
+const SERVICE_LOGS_KEY = 'dashboardServiceLogs';
+const SELECTED_SERVICE_LOG_KEY = 'dashboardSelectedServiceLog';
+let trackedServiceLogs = [];
+let selectedServiceLog = null;
+let activeLogSourceType = 'bot';
+let serviceLogsDockOpenTimer = null;
+let serviceLogsDockCloseTimer = null;
+let serviceLogsRequestId = 0;
+let serviceLogsMenuMode = 'add';
+
+try {
+    const savedServiceLogs = JSON.parse(localStorage.getItem(SERVICE_LOGS_KEY) || '[]');
+    if (Array.isArray(savedServiceLogs)) {
+        const services = savedServiceLogs.map(service => typeof service === 'string'
+            ? { name: service, type: 'systemd' }
+            : service
+        ).filter(service =>
+            service && typeof service.name === 'string' && ['systemd', 'docker'].includes(service.type)
+        );
+        trackedServiceLogs = services.filter((service, index) =>
+            services.findIndex(item => item.name === service.name && item.type === service.type) === index
+        );
+    }
+    const savedSelection = localStorage.getItem(SELECTED_SERVICE_LOG_KEY);
+    selectedServiceLog = trackedServiceLogs.find(service =>
+        savedSelection === `${service.type}:${service.name}` || savedSelection === service.name
+    ) || trackedServiceLogs[0] || null;
+} catch (error) {
+    console.error('Failed to load tracked service logs', error);
+}
+
+function renderServiceLogsMenu({ availableServices = [], mode = 'add', loading = false, error = false } = {}) {
+    const menu = document.getElementById('serviceLogsMenu');
+    if (!menu) return;
+    menu.replaceChildren();
+
+    const addMenuItem = (service, action, { removable = false } = {}) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center border-b border-gray-100 dark:border-white/5 last:border-0';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'flex-1 min-w-0 text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 truncate';
+        button.textContent = service.name;
+        button.addEventListener('click', action);
+        row.appendChild(button);
+        if (removable) {
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'px-2 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20';
+            removeButton.title = I18N.web_widget_hide || 'Remove';
+            removeButton.setAttribute('aria-label', removeButton.title);
+            removeButton.textContent = '×';
+            removeButton.addEventListener('click', event => {
+                event.stopPropagation();
+                removeTrackedServiceLog(service);
+            });
+            row.appendChild(removeButton);
+        }
+        menu.appendChild(row);
+    };
+
+    if (mode === 'tracked') {
+        trackedServiceLogs.forEach(service => {
+            addMenuItem(service, () => {
+                selectedServiceLog = service;
+                localStorage.setItem(SELECTED_SERVICE_LOG_KEY, `${service.type}:${service.name}`);
+                renderServiceLogsTab();
+                switchLogType('service', service.name, service.type);
+                menu.classList.add('hidden');
+            }, { removable: true });
+        });
+        return;
+    }
+
+    const trackedNames = new Set(trackedServiceLogs.map(service => `${service.type}:${service.name}`));
+    const candidates = availableServices.filter(service =>
+        ['systemd', 'docker'].includes(service.type)
+        && !trackedNames.has(`${service.type}:${service.name}`)
+    );
+    const heading = document.createElement('div');
+    heading.className = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400 border-b border-gray-100 dark:border-white/5';
+    heading.textContent = I18N.web_logs_add_service || 'Add service';
+    menu.appendChild(heading);
+    if (loading || error) {
+        const state = document.createElement('div');
+        state.className = loading ? 'service-logs-loading' : 'px-3 py-2 text-xs text-red-500';
+        if (loading) {
+            const spinner = document.createElement('span');
+            spinner.className = 'service-logs-spinner';
+            spinner.setAttribute('aria-hidden', 'true');
+            state.appendChild(spinner);
+        }
+        const message = document.createElement('span');
+        message.textContent = loading
+            ? (I18N.web_logs_loading_services || 'Loading services…')
+            : (I18N.web_logs_services_error || 'Unable to load services');
+        state.appendChild(message);
+        menu.appendChild(state);
+    } else if (!candidates.length) {
+        const empty = document.createElement('div');
+        empty.className = 'px-3 py-2 text-xs text-gray-500';
+        empty.textContent = I18N.web_logs_no_services || 'No available services';
+        menu.appendChild(empty);
+    } else {
+        candidates.forEach(service => addMenuItem(service, () => {
+            const trackedService = { name: service.name, type: service.type };
+            trackedServiceLogs.push(trackedService);
+            localStorage.setItem(SERVICE_LOGS_KEY, JSON.stringify(trackedServiceLogs));
+            selectedServiceLog = trackedService;
+            localStorage.setItem(SELECTED_SERVICE_LOG_KEY, `${service.type}:${service.name}`);
+            renderServiceLogsTab();
+            switchLogType('service', service.name, service.type);
+            menu.classList.add('hidden');
+        }));
+    }
+}
+
+function renderServiceLogsTab() {
+    const tab = document.getElementById('btnLogService');
+    const label = document.getElementById('serviceLogsSelectedName');
+    const chevron = document.getElementById('serviceLogsChevron');
+    const closeIcon = document.getElementById('serviceLogsCloseIcon');
+    const actionButton = document.getElementById('serviceLogsActionBtn');
+    const serviceTab = document.getElementById('serviceLogsTab');
+    if (!tab || !label || !serviceTab || !actionButton) return;
+
+    const isAvailable = selectedServiceLog && trackedServiceLogs.some(service =>
+        service.name === selectedServiceLog.name && service.type === selectedServiceLog.type
+    );
+    const isActive = isAvailable && activeLogSourceType === 'service';
+    serviceTab.classList.toggle('is-active', Boolean(isActive));
+    label.textContent = isAvailable ? selectedServiceLog.name : '';
+    const hasMultiple = trackedServiceLogs.length > 1;
+    chevron?.classList.toggle('hidden', !hasMultiple);
+    closeIcon?.classList.toggle('hidden', hasMultiple);
+    actionButton.setAttribute(
+        'aria-label',
+        hasMultiple
+            ? (I18N.web_logs_select_service || 'Select service')
+            : (I18N.web_logs_close_service || 'Close service logs')
+    );
+    actionButton.title = actionButton.getAttribute('aria-label');
+}
+
+function showServiceLogsMenu(mode, anchorId) {
+    const menu = document.getElementById('serviceLogsMenu');
+    if (!menu) return;
+    if (mode === 'tracked') serviceLogsRequestId += 1;
+    serviceLogsMenuMode = mode;
+    menu.classList.remove('hidden');
+    menu.setAttribute('aria-busy', 'false');
+    renderServiceLogsMenu({ mode });
+    positionServiceLogsMenu(anchorId);
+}
+
+function positionServiceLogsMenu(anchorId = 'addServiceLogsBtn') {
+    if (anchorId === 'addServiceLogsBtn' && serviceLogsMenuMode === 'tracked') {
+        anchorId = 'serviceLogsActionBtn';
+    }
+    const menu = document.getElementById('serviceLogsMenu');
+    const anchor = document.getElementById(anchorId);
+    if (!menu || !anchor || menu.classList.contains('hidden')) return;
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const menuWidth = menu.getBoundingClientRect().width;
+    const left = Math.max(12, Math.min(anchorRect.right - menuWidth, window.innerWidth - menuWidth - 12));
+    const menuHeight = menu.getBoundingClientRect().height;
+    const belowTop = anchorRect.bottom + 8;
+    const top = belowTop + menuHeight <= window.innerHeight - 12
+        ? belowTop
+        : Math.max(12, anchorRect.top - menuHeight - 8);
+
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+function setServiceLogsDockOpen(isOpen) {
+    const dock = document.getElementById('serviceLogsDock');
+    if (!dock) return;
+    dock.classList.toggle('is-open', isOpen);
+    if (isOpen) {
+        clearTimeout(serviceLogsDockCloseTimer);
+    }
+}
+
+function initServiceLogsDock() {
+    const dock = document.getElementById('serviceLogsDock');
+    const menu = document.getElementById('serviceLogsMenu');
+    if (!dock || !menu) return;
+    document.body.appendChild(menu);
+
+    let lastPointerX = null;
+    let touchSwipeStart = null;
+    let suppressDockClickUntil = 0;
+    window.addEventListener('resize', positionServiceLogsMenu);
+    window.addEventListener('scroll', positionServiceLogsMenu, true);
+    document.addEventListener('pointermove', event => {
+        if (event.pointerType !== 'mouse') return;
+        const movingLeft = lastPointerX !== null && event.clientX < lastPointerX - 2;
+        lastPointerX = event.clientX;
+        if (!movingLeft || !dock.contains(event.target) || dock.classList.contains('is-open')) return;
+
+        clearTimeout(serviceLogsDockOpenTimer);
+        serviceLogsDockOpenTimer = setTimeout(() => {
+            if (dock.matches(':hover')) setServiceLogsDockOpen(true);
+        }, 320);
+    }, { passive: true });
+
+    dock.addEventListener('pointerdown', event => {
+        if (event.pointerType === 'mouse') return;
+        touchSwipeStart = {
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY
+        };
+    }, { passive: true });
+
+    document.addEventListener('pointerup', event => {
+        if (!touchSwipeStart || event.pointerId !== touchSwipeStart.pointerId) return;
+        const deltaX = event.clientX - touchSwipeStart.x;
+        const deltaY = event.clientY - touchSwipeStart.y;
+        touchSwipeStart = null;
+        if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+
+        suppressDockClickUntil = Date.now() + 500;
+        if (deltaX < 0 && selectedServiceLog) {
+            setServiceLogsDockOpen(true);
+        } else if (deltaX > 0) {
+            setServiceLogsDockOpen(false);
+            document.getElementById('serviceLogsMenu')?.classList.add('hidden');
+        }
+    });
+
+    document.addEventListener('pointercancel', event => {
+        if (touchSwipeStart?.pointerId === event.pointerId) touchSwipeStart = null;
+    });
+
+    dock.addEventListener('click', event => {
+        if (Date.now() > suppressDockClickUntil) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        suppressDockClickUntil = 0;
+    }, true);
+
+    dock.addEventListener('pointerenter', () => clearTimeout(serviceLogsDockCloseTimer));
+    dock.addEventListener('pointerleave', () => {
+        clearTimeout(serviceLogsDockOpenTimer);
+        serviceLogsDockCloseTimer = setTimeout(() => {
+            if (!dock.matches(':focus-within') && !menu?.matches(':hover') && activeLogSourceType !== 'service') {
+                setServiceLogsDockOpen(false);
+            }
+        }, 600);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initServiceLogsDock);
+
+function removeTrackedServiceLog(removedService) {
+    const wasViewingService = activeLogSourceType === 'service';
+    trackedServiceLogs = trackedServiceLogs.filter(service =>
+        service.name !== removedService.name || service.type !== removedService.type
+    );
+    localStorage.setItem(SERVICE_LOGS_KEY, JSON.stringify(trackedServiceLogs));
+    const removedSelected = selectedServiceLog?.name === removedService.name
+        && selectedServiceLog?.type === removedService.type;
+    if (removedSelected) {
+        selectedServiceLog = trackedServiceLogs[0] || null;
+        localStorage.setItem(
+            SELECTED_SERVICE_LOG_KEY,
+            selectedServiceLog ? `${selectedServiceLog.type}:${selectedServiceLog.name}` : ''
+        );
+        if (selectedServiceLog && wasViewingService) {
+            switchLogType('service', selectedServiceLog.name, selectedServiceLog.type);
+        } else if (wasViewingService) {
+            switchLogType('bot');
+        } else {
+            renderServiceLogsTab();
+        }
+    }
+    renderServiceLogsTab();
+    if (trackedServiceLogs.length > 1) {
+        showServiceLogsMenu('tracked', 'serviceLogsActionBtn');
+    } else {
+        document.getElementById('serviceLogsMenu')?.classList.add('hidden');
+        serviceLogsMenuMode = 'add';
+    }
+}
+
+window.toggleServiceLogsMenu = function (event) {
+    event.stopPropagation();
+    if (!selectedServiceLog) return;
+    if (trackedServiceLogs.length < 2) {
+        removeTrackedServiceLog(selectedServiceLog);
+        return;
+    }
+    const menu = document.getElementById('serviceLogsMenu');
+    if (!menu) return;
+    if (!menu.classList.contains('hidden') && serviceLogsMenuMode === 'tracked') {
+        menu.classList.add('hidden');
+    } else {
+        showServiceLogsMenu('tracked', 'serviceLogsActionBtn');
+    }
+};
+
+window.addServiceLogs = async function (event) {
+    event.stopPropagation();
+    setServiceLogsDockOpen(true);
+    const menu = document.getElementById('serviceLogsMenu');
+    if (!menu) return;
+    if (!menu.classList.contains('hidden') && serviceLogsMenuMode === 'add') {
+        serviceLogsRequestId += 1;
+        menu.classList.add('hidden');
+        menu.setAttribute('aria-busy', 'false');
+        return;
+    }
+
+    const requestId = ++serviceLogsRequestId;
+    serviceLogsMenuMode = 'add';
+    const loadingStartedAt = performance.now();
+    menu.classList.remove('hidden');
+    menu.setAttribute('aria-busy', 'true');
+    renderServiceLogsMenu({ mode: 'add', loading: true });
+    positionServiceLogsMenu();
+
+    try {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        if (requestId !== serviceLogsRequestId || menu.classList.contains('hidden')) return;
+        const services = await sseRequest('/api/services/available?search=1', 'available_services');
+        const loadingTimeLeft = 220 - (performance.now() - loadingStartedAt);
+        if (loadingTimeLeft > 0) {
+            await new Promise(resolve => setTimeout(resolve, loadingTimeLeft));
+        }
+        if (requestId !== serviceLogsRequestId || menu.classList.contains('hidden')) return;
+        renderServiceLogsMenu({ availableServices: services, mode: 'add' });
+        positionServiceLogsMenu();
+        menu.setAttribute('aria-busy', 'false');
+    } catch (error) {
+        if (requestId !== serviceLogsRequestId || menu.classList.contains('hidden')) return;
+        console.error('Failed to load services for log tracking', error);
+        renderServiceLogsMenu({ mode: 'add', error: true });
+        positionServiceLogsMenu();
+        menu.setAttribute('aria-busy', 'false');
+        if (typeof showToast === 'function') {
+            showToast(I18N.web_logs_services_error || 'Unable to load services');
+        }
+    }
+};
+
 // Close log filter dropdown when clicking outside
 document.addEventListener('click', function (e) {
     const wrapper = document.getElementById('logFilterDropdownWrapper');
@@ -1375,19 +1699,54 @@ document.addEventListener('click', function (e) {
     if (wrapper && menu && !wrapper.contains(e.target)) {
         menu.classList.add('hidden');
     }
+    const serviceMenu = document.getElementById('serviceLogsMenu');
+    const serviceDock = document.getElementById('serviceLogsDock');
+    if (serviceMenu && serviceDock && !serviceDock.contains(e.target) && !serviceMenu.contains(e.target)) {
+        serviceMenu.classList.add('hidden');
+        serviceLogsRequestId += 1;
+        serviceMenu.setAttribute('aria-busy', 'false');
+    }
 });
 
-window.switchLogType = function (type) {
+window.switchLogType = function (
+    type,
+    serviceName = selectedServiceLog?.name,
+    serviceType = selectedServiceLog?.type
+) {
+    if (type === 'service' && !trackedServiceLogs.some(service =>
+        service.name === serviceName && service.type === serviceType
+    )) return;
+    activeLogSourceType = type;
+    if (type === 'service') {
+        setServiceLogsDockOpen(true);
+    } else {
+        clearTimeout(serviceLogsDockCloseTimer);
+        serviceLogsDockCloseTimer = setTimeout(() => {
+            if (!document.getElementById('serviceLogsDock')?.matches(':focus-within')) {
+                setServiceLogsDockOpen(false);
+            }
+        }, 1200);
+    }
+    renderServiceLogsTab();
     // Reset log level filter to ALL
     selectLogFilter('ALL');
-    ['btnLogBot', 'btnLogSys'].forEach(id => {
+    ['btnLogBot', 'btnLogSys', 'btnLogService'].forEach(id => {
         const el = document.getElementById(id);
-        const isActive = (id === 'btnLogBot' && type === 'bot') || (id === 'btnLogSys' && type === 'sys');
+        if (!el) return;
+        const isActive = (id === 'btnLogBot' && type === 'bot')
+            || (id === 'btnLogSys' && type === 'sys')
+            || (id === 'btnLogService' && type === 'service');
         el.classList.toggle('bg-white', isActive);
         el.classList.toggle('dark:bg-gray-700', isActive);
         el.classList.toggle('text-gray-900', isActive);
         el.classList.toggle('text-gray-500', !isActive);
     });
+    const serviceMenu = document.getElementById('serviceLogsMenu');
+    if (serviceMenu) {
+        serviceMenu.classList.add('hidden');
+        serviceMenu.setAttribute('aria-busy', 'false');
+        serviceLogsRequestId += 1;
+    }
     if (logSSESource) {
         logSSESource.close();
         logSSESource = null;
@@ -1410,7 +1769,10 @@ window.switchLogType = function (type) {
     if (oldEmpty) oldEmpty.remove();
 
     setLogLoading();
-    logSSESource = new EventSource(`/api/events/logs?type=${type}`);
+    const serviceQuery = type === 'service'
+        ? `&service=${encodeURIComponent(serviceName)}&service_type=${encodeURIComponent(serviceType)}`
+        : '';
+    logSSESource = new EventSource(`/api/events/logs?type=${encodeURIComponent(type)}${serviceQuery}`);
 
     logSSESource.addEventListener('logs', (e) => {
         if (overlay) overlay.classList.add('hidden');

@@ -1296,6 +1296,176 @@ html.amoled #log-loader {
     opacity: 1;
 }
 
+.log-source-switcher {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    background: rgb(243 244 246);
+}
+
+.dark .log-source-switcher {
+    background: rgb(0 0 0 / 30%);
+}
+
+.log-source-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-height: 2rem;
+    padding: 0.375rem 0.75rem;
+    border: 0;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: rgb(107 114 128);
+    white-space: nowrap;
+    transition: color 160ms ease, background-color 160ms ease, max-width 260ms ease, opacity 180ms ease;
+}
+
+.dark .log-source-button {
+    color: rgb(156 163 175);
+}
+
+.log-source-button:hover {
+    color: rgb(17 24 39);
+}
+
+.dark .log-source-button:hover {
+    color: white;
+}
+
+.log-source-button.log-source-add {
+    width: 2rem;
+    padding: 0.375rem;
+    color: rgb(37 99 235);
+}
+
+.dark .log-source-button.log-source-add {
+    color: rgb(96 165 250);
+}
+
+.log-source-button.log-source-add:hover {
+    background: rgb(59 130 246 / 12%);
+}
+
+.service-log-tab {
+    display: flex;
+    align-items: center;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    transition: max-width 300ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease, visibility 0s linear 300ms;
+}
+
+.service-log-tab.is-active {
+    max-width: min(13rem, 40vw);
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+}
+
+.service-log-name {
+    max-width: min(9rem, 32vw);
+    overflow: hidden;
+}
+
+.service-log-action {
+    width: 2rem;
+    flex: 0 0 auto;
+    padding: 0.375rem;
+}
+
+#btnLogService.bg-white,
+#btnLogBot.bg-white,
+#btnLogSys.bg-white {
+    color: rgb(17 24 39);
+    background: white;
+}
+
+.dark #btnLogService.dark\:bg-gray-700,
+.dark #btnLogBot.dark\:bg-gray-700,
+.dark #btnLogSys.dark\:bg-gray-700 {
+    color: white;
+    background: rgb(55 65 81);
+}
+
+#serviceLogsMenu {
+    position: fixed;
+    z-index: 100;
+    width: max-content;
+    min-width: 12rem;
+    max-width: min(20rem, calc(100vw - 2rem));
+    max-height: min(60vh, 24rem);
+    overflow-y: auto;
+    color: rgb(31 41 55);
+    background: rgb(255 255 255 / 92%);
+    border: 1px solid rgb(209 213 219 / 75%);
+    box-shadow: 0 16px 40px rgb(15 23 42 / 28%);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    transform-origin: top right;
+}
+
+.dark #serviceLogsMenu {
+    color: rgb(229 231 235);
+    background: rgb(17 24 39 / 92%);
+    border-color: rgb(255 255 255 / 12%);
+}
+
+#serviceLogsMenu:not(.hidden) {
+    animation: service-logs-menu-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes service-logs-menu-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.service-logs-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+}
+
+.service-logs-spinner {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    border: 2px solid rgb(59 130 246 / 25%);
+    border-top-color: rgb(59 130 246);
+    border-radius: 9999px;
+    animation: service-logs-spin 700ms linear infinite;
+}
+
+@keyframes service-logs-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .service-log-tab,
+    .log-source-button,
+    #serviceLogsMenu:not(.hidden),
+    .service-logs-spinner {
+        transition-duration: 0.01ms;
+        animation-duration: 0.01ms;
+        animation-iteration-count: 1;
+    }
+}
+
 .edit-overlay button {
     cursor: pointer;
     pointer-events: auto; /* Buttons inside overlay should be clickable */
@@ -2581,8 +2751,3 @@ body > nav {
         opacity: 1;
     }
 }
-
-
-
-
-
