@@ -1299,7 +1299,9 @@ html.amoled #log-loader {
 .log-source-switcher {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 0.125rem;
     padding: 0.25rem;
     border-radius: 0.5rem;
     background: rgb(243 244 246);
@@ -1315,12 +1317,13 @@ html.amoled #log-loader {
     justify-content: center;
     gap: 0.25rem;
     min-height: 2rem;
-    padding: 0.375rem 0.75rem;
+    padding: 0.375rem 0.625rem;
     border: 0;
     border-radius: 0.375rem;
     background: transparent;
     color: rgb(107 114 128);
     white-space: nowrap;
+    flex-shrink: 0;
     transition: color 160ms ease, background-color 160ms ease, max-width 260ms ease, opacity 180ms ease;
 }
 
@@ -1361,15 +1364,92 @@ html.amoled #log-loader {
 }
 
 .service-log-tab.is-active {
-    max-width: min(13rem, 40vw);
+    max-width: min(11rem, 34vw);
     opacity: 1;
     visibility: visible;
     transition-delay: 0s;
 }
 
+/* Let the tracked-services dropdown escape the tab once the slide-in finished. */
+.service-log-tab.is-active.has-dropdown {
+    overflow: visible;
+}
+
 .service-log-name {
-    max-width: min(9rem, 32vw);
+    max-width: min(7rem, 26vw);
     overflow: hidden;
+}
+
+.service-log-name > span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-label-short {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    /* Controls drop under the title: stretch across and share the width. */
+    .log-controls {
+        flex: 1 1 100%;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .log-controls #serviceLogsDock {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .log-label-full {
+        display: none;
+    }
+
+    .log-label-short {
+        display: inline;
+    }
+
+    /* Bot/Server tabs share the free width so the pill never has an empty tail. */
+    .log-controls #serviceLogsDock > .log-source-button:not(.log-source-add) {
+        flex: 1 1 0;
+        min-width: 0;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+
+    /* When a service tab is open it gets the remainder; Bot/Server fall back to content width. */
+    .log-controls #serviceLogsDock:has(.service-log-tab.is-active) > .log-source-button:not(.log-source-add) {
+        flex: 0 1 auto;
+    }
+
+    /* The active service tab takes whatever is left, name truncates with an ellipsis. */
+    .log-controls #serviceLogsDock .service-log-tab.is-active {
+        flex: 1 1 0;
+        min-width: 4.5rem;
+        max-width: none;
+    }
+
+    .log-controls #serviceLogsDock .service-log-name {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: none;
+        padding-left: 0.5rem;
+        padding-right: 0.25rem;
+    }
+
+    .log-controls #logFilterBtn {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        gap: 0.25rem;
+    }
+}
+
+@media (max-width: 380px) {
+    .log-controls #logFilterSelectedText {
+        display: none;
+    }
 }
 
 .service-log-action {
@@ -1392,51 +1472,13 @@ html.amoled #log-loader {
     background: rgb(55 65 81);
 }
 
-#serviceLogsMenu {
-    position: fixed;
-    z-index: 100;
-    width: max-content;
-    min-width: 12rem;
-    max-width: min(20rem, calc(100vw - 2rem));
-    max-height: min(60vh, 24rem);
-    overflow-y: auto;
-    color: rgb(31 41 55);
-    background: rgb(255 255 255 / 92%);
-    border: 1px solid rgb(209 213 219 / 75%);
-    box-shadow: 0 16px 40px rgb(15 23 42 / 28%);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
-    transform-origin: top right;
-}
-
-.dark #serviceLogsMenu {
-    color: rgb(229 231 235);
-    background: rgb(17 24 39 / 92%);
-    border-color: rgb(255 255 255 / 12%);
-}
-
-#serviceLogsMenu:not(.hidden) {
-    animation: service-logs-menu-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-@keyframes service-logs-menu-in {
-    from {
-        opacity: 0;
-        transform: translateY(-6px) scale(0.98);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
 .service-logs-loading {
     display: flex;
     align-items: center;
     gap: 0.625rem;
-    padding: 0.75rem;
+    padding: 0.25rem;
     font-size: 0.75rem;
+    color: rgb(107 114 128);
 }
 
 .service-logs-spinner {
@@ -1458,7 +1500,6 @@ html.amoled #log-loader {
 @media (prefers-reduced-motion: reduce) {
     .service-log-tab,
     .log-source-button,
-    #serviceLogsMenu:not(.hidden),
     .service-logs-spinner {
         transition-duration: 0.01ms;
         animation-duration: 0.01ms;

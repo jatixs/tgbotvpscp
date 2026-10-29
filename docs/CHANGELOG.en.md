@@ -19,7 +19,8 @@
 * **Unnecessary watchdog startup during install and upgrade:** the watchdog systemd unit is configured as an event-driven `oneshot` handler before the bot starts; upgrades no longer restart the watchdog as a continuously running service.
 
 ### ✨ Improved
-* **Quick access to log sources:** add systemd services and Docker containers using the shared plus button beside the log tabs. Viewing a service adds its own tab; the close icon removes the only source, while the dropdown arrow opens the selected-services list with per-service removal. The menu overlays the logs with a blurred backdrop and animated loading state.
+* **Service logs in the log panel:** a "+" button next to the Bot/Server log tabs opens a modal for managing log sources. Only running systemd services and Docker containers are listed by default; stopped ones can be found via search. Search tolerates wrong keyboard layout ("тпштч" → nginx) and typos, offering matches under a "Did you mean" hint. Viewing a service adds its own tab; the close icon removes the only source, while with multiple sources an arrow reveals a compact dropdown of tracked services for quick switching and removal. The block title is shortened to "Logs".
+* **Fast service discovery:** the service inventory is now built from two `systemctl` calls and one Docker request instead of spawning a process per unit; results are cached server-side (30 s, invalidated on start/stop/restart) and in the browser for the tab lifetime, so the modal opens instantly.
 * **Documentation & UI Asset Showcase:**
   Refreshed high-resolution visual assets and preview screenshots across documentation (`assets/`), reflecting recent PWA interface updates, responsive dashboard controls, and real-time node monitoring views.
 

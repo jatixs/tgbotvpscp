@@ -1349,10 +1349,7 @@ const SELECTED_SERVICE_LOG_KEY = 'dashboardSelectedServiceLog';
 let trackedServiceLogs = [];
 let selectedServiceLog = null;
 let activeLogSourceType = 'bot';
-let serviceLogsDockOpenTimer = null;
-let serviceLogsDockCloseTimer = null;
 let serviceLogsRequestId = 0;
-let serviceLogsMenuMode = 'add';
 
 try {
     const savedServiceLogs = JSON.parse(localStorage.getItem(SERVICE_LOGS_KEY) || '[]');
@@ -1375,61 +1372,158 @@ try {
     console.error('Failed to load tracked service logs', error);
 }
 
-function renderServiceLogsMenu({ availableServices = [], mode = 'add', loading = false, error = false } = {}) {
-    const menu = document.getElementById('serviceLogsMenu');
-    if (!menu) return;
-    menu.replaceChildren();
+function isSameService(a, b) {
+    return Boolean(a && b) && a.name === b.name && a.type === b.type;
+}
 
-    const addMenuItem = (service, action, { removable = false } = {}) => {
-        const row = document.createElement('div');
-        row.className = 'flex items-center border-b border-gray-100 dark:border-white/5 last:border-0';
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'flex-1 min-w-0 text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 truncate';
-        button.textContent = service.name;
-        button.addEventListener('click', action);
-        row.appendChild(button);
-        if (removable) {
-            const removeButton = document.createElement('button');
-            removeButton.type = 'button';
-            removeButton.className = 'px-2 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20';
-            removeButton.title = I18N.web_widget_hide || 'Remove';
-            removeButton.setAttribute('aria-label', removeButton.title);
-            removeButton.textContent = '×';
-            removeButton.addEventListener('click', event => {
-                event.stopPropagation();
-                removeTrackedServiceLog(service);
-            });
-            row.appendChild(removeButton);
-        }
-        menu.appendChild(row);
-    };
+function persistTrackedServiceLogs() {
+    localStorage.setItem(SERVICE_LOGS_KEY, JSON.stringify(trackedServiceLogs));
+    localStorage.setItem(
+        SELECTED_SERVICE_LOG_KEY,
+        selectedServiceLog ? `${selectedServiceLog.type}:${selectedServiceLog.name}` : ''
+    );
+}
 
-    if (mode === 'tracked') {
-        trackedServiceLogs.forEach(service => {
-            addMenuItem(service, () => {
-                selectedServiceLog = service;
-                localStorage.setItem(SELECTED_SERVICE_LOG_KEY, `${service.type}:${service.name}`);
-                renderServiceLogsTab();
-                switchLogType('service', service.name, service.type);
-                menu.classList.add('hidden');
-            }, { removable: true });
+function selectServiceLog(service) {
+    selectedServiceLog = service;
+    persistTrackedServiceLogs();
+    renderServiceLogsTab();
+    switchLogType('service', service.name, service.type);
+}
+
+function buildServiceRow(service, { onSelect, onRemove = null, active = false } = {}) {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 bg-gray-50 dark:bg-black/20 border rounded-xl transition-colors '
+        + (active
+            ? 'border-blue-400/60 dark:border-blue-400/40'
+            : 'border-gray-200 dark:border-white/5 hover:bg-gray-100 dark:hover:bg-white/10');
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'flex-1 min-w-0 text-left p-3 flex items-center gap-2';
+    const dot = document.createElement('span');
+    dot.className = 'shrink-0 w-2 h-2 rounded-full ' + (isRunningService(service) ? 'bg-emerald-500' : 'bg-gray-400');
+    dot.title = service.status || '';
+    const name = document.createElement('span');
+    name.className = 'font-bold text-sm text-gray-900 dark:text-white truncate';
+    name.textContent = service.name;
+    const badge = document.createElement('span');
+    badge.className = 'shrink-0 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md '
+        + (service.type === 'docker'
+            ? 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300'
+            : 'bg-gray-200 text-gray-600 dark:bg-white/10 dark:text-gray-300');
+    badge.textContent = service.type;
+    button.append(dot, name, badge);
+    button.addEventListener('click', onSelect);
+    row.appendChild(button);
+
+    if (onRemove) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'shrink-0 p-2 mr-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition';
+        remove.title = I18N.web_logs_close_service || 'Remove';
+        remove.setAttribute('aria-label', remove.title);
+        remove.innerHTML = '<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+        remove.addEventListener('click', event => {
+            event.stopPropagation();
+            onRemove();
         });
+        row.appendChild(remove);
+    }
+    return row;
+}
+
+function renderServiceLogsTrackedList() {
+    const list = document.getElementById('serviceLogsTrackedList');
+    if (!list) return;
+    list.replaceChildren();
+    if (!trackedServiceLogs.length) {
+        const empty = document.createElement('div');
+        empty.className = 'text-xs text-gray-500 dark:text-gray-400 px-1';
+        empty.textContent = I18N.web_logs_no_tracked || 'No services selected yet';
+        list.appendChild(empty);
         return;
     }
+    trackedServiceLogs.forEach(service => {
+        list.appendChild(buildServiceRow(service, {
+            active: isSameService(service, selectedServiceLog) && activeLogSourceType === 'service',
+            onSelect: () => {
+                selectServiceLog(service);
+                closeServiceLogsModal();
+            },
+            onRemove: () => removeTrackedServiceLog(service)
+        }));
+    });
+}
 
-    const trackedNames = new Set(trackedServiceLogs.map(service => `${service.type}:${service.name}`));
-    const candidates = availableServices.filter(service =>
-        ['systemd', 'docker'].includes(service.type)
-        && !trackedNames.has(`${service.type}:${service.name}`)
-    );
-    const heading = document.createElement('div');
-    heading.className = 'px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400 border-b border-gray-100 dark:border-white/5';
-    heading.textContent = I18N.web_logs_add_service || 'Add service';
-    menu.appendChild(heading);
+let lastAvailableServices = [];
+
+function isRunningService(service) {
+    return service.status === 'running' || service.status === 'active';
+}
+
+// Russian ЙЦУКЕН → US QWERTY, same physical keys. Lets "тпштч" match "nginx".
+const RU_TO_EN_LAYOUT = {
+    'й': 'q', 'ц': 'w', 'у': 'e', 'к': 'r', 'е': 't', 'н': 'y', 'г': 'u', 'ш': 'i', 'щ': 'o', 'з': 'p', 'х': '[', 'ъ': ']',
+    'ф': 'a', 'ы': 's', 'в': 'd', 'а': 'f', 'п': 'g', 'р': 'h', 'о': 'j', 'л': 'k', 'д': 'l', 'ж': ';', 'э': '\'',
+    'я': 'z', 'ч': 'x', 'с': 'c', 'м': 'v', 'и': 'b', 'т': 'n', 'ь': 'm', 'б': ',', 'ю': '.', 'ё': '`',
+};
+const EN_TO_RU_LAYOUT = Object.fromEntries(Object.entries(RU_TO_EN_LAYOUT).map(([ru, en]) => [en, ru]));
+
+function switchKeyboardLayout(text) {
+    return text.split('').map(ch => RU_TO_EN_LAYOUT[ch] || EN_TO_RU_LAYOUT[ch] || ch).join('');
+}
+
+function damerauLevenshtein(a, b) {
+    const rows = a.length + 1;
+    const cols = b.length + 1;
+    const d = Array.from({ length: rows }, (_, i) => {
+        const row = new Array(cols).fill(0);
+        row[0] = i;
+        return row;
+    });
+    for (let j = 0; j < cols; j++) d[0][j] = j;
+    for (let i = 1; i < rows; i++) {
+        for (let j = 1; j < cols; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+                d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+            }
+        }
+    }
+    return d[a.length][b.length];
+}
+
+// Best fuzzy score of `query` against `name`: substring or layout-switched substring wins outright,
+// otherwise the edit distance between the query and the closest same-length window of the name.
+function fuzzyServiceScore(query, name) {
+    const lowerName = name.toLowerCase();
+    const switched = switchKeyboardLayout(query);
+    if (lowerName.includes(switched)) return 0;
+
+    const tolerance = query.length <= 4 ? 1 : 2;
+    let best = Infinity;
+    for (const probe of [query, switched]) {
+        if (probe.length > lowerName.length + tolerance) continue;
+        const windowLength = Math.min(lowerName.length, probe.length);
+        for (let start = 0; start + windowLength <= lowerName.length; start++) {
+            best = Math.min(best, damerauLevenshtein(probe, lowerName.slice(start, start + windowLength)));
+            if (best === 0) return 0;
+        }
+        best = Math.min(best, damerauLevenshtein(probe, lowerName));
+    }
+    return best <= tolerance ? best : Infinity;
+}
+
+function renderServiceLogsAvailableList({ availableServices = null, loading = false, error = false } = {}) {
+    const list = document.getElementById('serviceLogsAvailableList');
+    if (!list) return;
+    list.replaceChildren();
+
     if (loading || error) {
         const state = document.createElement('div');
-        state.className = loading ? 'service-logs-loading' : 'px-3 py-2 text-xs text-red-500';
+        state.className = loading ? 'service-logs-loading' : 'px-1 text-xs text-red-500';
         if (loading) {
             const spinner = document.createElement('span');
             spinner.className = 'service-logs-spinner';
@@ -1441,25 +1535,67 @@ function renderServiceLogsMenu({ availableServices = [], mode = 'add', loading =
             ? (I18N.web_logs_loading_services || 'Loading services…')
             : (I18N.web_logs_services_error || 'Unable to load services');
         state.appendChild(message);
-        menu.appendChild(state);
-    } else if (!candidates.length) {
-        const empty = document.createElement('div');
-        empty.className = 'px-3 py-2 text-xs text-gray-500';
-        empty.textContent = I18N.web_logs_no_services || 'No available services';
-        menu.appendChild(empty);
-    } else {
-        candidates.forEach(service => addMenuItem(service, () => {
-            const trackedService = { name: service.name, type: service.type };
-            trackedServiceLogs.push(trackedService);
-            localStorage.setItem(SERVICE_LOGS_KEY, JSON.stringify(trackedServiceLogs));
-            selectedServiceLog = trackedService;
-            localStorage.setItem(SELECTED_SERVICE_LOG_KEY, `${service.type}:${service.name}`);
-            renderServiceLogsTab();
-            switchLogType('service', service.name, service.type);
-            menu.classList.add('hidden');
-        }));
+        list.appendChild(state);
+        return;
     }
+
+    if (availableServices) lastAvailableServices = availableServices;
+    const query = (document.getElementById('serviceLogsSearch')?.value || '').trim().toLowerCase();
+
+    const pool = lastAvailableServices.filter(service =>
+        ['systemd', 'docker'].includes(service.type)
+        && !trackedServiceLogs.some(tracked => isSameService(tracked, service))
+    );
+    const byRunningThenName = (a, b) => {
+        if (isRunningService(a) !== isRunningService(b)) return isRunningService(a) ? -1 : 1;
+        return a.name.localeCompare(b.name);
+    };
+
+    // Default view shows only running units; a search query widens it to everything.
+    let candidates = pool.filter(service => (query ? service.name.toLowerCase().includes(query) : isRunningService(service)));
+    candidates.sort(byRunningThenName);
+
+    let isSuggestion = false;
+    if (!candidates.length && query.length >= 2) {
+        candidates = pool
+            .map(service => ({ service, score: fuzzyServiceScore(query, service.name) }))
+            .filter(item => item.score !== Infinity)
+            .sort((a, b) => a.score - b.score || byRunningThenName(a.service, b.service))
+            .slice(0, 8)
+            .map(item => item.service);
+        isSuggestion = candidates.length > 0;
+    }
+
+    if (!candidates.length) {
+        const empty = document.createElement('div');
+        empty.className = 'px-1 text-xs text-gray-500 dark:text-gray-400';
+        empty.textContent = query
+            ? (I18N.web_logs_search_empty || 'Nothing found')
+            : (I18N.web_logs_no_running || 'No running services. Use search to find stopped ones.');
+        list.appendChild(empty);
+        return;
+    }
+    if (isSuggestion) {
+        const hint = document.createElement('div');
+        hint.className = 'px-1 text-xs text-gray-500 dark:text-gray-400';
+        hint.textContent = I18N.web_logs_did_you_mean || 'Did you mean:';
+        list.appendChild(hint);
+    }
+    candidates.forEach(service => {
+        list.appendChild(buildServiceRow(service, {
+            onSelect: () => {
+                trackedServiceLogs.push({ name: service.name, type: service.type });
+                selectServiceLog(trackedServiceLogs[trackedServiceLogs.length - 1]);
+                closeServiceLogsModal();
+            }
+        }));
+    });
 }
+
+window.filterServiceLogsAvailable = function () {
+    if (!lastAvailableServices.length) return;
+    renderServiceLogsAvailableList();
+};
 
 function renderServiceLogsTab() {
     const tab = document.getElementById('btnLogService');
@@ -1470,12 +1606,10 @@ function renderServiceLogsTab() {
     const serviceTab = document.getElementById('serviceLogsTab');
     if (!tab || !label || !serviceTab || !actionButton) return;
 
-    const isAvailable = selectedServiceLog && trackedServiceLogs.some(service =>
-        service.name === selectedServiceLog.name && service.type === selectedServiceLog.type
-    );
-    const isActive = isAvailable && activeLogSourceType === 'service';
-    serviceTab.classList.toggle('is-active', Boolean(isActive));
+    const isAvailable = selectedServiceLog && trackedServiceLogs.some(service => isSameService(service, selectedServiceLog));
+    serviceTab.classList.toggle('is-active', Boolean(isAvailable && activeLogSourceType === 'service'));
     label.textContent = isAvailable ? selectedServiceLog.name : '';
+
     const hasMultiple = trackedServiceLogs.length > 1;
     chevron?.classList.toggle('hidden', !hasMultiple);
     closeIcon?.classList.toggle('hidden', hasMultiple);
@@ -1488,207 +1622,189 @@ function renderServiceLogsTab() {
     actionButton.title = actionButton.getAttribute('aria-label');
 }
 
-function showServiceLogsMenu(mode, anchorId) {
-    const menu = document.getElementById('serviceLogsMenu');
-    if (!menu) return;
-    if (mode === 'tracked') serviceLogsRequestId += 1;
-    serviceLogsMenuMode = mode;
-    menu.classList.remove('hidden');
-    menu.setAttribute('aria-busy', 'false');
-    renderServiceLogsMenu({ mode });
-    positionServiceLogsMenu(anchorId);
-}
-
-function positionServiceLogsMenu(anchorId = 'addServiceLogsBtn') {
-    if (anchorId === 'addServiceLogsBtn' && serviceLogsMenuMode === 'tracked') {
-        anchorId = 'serviceLogsActionBtn';
-    }
-    const menu = document.getElementById('serviceLogsMenu');
-    const anchor = document.getElementById(anchorId);
-    if (!menu || !anchor || menu.classList.contains('hidden')) return;
-
-    const anchorRect = anchor.getBoundingClientRect();
-    const menuWidth = menu.getBoundingClientRect().width;
-    const left = Math.max(12, Math.min(anchorRect.right - menuWidth, window.innerWidth - menuWidth - 12));
-    const menuHeight = menu.getBoundingClientRect().height;
-    const belowTop = anchorRect.bottom + 8;
-    const top = belowTop + menuHeight <= window.innerHeight - 12
-        ? belowTop
-        : Math.max(12, anchorRect.top - menuHeight - 8);
-
-    menu.style.left = `${left}px`;
-    menu.style.top = `${top}px`;
-}
-
-function setServiceLogsDockOpen(isOpen) {
-    const dock = document.getElementById('serviceLogsDock');
-    if (!dock) return;
-    dock.classList.toggle('is-open', isOpen);
-    if (isOpen) {
-        clearTimeout(serviceLogsDockCloseTimer);
-    }
-}
-
-function initServiceLogsDock() {
-    const dock = document.getElementById('serviceLogsDock');
-    const menu = document.getElementById('serviceLogsMenu');
-    if (!dock || !menu) return;
-    document.body.appendChild(menu);
-
-    let lastPointerX = null;
-    let touchSwipeStart = null;
-    let suppressDockClickUntil = 0;
-    window.addEventListener('resize', positionServiceLogsMenu);
-    window.addEventListener('scroll', positionServiceLogsMenu, true);
-    document.addEventListener('pointermove', event => {
-        if (event.pointerType !== 'mouse') return;
-        const movingLeft = lastPointerX !== null && event.clientX < lastPointerX - 2;
-        lastPointerX = event.clientX;
-        if (!movingLeft || !dock.contains(event.target) || dock.classList.contains('is-open')) return;
-
-        clearTimeout(serviceLogsDockOpenTimer);
-        serviceLogsDockOpenTimer = setTimeout(() => {
-            if (dock.matches(':hover')) setServiceLogsDockOpen(true);
-        }, 320);
-    }, { passive: true });
-
-    dock.addEventListener('pointerdown', event => {
-        if (event.pointerType === 'mouse') return;
-        touchSwipeStart = {
-            pointerId: event.pointerId,
-            x: event.clientX,
-            y: event.clientY
-        };
-    }, { passive: true });
-
-    document.addEventListener('pointerup', event => {
-        if (!touchSwipeStart || event.pointerId !== touchSwipeStart.pointerId) return;
-        const deltaX = event.clientX - touchSwipeStart.x;
-        const deltaY = event.clientY - touchSwipeStart.y;
-        touchSwipeStart = null;
-        if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
-
-        suppressDockClickUntil = Date.now() + 500;
-        if (deltaX < 0 && selectedServiceLog) {
-            setServiceLogsDockOpen(true);
-        } else if (deltaX > 0) {
-            setServiceLogsDockOpen(false);
-            document.getElementById('serviceLogsMenu')?.classList.add('hidden');
-        }
-    });
-
-    document.addEventListener('pointercancel', event => {
-        if (touchSwipeStart?.pointerId === event.pointerId) touchSwipeStart = null;
-    });
-
-    dock.addEventListener('click', event => {
-        if (Date.now() > suppressDockClickUntil) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        suppressDockClickUntil = 0;
-    }, true);
-
-    dock.addEventListener('pointerenter', () => clearTimeout(serviceLogsDockCloseTimer));
-    dock.addEventListener('pointerleave', () => {
-        clearTimeout(serviceLogsDockOpenTimer);
-        serviceLogsDockCloseTimer = setTimeout(() => {
-            if (!dock.matches(':focus-within') && !menu?.matches(':hover') && activeLogSourceType !== 'service') {
-                setServiceLogsDockOpen(false);
-            }
-        }, 600);
-    });
-}
-
-document.addEventListener('DOMContentLoaded', initServiceLogsDock);
-
 function removeTrackedServiceLog(removedService) {
     const wasViewingService = activeLogSourceType === 'service';
-    trackedServiceLogs = trackedServiceLogs.filter(service =>
-        service.name !== removedService.name || service.type !== removedService.type
-    );
-    localStorage.setItem(SERVICE_LOGS_KEY, JSON.stringify(trackedServiceLogs));
-    const removedSelected = selectedServiceLog?.name === removedService.name
-        && selectedServiceLog?.type === removedService.type;
-    if (removedSelected) {
+    trackedServiceLogs = trackedServiceLogs.filter(service => !isSameService(service, removedService));
+
+    if (isSameService(selectedServiceLog, removedService)) {
         selectedServiceLog = trackedServiceLogs[0] || null;
-        localStorage.setItem(
-            SELECTED_SERVICE_LOG_KEY,
-            selectedServiceLog ? `${selectedServiceLog.type}:${selectedServiceLog.name}` : ''
-        );
-        if (selectedServiceLog && wasViewingService) {
-            switchLogType('service', selectedServiceLog.name, selectedServiceLog.type);
-        } else if (wasViewingService) {
-            switchLogType('bot');
-        } else {
-            renderServiceLogsTab();
+        persistTrackedServiceLogs();
+        if (wasViewingService) {
+            if (selectedServiceLog) {
+                switchLogType('service', selectedServiceLog.name, selectedServiceLog.type);
+            } else {
+                switchLogType('bot');
+            }
         }
-    }
-    renderServiceLogsTab();
-    if (trackedServiceLogs.length > 1) {
-        showServiceLogsMenu('tracked', 'serviceLogsActionBtn');
     } else {
-        document.getElementById('serviceLogsMenu')?.classList.add('hidden');
-        serviceLogsMenuMode = 'add';
+        persistTrackedServiceLogs();
+    }
+
+    renderServiceLogsTab();
+    const modal = document.getElementById('serviceLogsModal');
+    if (modal && !modal.classList.contains('hidden')) {
+        renderServiceLogsTrackedList();
+        // Re-render available list so the removed service becomes addable again.
+        loadAvailableServicesIntoModal();
+    }
+    const dropdown = document.getElementById('serviceLogsDropdown');
+    if (dropdown && !dropdown.classList.contains('hidden')) {
+        if (trackedServiceLogs.length > 1) {
+            renderServiceLogsDropdown();
+        } else {
+            closeServiceLogsDropdown();
+        }
     }
 }
 
-window.toggleServiceLogsMenu = function (event) {
+function renderServiceLogsDropdown() {
+    const dropdown = document.getElementById('serviceLogsDropdown');
+    if (!dropdown) return;
+    dropdown.replaceChildren();
+    trackedServiceLogs.forEach((service, index) => {
+        const isActive = isSameService(service, selectedServiceLog) && activeLogSourceType === 'service';
+        const row = document.createElement('div');
+        row.className = 'flex items-center'
+            + (index ? ' border-t border-gray-50 dark:border-white/5' : '');
+
+        const pick = document.createElement('button');
+        pick.type = 'button';
+        pick.className = 'flex-1 min-w-0 text-left px-3 py-2 text-xs font-bold flex items-center gap-2 transition-colors '
+            + (isActive
+                ? 'text-gray-900 dark:text-white bg-gray-50 dark:bg-white/5'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5');
+        const dot = document.createElement('span');
+        dot.className = 'w-2 h-2 rounded-full shrink-0 ' + (isActive ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600');
+        const name = document.createElement('span');
+        name.className = 'truncate';
+        name.textContent = service.name;
+        pick.append(dot, name);
+        pick.addEventListener('click', () => {
+            selectServiceLog(service);
+            closeServiceLogsDropdown();
+        });
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'shrink-0 p-2 text-gray-400 hover:text-red-500 transition-colors';
+        remove.title = I18N.web_logs_close_service || 'Remove';
+        remove.setAttribute('aria-label', remove.title);
+        remove.innerHTML = '<svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+        remove.addEventListener('click', event => {
+            event.stopPropagation();
+            removeTrackedServiceLog(service);
+        });
+
+        row.append(pick, remove);
+        dropdown.appendChild(row);
+    });
+}
+
+function openServiceLogsDropdown() {
+    const dropdown = document.getElementById('serviceLogsDropdown');
+    const tab = document.getElementById('serviceLogsTab');
+    if (!dropdown || !tab) return;
+    renderServiceLogsDropdown();
+    tab.classList.add('has-dropdown');
+    dropdown.classList.remove('hidden');
+}
+
+function closeServiceLogsDropdown() {
+    const dropdown = document.getElementById('serviceLogsDropdown');
+    const tab = document.getElementById('serviceLogsTab');
+    if (dropdown) dropdown.classList.add('hidden');
+    if (tab) tab.classList.remove('has-dropdown');
+}
+
+window.handleServiceLogAction = function (event) {
     event.stopPropagation();
     if (!selectedServiceLog) return;
     if (trackedServiceLogs.length < 2) {
         removeTrackedServiceLog(selectedServiceLog);
         return;
     }
-    const menu = document.getElementById('serviceLogsMenu');
-    if (!menu) return;
-    if (!menu.classList.contains('hidden') && serviceLogsMenuMode === 'tracked') {
-        menu.classList.add('hidden');
+    const dropdown = document.getElementById('serviceLogsDropdown');
+    if (dropdown && !dropdown.classList.contains('hidden')) {
+        closeServiceLogsDropdown();
     } else {
-        showServiceLogsMenu('tracked', 'serviceLogsActionBtn');
+        openServiceLogsDropdown();
     }
 };
 
-window.addServiceLogs = async function (event) {
-    event.stopPropagation();
-    setServiceLogsDockOpen(true);
-    const menu = document.getElementById('serviceLogsMenu');
-    if (!menu) return;
-    if (!menu.classList.contains('hidden') && serviceLogsMenuMode === 'add') {
-        serviceLogsRequestId += 1;
-        menu.classList.add('hidden');
-        menu.setAttribute('aria-busy', 'false');
-        return;
+const AVAILABLE_SERVICES_CACHE_KEY = 'dashboardAvailableServices';
+const AVAILABLE_SERVICES_CACHE_TTL = 5 * 60 * 1000;
+
+function readAvailableServicesCache() {
+    try {
+        const raw = sessionStorage.getItem(AVAILABLE_SERVICES_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Array.isArray(parsed.services) || typeof parsed.savedAt !== 'number') return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function writeAvailableServicesCache(services) {
+    try {
+        sessionStorage.setItem(AVAILABLE_SERVICES_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), services }));
+    } catch {
+        // Quota or privacy mode — cache is a nicety, not a requirement.
+    }
+}
+
+async function loadAvailableServicesIntoModal() {
+    const requestId = ++serviceLogsRequestId;
+    const cached = readAvailableServicesCache();
+    const cacheFresh = cached && Date.now() - cached.savedAt < AVAILABLE_SERVICES_CACHE_TTL;
+
+    // Show the cached list immediately; refresh in the background unless it is still fresh.
+    if (cached) {
+        renderServiceLogsAvailableList({ availableServices: cached.services });
+        if (cacheFresh) return;
+    } else {
+        renderServiceLogsAvailableList({ loading: true });
     }
 
-    const requestId = ++serviceLogsRequestId;
-    serviceLogsMenuMode = 'add';
-    const loadingStartedAt = performance.now();
-    menu.classList.remove('hidden');
-    menu.setAttribute('aria-busy', 'true');
-    renderServiceLogsMenu({ mode: 'add', loading: true });
-    positionServiceLogsMenu();
-
     try {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        if (requestId !== serviceLogsRequestId || menu.classList.contains('hidden')) return;
         const services = await sseRequest('/api/services/available?search=1', 'available_services');
-        const loadingTimeLeft = 220 - (performance.now() - loadingStartedAt);
-        if (loadingTimeLeft > 0) {
-            await new Promise(resolve => setTimeout(resolve, loadingTimeLeft));
-        }
-        if (requestId !== serviceLogsRequestId || menu.classList.contains('hidden')) return;
-        renderServiceLogsMenu({ availableServices: services, mode: 'add' });
-        positionServiceLogsMenu();
-        menu.setAttribute('aria-busy', 'false');
+        const list = Array.isArray(services) ? services : [];
+        writeAvailableServicesCache(list);
+        if (requestId !== serviceLogsRequestId) return;
+        renderServiceLogsAvailableList({ availableServices: list });
     } catch (error) {
-        if (requestId !== serviceLogsRequestId || menu.classList.contains('hidden')) return;
+        if (requestId !== serviceLogsRequestId) return;
         console.error('Failed to load services for log tracking', error);
-        renderServiceLogsMenu({ mode: 'add', error: true });
-        positionServiceLogsMenu();
-        menu.setAttribute('aria-busy', 'false');
-        if (typeof showToast === 'function') {
-            showToast(I18N.web_logs_services_error || 'Unable to load services');
-        }
+        if (!cached) renderServiceLogsAvailableList({ error: true });
+    }
+}
+
+window.openServiceLogsModal = function (event) {
+    if (event) event.stopPropagation();
+    const modal = document.getElementById('serviceLogsModal');
+    if (!modal) return;
+    const search = document.getElementById('serviceLogsSearch');
+    if (search) search.value = '';
+    renderServiceLogsTrackedList();
+    if (typeof window.animateModalOpen === 'function') {
+        window.animateModalOpen(modal);
+    } else {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+    loadAvailableServicesIntoModal();
+};
+
+window.closeServiceLogsModal = function () {
+    const modal = document.getElementById('serviceLogsModal');
+    if (!modal) return;
+    serviceLogsRequestId += 1;
+    if (typeof window.animateModalClose === 'function') {
+        window.animateModalClose(modal);
+    } else {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
     }
 };
 
@@ -1699,12 +1815,9 @@ document.addEventListener('click', function (e) {
     if (wrapper && menu && !wrapper.contains(e.target)) {
         menu.classList.add('hidden');
     }
-    const serviceMenu = document.getElementById('serviceLogsMenu');
-    const serviceDock = document.getElementById('serviceLogsDock');
-    if (serviceMenu && serviceDock && !serviceDock.contains(e.target) && !serviceMenu.contains(e.target)) {
-        serviceMenu.classList.add('hidden');
-        serviceLogsRequestId += 1;
-        serviceMenu.setAttribute('aria-busy', 'false');
+    const serviceTab = document.getElementById('serviceLogsTab');
+    if (serviceTab && !serviceTab.contains(e.target)) {
+        closeServiceLogsDropdown();
     }
 });
 
@@ -1717,16 +1830,7 @@ window.switchLogType = function (
         service.name === serviceName && service.type === serviceType
     )) return;
     activeLogSourceType = type;
-    if (type === 'service') {
-        setServiceLogsDockOpen(true);
-    } else {
-        clearTimeout(serviceLogsDockCloseTimer);
-        serviceLogsDockCloseTimer = setTimeout(() => {
-            if (!document.getElementById('serviceLogsDock')?.matches(':focus-within')) {
-                setServiceLogsDockOpen(false);
-            }
-        }, 1200);
-    }
+    closeServiceLogsDropdown();
     renderServiceLogsTab();
     // Reset log level filter to ALL
     selectLogFilter('ALL');
@@ -1741,12 +1845,6 @@ window.switchLogType = function (
         el.classList.toggle('text-gray-900', isActive);
         el.classList.toggle('text-gray-500', !isActive);
     });
-    const serviceMenu = document.getElementById('serviceLogsMenu');
-    if (serviceMenu) {
-        serviceMenu.classList.add('hidden');
-        serviceMenu.setAttribute('aria-busy', 'false');
-        serviceLogsRequestId += 1;
-    }
     if (logSSESource) {
         logSSESource.close();
         logSSESource = null;

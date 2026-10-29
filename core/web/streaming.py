@@ -52,6 +52,19 @@ def _is_sse_request(request: web.Request) -> bool:
     return SSE_ACCEPT_HEADER in accept_header.lower()
 
 
+async def _prepare_sse(response: web.StreamResponse, request: web.Request) -> bool:
+    """Send SSE headers; return False if the client already went away.
+
+    Browsers tear down an EventSource and open a new one on every source switch,
+    so the old request often reaches prepare() after its transport is closing.
+    """
+    try:
+        await response.prepare(request)
+        return True
+    except (aiohttp.ClientConnectionResetError, ConnectionResetError, ConnectionError):
+        return False
+
+
 def _build_websocket_notice(path: str) -> web.Response:
     message = (
         f"Это обычный HTTP/HTTPS-запрос.\n"
@@ -338,7 +351,8 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
     response.headers["Content-Type"] = "text/event-stream"
     response.headers["Cache-Control"] = "no-cache"
     response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    if not await _prepare_sse(response, request):
+        return response
 
     shutdown_event = request.app.get("shutdown_event")
     user_id = int(user["id"])
@@ -548,7 +562,10 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
     response.headers["Connection"] = "keep-alive"
     response.headers["X-Accel-Buffering"] = "no"
     response.enable_compression(False)
-    await response.prepare(request)
+    if not await _prepare_sse(response, request):
+        if docker_client:
+            docker_client.close()
+        return response
 
     shutdown_event = request.app.get("shutdown_event")
     journal_bin = ["journalctl"]
@@ -849,7 +866,8 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
     response.headers["Cache-Control"] = "no-cache"
     response.headers["Connection"] = "keep-alive"
     response.headers["X-Accel-Buffering"] = "no"
-    await response.prepare(request)
+    if not await _prepare_sse(response, request):
+        return response
 
     shutdown_event = request.app.get("shutdown_event")
     try:
@@ -949,7 +967,8 @@ async def handle_sse_node_services(request: web.Request) -> web.StreamResponse:
     response.headers["Cache-Control"] = "no-cache"
     response.headers["Connection"] = "keep-alive"
     response.headers["X-Accel-Buffering"] = "no"
-    await response.prepare(request)
+    if not await _prepare_sse(response, request):
+        return response
 
     shutdown_event = request.app.get("shutdown_event")
     try:
@@ -1025,7 +1044,8 @@ async def handle_sse_services(request: web.Request) -> web.StreamResponse:
     response.headers["Cache-Control"] = "no-cache"
     response.headers["Connection"] = "keep-alive"
     response.headers["X-Accel-Buffering"] = "no"
-    await response.prepare(request)
+    if not await _prepare_sse(response, request):
+        return response
 
     shutdown_event = request.app.get("shutdown_event")
     try:
@@ -1490,7 +1510,8 @@ async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
     response.headers["Cache-Control"] = "no-cache"
     response.headers["Connection"] = "keep-alive"
     response.headers["X-Accel-Buffering"] = "no"
-    await response.prepare(request)
+    if not await _prepare_sse(response, request):
+        return response
 
     shutdown_event = request.app.get("shutdown_event")
     interval = metrics_history.STREAM_INTERVALS.get(range_key, 10)
