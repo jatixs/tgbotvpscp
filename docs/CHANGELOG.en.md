@@ -12,17 +12,28 @@
 
 ## [1.27.1] - 2026-10-29
 
-### 🐛 Fixed
-* **Mobile header disappearing during theme changes:** View Transitions are now skipped on narrow screens, keeping the sticky header visible when changing themes on a scrolled page.
-* **Theme slider in accessibility mode:** the slider position is recalculated after accessibility mode is enabled or disabled, accounting for the updated UI dimensions.
-* **Lazy loading after window resizing:** responsive lazy loading now reconfigures block observation when moving between desktop, tablet, and mobile widths, rather than relying only on the viewport width at initial page load.
-* **Unnecessary watchdog startup during install and upgrade:** the watchdog systemd unit is configured as an event-driven `oneshot` handler before the bot starts; upgrades no longer restart the watchdog as a continuously running service.
+### 🚀 Key Feature
+* 📋 **Any service's logs right in the dashboard** — the Logs block is no longer limited to bot and server logs. Attach any systemd service or Docker container and follow its journal live (`journalctl -u` for systemd, Docker API for containers), with the last 300 lines of history and the level filter.
+  * **Source management:** the "+" button next to the tabs opens a modal with two lists — tracked services and services available to add. Only running ones are shown by default; stopped ones are reachable via search.
+  * **Smart search:** tolerates wrong keyboard layout ("тпштч" → `nginx`) and typos including transpositions ("ngnix", "dokcer"), offering matches under a "Did you mean" hint.
+  * **Service tab:** while viewing, a dedicated tab with the service name appears. The close icon removes the only source; with several sources an arrow reveals a compact dropdown for switching and removal. Selection persists across sessions.
+  * **Safety:** service names are validated against the actual inventory of installed units and containers; commands are built without a shell.
 
-### ✨ Improved
-* **Service logs in the log panel:** a "+" button next to the Bot/Server log tabs opens a modal for managing log sources. Only running systemd services and Docker containers are listed by default; stopped ones can be found via search. Search tolerates wrong keyboard layout ("тпштч" → nginx) and typos, offering matches under a "Did you mean" hint. Viewing a service adds its own tab; the close icon removes the only source, while with multiple sources an arrow reveals a compact dropdown of tracked services for quick switching and removal. The block title is shortened to "Logs".
-* **Fast service discovery:** the service inventory is now built from two `systemctl` calls and one Docker request instead of spawning a process per unit; results are cached server-side (30 s, invalidated on start/stop/restart) and in the browser for the tab lifetime, so the modal opens instantly.
-* **Documentation & UI Asset Showcase:**
-  Refreshed high-resolution visual assets and preview screenshots across documentation (`assets/`), reflecting recent PWA interface updates, responsive dashboard controls, and real-time node monitoring views.
+### ⚡ Performance
+* **Service discovery orders of magnitude faster.** Previously every service spawned its own `systemctl show` process (hundreds of forks per request on a typical VPS). Now all statuses come from two `systemctl` calls and one Docker request; results are cached server-side (30 s, invalidated on start/stop/restart) and in the browser for the tab lifetime. This speeds up the Telegram bot's service list as well.
+* **Static assets without a restart.** The asset version tag (`?v=`) is now derived from JS/CSS modification time instead of being frozen at process start, so browsers reliably receive fresh files after an upgrade.
+
+### 🐛 Fixed
+* **Header vanishing on theme switch (mobile):** View Transitions are skipped on narrow screens — the sticky navigation no longer disappears on a scrolled page.
+* **Theme slider in accessibility mode:** its position is recalculated after toggling the mode to match the new dimensions.
+* **Lazy loading on window resize:** the observer re-initialises when crossing desktop ↔ tablet ↔ mobile breakpoints instead of only at page load.
+* **Watchdog consuming resources while idle:** the systemd unit is configured as an event-driven `oneshot` handler (`OnFailure`) before the bot starts; upgrades no longer restart it as a long-running service.
+* **Log noise when switching sources:** a connection reset while sending SSE headers (the browser closes the old `EventSource` before the server replies) no longer leaves a `ClientConnectionResetError` traceback — across all SSE endpoints.
+
+### ✨ Interface
+* **Consistent Logs controls:** the level filter and source switcher share the same height and visual style; the block title is shortened to "Logs". The output area has a fixed height and no longer shrinks when the selected source has few entries.
+* **Mobile layout:** on narrow screens the controls take their own full-width row with no gaps or wrapping; labels shrink to "Bot"/"Server", long service names truncate with an ellipsis, and on the narrowest screens the filter keeps only its icon.
+* **Documentation & UI asset refresh:** updated the project screenshot gallery (`assets/`) — mobile PWA client, web console, responsive metric charts and node monitoring views.
 
 ## [1.27.0] - 2026-10-26
 
