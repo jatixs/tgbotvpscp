@@ -774,7 +774,9 @@ function initGlobalLazyLoad() {
     }
 
     if (!('IntersectionObserver' in window)) {
-        blocks.forEach(block => block.classList.add('is-visible'));
+        blocks.forEach(block => {
+            block.classList.add('is-visible');
+        });
         return;
     }
 
