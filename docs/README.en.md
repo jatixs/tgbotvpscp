@@ -2,7 +2,7 @@
   <a href="../README.md"><img src="https://flagcdn.com/20x15/ru.png" width="16" alt="RU"> Русский</a> | <img src="https://flagcdn.com/20x15/gb.png" width="16" alt="EN"> English
 </p>
 
-<h1 align="center"><img src="../assets/logo.png" width="32" height="32" alt="Logo" valign="middle"> VPS Manager Telegram Bot</h1>
+<h1 align="center"><img src="../assets/logo.png" width="100" height="100" alt="Logo" valign="middle"> VPS Manager Telegram Bot</h1>
 
 <p align="center">
   <b>v1.27.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>

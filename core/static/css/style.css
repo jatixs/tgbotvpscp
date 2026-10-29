@@ -2543,25 +2543,24 @@ body > nav {
 }
 
 ::view-transition-old(mobile-settings-dropdown),
-::view-transition-new(mobile-settings-dropdown) {
+::view-transition-new(mobile-settings-dropdown),
+::view-transition-old(main-header),
+::view-transition-new(main-header) {
     animation: none;
+    mix-blend-mode: normal;
 }
 
 ::view-transition-old(root),
-::view-transition-new(root),
-::view-transition-old(main-header),
-::view-transition-new(main-header) {
+::view-transition-new(root) {
     animation-duration: 0.25s;
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-::view-transition-old(root),
-::view-transition-old(main-header) {
+::view-transition-old(root) {
     animation-name: themeFadeOut;
 }
 
-::view-transition-new(root),
-::view-transition-new(main-header) {
+::view-transition-new(root) {
     animation-name: themeFadeIn;
 }
 
