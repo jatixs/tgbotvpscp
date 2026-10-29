@@ -4,11 +4,36 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/>
-    <img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/>
-    <img src="https://img.shields.io/badge/date-Oct%2026%202026-green?style=flat-square" alt="Date Oct 26 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.27.1-blue?style=flat-square" alt="Version 1.27.1"/>
+    <img src="https://img.shields.io/badge/build-96-purple?style=flat-square" alt="Build 96"/>
+    <img src="https://img.shields.io/badge/date-Oct%2029%202026-green?style=flat-square" alt="Date Oct 29 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.27.1] - 2026-10-29
+
+### 🚀 Key Feature
+* 📋 **Any service's logs right in the dashboard** — the Logs block is no longer limited to bot and server logs. Attach any systemd service or Docker container and follow its journal live (`journalctl -u` for systemd, Docker API for containers), with the last 300 lines of history and the level filter.
+  * **Source management:** the "+" button next to the tabs opens a modal with two lists — tracked services and services available to add. Only running ones are shown by default; stopped ones are reachable via search.
+  * **Smart search:** tolerates wrong keyboard layout ("тпштч" → `nginx`) and typos including transpositions ("ngnix", "dokcer"), offering matches under a "Did you mean" hint.
+  * **Service tab:** while viewing, a dedicated tab with the service name appears. The close icon removes the only source; with several sources an arrow reveals a compact dropdown for switching and removal. Selection persists across sessions.
+  * **Safety:** service names are validated against the actual inventory of installed units and containers; commands are built without a shell.
+
+### ⚡ Performance
+* **Service discovery orders of magnitude faster.** Previously every service spawned its own `systemctl show` process (hundreds of forks per request on a typical VPS). Now all statuses come from two `systemctl` calls and one Docker request; results are cached server-side (30 s, invalidated on start/stop/restart) and in the browser for the tab lifetime. This speeds up the Telegram bot's service list as well.
+* **Static assets without a restart.** The asset version tag (`?v=`) is now derived from JS/CSS modification time instead of being frozen at process start, so browsers reliably receive fresh files after an upgrade.
+
+### 🐛 Fixed
+* **Header vanishing on theme switch (mobile):** View Transitions are skipped on narrow screens — the sticky navigation no longer disappears on a scrolled page.
+* **Theme slider in accessibility mode:** its position is recalculated after toggling the mode to match the new dimensions.
+* **Lazy loading on window resize:** the observer re-initialises when crossing desktop ↔ tablet ↔ mobile breakpoints instead of only at page load.
+* **Watchdog consuming resources while idle:** the systemd unit is configured as an event-driven `oneshot` handler (`OnFailure`) before the bot starts; upgrades no longer restart it as a long-running service.
+* **Log noise when switching sources:** a connection reset while sending SSE headers (the browser closes the old `EventSource` before the server replies) no longer leaves a `ClientConnectionResetError` traceback — across all SSE endpoints.
+
+### ✨ Interface
+* **Consistent Logs controls:** the level filter and source switcher share the same height and visual style; the block title is shortened to "Logs". The output area has a fixed height and no longer shrinks when the selected source has few entries.
+* **Mobile layout:** on narrow screens the controls take their own full-width row with no gaps or wrapping; labels shrink to "Bot"/"Server", long service names truncate with an ellipsis, and on the narrowest screens the filter keeps only its icon.
+* **Documentation & UI asset refresh:** updated the project screenshot gallery (`assets/`) — mobile PWA client, web console, responsive metric charts and node monitoring views.
 
 ## [1.27.0] - 2026-10-26
 

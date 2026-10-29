@@ -3,6 +3,8 @@ import json
 import logging
 import re
 import subprocess
+import threading
+import time
 
 import aiohttp
 from aiogram import Dispatcher, F, types
@@ -132,95 +134,132 @@ def get_docker_status(container_name):
 
 def discover_all_systemd_services():
     """Discover all running/available systemd services"""
-    services = set()
+    return list(_bulk_systemd_statuses().keys())
+
+def discover_all_docker_containers():
+    """Discover all docker containers (running and stopped)"""
+    return list(_bulk_docker_statuses().keys())
+
+
+def _bulk_systemd_statuses() -> dict[str, str]:
+    """Status of every systemd service in a single `systemctl` round-trip.
+
+    `systemctl list-units --all` already carries ACTIVE/SUB for each loaded
+    unit, so we avoid one `systemctl show` per service (hundreds of forks).
+    Unit files that are not loaded are reported as stopped.
+    """
+    statuses: dict[str, str] = {}
     try:
-        # Get list of all loaded services (running and available)
-        cmd = ["systemctl", "list-units", "--type=service", "--all", "--no-pager", "--no-legend"]
+        cmd = ["systemctl", "list-units", "--type=service", "--all", "--plain", "--no-pager", "--no-legend"]
         # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
-            for line in result.stdout.strip().split("\n"):
-                if not line.strip():
-                    continue
+            for line in result.stdout.splitlines():
                 parts = line.split()
-                if len(parts) >= 1:
-                    unit = parts[0]
-                    # Remove .service suffix
-                    if unit.endswith(".service"):
-                        name = unit[:-8]
-                        services.add(name)
-        
-        # Also get list of all unit files (includes services not currently loaded)
+                if len(parts) < 4 or not parts[0].endswith(".service"):
+                    continue
+                name, load_state, active, sub = parts[0][:-8], parts[1], parts[2], parts[3]
+                if load_state == "not-found":
+                    continue
+                if active == "active":
+                    statuses[name] = "running" if sub == "running" else "active"
+                else:
+                    statuses[name] = "stopped"
+
         cmd2 = ["systemctl", "list-unit-files", "--type=service", "--no-pager", "--no-legend"]
         # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         result2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=10)
         if result2.returncode == 0:
-            for line in result2.stdout.strip().split("\n"):
-                if not line.strip():
-                    continue
+            for line in result2.stdout.splitlines():
                 parts = line.split()
-                if len(parts) >= 1:
-                    unit = parts[0]
-                    if unit.endswith(".service"):
-                        name = unit[:-8]
-                        services.add(name)
+                if not parts or not parts[0].endswith(".service"):
+                    continue
+                name = parts[0][:-8]
+                # Template units (foo@.service) cannot be started by bare name.
+                if name.endswith("@"):
+                    continue
+                statuses.setdefault(name, "stopped")
     except Exception as e:
         logging.error(f"Error discovering systemd services: {e}")
-    return list(services)
+    return statuses
 
-def discover_all_docker_containers():
-    """Discover all docker containers (running and stopped)"""
-    containers = []
+
+def _bulk_docker_statuses() -> dict[str, str]:
+    """Status of every docker container in a single API/CLI call."""
+    statuses: dict[str, str] = {}
     try:
         import docker
         client = docker.from_env()
-        for c in client.containers.list(all=True):
-            containers.append(c.name)
-    except ImportError:
-        # Fallback to CLI
         try:
-            cmd = ["docker", "ps", "-a", "--format", "{{.Names}}"]
+            for c in client.containers.list(all=True):
+                statuses[c.name] = "running" if c.status == "running" else "stopped"
+        finally:
+            client.close()
+    except ImportError:
+        try:
+            cmd = ["docker", "ps", "-a", "--format", "{{.Names}}\t{{.State}}"]
             # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    if line.strip():
-                        containers.append(line.strip())
+                for line in result.stdout.splitlines():
+                    name, _sep, state = line.strip().partition("\t")
+                    if name:
+                        statuses[name] = "running" if state == "running" else "stopped"
         except (OSError, subprocess.SubprocessError) as exc:
             logging.debug("Docker CLI discovery is unavailable: %s", exc)
     except Exception as e:
         logging.debug(f"Docker not available: {e}")
-    return containers
+    return statuses
 
-def get_all_available_services():
-    """Get all available installed services/containers with their managed status."""
+
+_AVAILABLE_SERVICES_TTL = 30.0
+_available_services_cache: tuple[float, list[dict]] | None = None
+_available_services_lock = threading.Lock()
+
+
+def invalidate_available_services_cache() -> None:
+    global _available_services_cache
+    with _available_services_lock:
+        _available_services_cache = None
+
+
+def get_all_available_services(force_refresh: bool = False):
+    """Get all available installed services/containers with their managed status.
+
+    The discovery result is cached for a short TTL: the inventory of units and
+    containers changes rarely, while the UI may request it on every open.
+    """
+    global _available_services_cache
+    now = time.monotonic()
+    if not force_refresh:
+        with _available_services_lock:
+            cached = _available_services_cache
+        if cached and now - cached[0] < _AVAILABLE_SERVICES_TTL:
+            return _with_managed_flags(cached[1])
+
+    with _available_services_lock:
+        cached = _available_services_cache
+        if not force_refresh and cached and time.monotonic() - cached[0] < _AVAILABLE_SERVICES_TTL:
+            return _with_managed_flags(cached[1])
+
+        discovered: list[dict] = []
+        for name, status in _bulk_systemd_statuses().items():
+            if _is_displayable_service_status(status):
+                discovered.append({"name": name, "type": "systemd", "status": status})
+        for name, status in _bulk_docker_statuses().items():
+            if _is_displayable_service_status(status):
+                discovered.append({"name": name, "type": "docker", "status": status})
+        _available_services_cache = (time.monotonic(), discovered)
+        return _with_managed_flags(discovered)
+
+
+def _with_managed_flags(discovered: list[dict]) -> list[dict]:
+    # Managed flags are resolved per call so cache stays valid when the list changes.
     managed_targets = {(str(s.get("name")), str(s.get("type", "systemd"))) for s in MANAGED_SERVICES}
-
-    result = []
-
-    # Systemd services
-    systemd_services = discover_all_systemd_services()
-    for name in systemd_services:
-        status = get_systemd_status(name)
-        if _is_displayable_service_status(status):
-            result.append({
-                "name": name,
-                "type": "systemd",
-                "status": status,
-                "managed": (name, "systemd") in managed_targets
-            })
-
-    # Docker containers
-    docker_containers = discover_all_docker_containers()
-    for name in docker_containers:
-        status = get_docker_status(name)
-        if _is_displayable_service_status(status):
-            result.append({
-                "name": name,
-                "type": "docker",
-                "status": status,
-                "managed": (name, "docker") in managed_targets
-            })
+    result = [
+        {**item, "managed": (item["name"], item["type"]) in managed_targets}
+        for item in discovered
+    ]
 
     # Sort: managed first, then by name
     result.sort(key=lambda x: (not x["managed"], x["name"].lower()))
@@ -355,7 +394,9 @@ async def perform_service_action(name, sType, action):
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await proc.communicate()
-        
+        # Statuses changed — drop the discovery cache so the UI sees the new state.
+        invalidate_available_services_cache()
+
         if proc.returncode == 0:
             return True, "OK"
         else:

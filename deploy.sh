@@ -1687,14 +1687,11 @@ create_docker_compose_yml() {
         fi
 }
 
-create_and_start_service() {
-    local svc=$1; local script=$2; local mode=$3; local desc=$4
-    local user="root"; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; fi
-
-    if [ "$svc" == "$WATCHDOG_SERVICE_NAME" ]; then
-        # Watchdog is an event-driven OnFailure crash handler (Type=oneshot).
-        # Consumes 0 MB RAM in idle and only triggers if tg-bot crashes unexpectedly.
-        sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
+configure_watchdog_service() {
+    local svc=$1; local script=$2; local desc=$3
+    sudo systemctl stop "${svc}" >/dev/null 2>&1 || true
+    sudo systemctl disable "${svc}" >/dev/null 2>&1 || true
+    sudo tee "/etc/systemd/system/${svc}.service" > /dev/null <<EOF
 [Unit]
 Description=${desc}
 After=network.target
@@ -1707,9 +1704,17 @@ EnvironmentFile=${BOT_INSTALL_PATH}/.env
 ExecStart=${VENV_PATH}/bin/python ${script} --crash-alert
 TimeoutStartSec=30
 EOF
-        sudo systemctl daemon-reload
-        sudo systemctl stop "${svc}" >/dev/null 2>&1 || true
-        sudo systemctl disable "${svc}" >/dev/null 2>&1 || true
+    sudo systemctl daemon-reload
+}
+
+create_and_start_service() {
+    local svc=$1; local script=$2; local mode=$3; local desc=$4
+    local user="root"; if [ "$mode" == "secure" ] && [ "$svc" == "$SERVICE_NAME" ]; then user=${SERVICE_USER}; fi
+
+    if [ "$svc" == "$WATCHDOG_SERVICE_NAME" ]; then
+        # Watchdog is an event-driven OnFailure crash handler (Type=oneshot).
+        # Consumes 0 MB RAM in idle and only triggers if tg-bot crashes unexpectedly.
+        configure_watchdog_service "${svc}" "${script}" "${desc}"
         msg_info "✓ Служба аварийного оповещения ${svc} (${desc}) настроена (OnFailure, 0 МБ RAM в простое)"
         return 0
     fi
@@ -1820,8 +1825,8 @@ install_systemd_logic() {
     write_env_file "systemd" "$mode" ""
     run_db_migrations "$exec_cmd"
     cleanup_for_systemd "установки"
-    create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
     create_and_start_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "root" "Наблюдатель"
+    create_and_start_service "${SERVICE_NAME}" "${BOT_INSTALL_PATH}/bot.py" "$mode" "Telegram Bot"
 
     msg_info "Создание команды 'tgcp-bot'..."
     sudo bash -c "cat > /usr/local/bin/tgcp-bot" <<EOF
@@ -2170,8 +2175,8 @@ if [ -f .env ]; then set -a; source .env; set +a; fi
 ${VENV_PATH}/bin/python manage.py "\$@"
 EOF
         sudo chmod +x /usr/local/bin/tgcp-bot
+        configure_watchdog_service "${WATCHDOG_SERVICE_NAME}" "${BOT_INSTALL_PATH}/watchdog.py" "Наблюдатель"
         if systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then sudo systemctl restart ${SERVICE_NAME}; fi
-        if systemctl list-unit-files | grep -q "^${WATCHDOG_SERVICE_NAME}.service"; then sudo systemctl restart ${WATCHDOG_SERVICE_NAME}; fi
     fi
 	
     MIGRATE_ARGS=""

@@ -678,7 +678,7 @@
                 </div>
             </div>
             <div data-block-id="system_logs" data-default-size="standard" class="dashboard-block relative col-span-12 lg:col-span-6 lg:row-span-2 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none flex flex-col overflow-hidden lazy-block transition-all duration-300">
-                <div class="flex justify-between items-center mb-4 flex-wrap gap-2 relative z-10">
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-2 relative z-[60]">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none"
                             viewBox="0 0 24 24" stroke="currentColor">
@@ -687,7 +687,7 @@
                         </svg>
                         {{ web_logs_title }}
                     </h3>
-                    <div class="flex items-center gap-2">
+                    <div class="log-controls flex items-center gap-2 flex-nowrap ml-auto min-w-0">
                         <style>
                             #logsContainer.filter-INFO .log-line:not([data-level="INFO"]),
                             #logsContainer.filter-WARN .log-line:not([data-level="WARN"]),
@@ -697,9 +697,9 @@
                                 pointer-events: none;
                             }
                         </style>
-                        <div class="relative" id="logFilterDropdownWrapper">
+                        <div class="relative log-source-switcher text-[10px] font-bold" id="logFilterDropdownWrapper">
                             <button id="logFilterBtn" onclick="document.getElementById('logFilterMenu').classList.toggle('hidden')"
-                                class="px-3 py-1.5 bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-lg text-[10px] font-bold text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 flex items-center gap-2 whitespace-nowrap">
+                                class="log-source-button focus:outline-none focus:ring-2 focus:ring-blue-500/50">
                                 <svg class="h-3.5 w-3.5 text-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                                 </svg>
@@ -708,7 +708,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
-                            <div id="logFilterMenu" class="hidden absolute right-0 mt-2 w-36 bg-white dark:bg-gray-800 border border-gray-100 dark:border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                            <div id="logFilterMenu" class="hidden absolute left-0 top-full mt-2 w-36 bg-white dark:bg-gray-800 border border-gray-100 dark:border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
                                 <button onclick="selectLogFilter('ALL')" class="w-full text-left px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2.5 transition-colors">
                                     <span class="w-2 h-2 rounded-full bg-gray-400 shrink-0"></span>ALL
                                 </button>
@@ -723,20 +723,46 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="flex bg-gray-100 dark:bg-black/30 rounded-lg p-1 text-[10px] font-bold">
+                        <div id="serviceLogsDock" class="log-source-switcher text-[10px] font-bold">
+                            <button onclick="openServiceLogsModal(event)" id="addServiceLogsBtn"
+                                class="log-source-button log-source-add"
+                                title="{{ web_logs_add_service }}" aria-label="{{ web_logs_add_service }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m-7-7h14" />
+                                </svg>
+                            </button>
+                            <div id="serviceLogsTab" class="service-log-tab relative">
+                                <button onclick="switchLogType('service')" id="btnLogService"
+                                    class="log-source-button service-log-name">
+                                    <span id="serviceLogsSelectedName" class="truncate"></span>
+                                </button>
+                                <button onclick="handleServiceLogAction(event)" id="serviceLogsActionBtn"
+                                    class="log-source-button service-log-action"
+                                    aria-label="{{ web_logs_close_service }}" title="{{ web_logs_close_service }}">
+                                    <svg id="serviceLogsCloseIcon" class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    <svg id="serviceLogsChevron" class="hidden h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <div id="serviceLogsDropdown" class="hidden absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-100 dark:border-white/10 rounded-xl shadow-xl z-50 overflow-hidden"></div>
+                            </div>
                             <button onclick="switchLogType('bot')" id="btnLogBot"
-                                class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                                {{ web_logs_btn_bot }}
+                                class="log-source-button">
+                                <span class="log-label-full">{{ web_logs_btn_bot }}</span>
+                                <span class="log-label-short">{{ web_logs_btn_bot_short }}</span>
                             </button>
                             <button onclick="switchLogType('sys')" id="btnLogSys"
-                                class="px-3 py-1.5 rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                                {{ web_logs_btn_sys }}
+                                class="log-source-button">
+                                <span class="log-label-full">{{ web_logs_btn_sys }}</span>
+                                <span class="log-label-short">{{ web_logs_btn_sys_short }}</span>
                             </button>
                         </div>
                     </div>
                 </div>
-                <div
-                    class="flex-1 flex flex-col min-h-[250px] max-h-[400px] bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
+                <div id="logsPanel"
+                    class="flex-1 flex flex-col h-[400px] min-h-[400px] max-h-[400px] bg-gray-50 dark:bg-gray-900 rounded-xl p-4 overflow-hidden relative font-mono text-xs border border-gray-200 dark:border-gray-800 shadow-inner group">
                     <div id="logsOverlay"
                         class="hidden absolute inset-0 z-20 flex items-center justify-center bg-white/10 dark:bg-black/10 backdrop-blur-sm transition-all duration-500">
                         <div
@@ -1154,6 +1180,48 @@
         </div>
     </div>
 
+    <div id="serviceLogsModal"
+        class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4"
+        onclick="if(event.target === this) closeServiceLogsModal()">
+        <div
+            class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm relative flex flex-col max-h-[85vh] backdrop-blur-xl transition-all">
+            <div
+                class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center shrink-0 rounded-t-2xl">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <div class="p-1.5 bg-blue-100 dark:bg-blue-500/20 rounded-lg text-blue-600 dark:text-blue-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                    </div>
+                    <span>{{ web_logs_sources_title }}</span>
+                </h3>
+                <button onclick="closeServiceLogsModal()"
+                    class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                <section>
+                    <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">{{ web_logs_tracked_services }}</div>
+                    <div id="serviceLogsTrackedList" class="space-y-2"></div>
+                </section>
+                <section>
+                    <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">{{ web_logs_add_service }}</div>
+                    <input id="serviceLogsSearch" type="search" autocomplete="off" spellcheck="false"
+                        placeholder="{{ web_logs_search_placeholder }}"
+                        class="w-full mb-2 px-3 py-2 text-sm rounded-xl bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/5 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        oninput="filterServiceLogsAvailable()">
+                    <div id="serviceLogsAvailableList" class="space-y-2" aria-live="polite"></div>
+                </section>
+            </div>
+        </div>
+    </div>
     <div id="vncNodeSelectModal"
         class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4"
         onclick="if(event.target === this) closeVncModal()">

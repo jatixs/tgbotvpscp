@@ -2,19 +2,25 @@
   <a href="../README.md"><img src="https://flagcdn.com/20x15/ru.png" width="16" alt="RU"> Русский</a> | <img src="https://flagcdn.com/20x15/gb.png" width="16" alt="EN"> English
 </p>
 
-<h1 align="center">🤖 VPS Manager Telegram Bot</h1>
+<h1 align="center"><img src="../assets/logo.png" width="100" height="100" alt="Logo" valign="middle"> VPS Manager Telegram Bot</h1>
 
 <p align="center">
-  <b>v1.27.0</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
-  (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)<br><br>
+  <b>v1.27.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)
+</p>
 
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.0-blue?style=flat-square" alt="Version 1.27.0"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-95-purple?style=flat-square" alt="Build 95"/></a>
+<p align="center">
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.1-blue?style=flat-square" alt="Version 1.27.1"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-96-purple?style=flat-square" alt="Build 96"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-green?style=flat-square" alt="Python 3.10+"/></a>
   <a href="https://choosealicense.com/licenses/gpl-3.0/"><img src="https://img.shields.io/badge/license-GPL--3.0-lightgrey?style=flat-square" alt="License GPL-3.0"/></a>
   <a href="https://github.com/aiogram/aiogram"><img src="https://img.shields.io/badge/aiogram-3.x-orange?style=flat-square" alt="Aiogram 3.x"/></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-ready-blueviolet?style=flat-square" alt="Docker"/></a>
   <a href="https://releases.ubuntu.com/focal/"><img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" alt="Platform Ubuntu 20.04+"/></a>
+</p>
+
+<p align="center">
+  <img src="../assets/asset_webUI.jpg" alt="VPS Manager Web UI & PWA Showcase" width="100%">
 </p>
 
 ---
@@ -654,8 +660,8 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.27.0 (Build 95)<br>
-  <b>Release Date:</b> October 21, 2026<br>
+  <b>Version:</b> 1.27.1 (Build 96)<br>
+  <b>Release Date:</b> October 29, 2026<br>
   <b>License:</b> GPL-3.0 license<br>
   <b>Status:</b> Release<br>
   <br>

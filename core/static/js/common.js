@@ -762,29 +762,54 @@ let bodyScrollTop = 0;
 let openModalStackCount = 0;
 const openModalSet = new Set();
 
+let lazyLoadObserver = null;
+let lazyLoadResizeScheduled = false;
+
 function initGlobalLazyLoad() {
-    if (window.innerWidth >= 1024) return;
-
-    const observerOptions = {
-        root: null,
-        rootMargin: '0px',
-        threshold: 0.1
-    };
-
-    const observer = new IntersectionObserver((entries, obs) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('is-visible');
-                obs.unobserve(entry.target);
-            }
-        });
-    }, observerOptions);
-
     const blocks = document.querySelectorAll('.lazy-block:not(.is-visible)');
+    if (window.innerWidth >= 1024) {
+        lazyLoadObserver?.disconnect();
+        lazyLoadObserver = null;
+        return;
+    }
+
+    if (!('IntersectionObserver' in window)) {
+        blocks.forEach(block => {
+            block.classList.add('is-visible');
+        });
+        return;
+    }
+
+    if (!lazyLoadObserver) {
+        lazyLoadObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, {
+            root: null,
+            rootMargin: '0px',
+            threshold: 0.1
+        });
+    }
+
     blocks.forEach(block => {
-        observer.observe(block);
+        lazyLoadObserver.observe(block);
     });
 }
+window.initGlobalLazyLoad = initGlobalLazyLoad;
+
+window.addEventListener('resize', () => {
+    if (lazyLoadResizeScheduled) return;
+    lazyLoadResizeScheduled = true;
+    requestAnimationFrame(() => {
+        lazyLoadResizeScheduled = false;
+        initGlobalLazyLoad();
+    });
+});
+
 document.addEventListener("DOMContentLoaded", () => {
     initHapticsFeedback();
     initHapticsToggle();
@@ -2471,7 +2496,9 @@ function setThemeDirect(theme, event) {
         ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
         : theme;
 
-    if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (document.startViewTransition
+        && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        && !window.matchMedia('(max-width: 767px)').matches) {
         document.startViewTransition(function() {
             applyThemeDirect(resolvedTheme);
         });
@@ -3110,6 +3137,7 @@ function togglePerfMode() {
 function toggleA11yMode() {
     const isA11yMode = document.documentElement.classList.toggle('a11y-mode');
     localStorage.setItem('a11y_mode', isA11yMode ? '1' : '0');
+    requestAnimationFrame(() => syncThemeGlider(true));
     if (typeof showToast === 'function') {
         showToast(isA11yMode ? (I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (I18N?.web_a11y_mode_off || 'Accessibility mode disabled'));
     }

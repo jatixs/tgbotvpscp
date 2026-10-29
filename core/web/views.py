@@ -63,7 +63,30 @@ def _compute_asset_version() -> str:
     return f"{APP_VERSION.lstrip('v')}.{latest or CACHE_VER}"
 
 
-ASSET_VER: Final[str] = _compute_asset_version()
+class _AssetVersion:
+    """Lazily refreshed asset version.
+
+    Jinja reloads templates on change, so a tag frozen at import time lets a
+    fresh page reference stale cached JS/CSS until the process restarts.
+    """
+
+    _TTL_SECONDS: Final[float] = 2.0
+
+    def __init__(self) -> None:
+        self._value = _compute_asset_version()
+        self._checked_at = time.monotonic()
+
+    def __str__(self) -> str:
+        now = time.monotonic()
+        if now - self._checked_at >= self._TTL_SECONDS:
+            self._value = _compute_asset_version()
+            self._checked_at = now
+        return self._value
+
+    __html__ = __str__
+
+
+ASSET_VER: Final[_AssetVersion] = _AssetVersion()
 JINJA_ENV.globals["asset_ver"] = ASSET_VER
 
 
@@ -456,6 +479,13 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_nodes_loading": _("web_nodes_loading", lang),
         "web_logs_btn_bot": _("web_logs_btn_bot", lang),
         "web_logs_btn_sys": _("web_logs_btn_sys", lang),
+        "web_logs_btn_bot_short": _("web_logs_btn_bot_short", lang),
+        "web_logs_btn_sys_short": _("web_logs_btn_sys_short", lang),
+        "web_logs_add_service": _("web_logs_add_service", lang),
+        "web_logs_close_service": _("web_logs_close_service", lang),
+        "web_logs_sources_title": _("web_logs_sources_title", lang),
+        "web_logs_tracked_services": _("web_logs_tracked_services", lang),
+        "web_logs_search_placeholder": _("web_logs_search_placeholder", lang),
         "node_action_btn": node_action_btn,
         "settings_btn": settings_btn,
         "web_footer_powered": _("web_footer_powered", lang),
@@ -514,6 +544,16 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_error": _("web_error", lang, error=""),
             "web_conn_error": _("web_conn_error", lang, error=""),
             "web_log_empty": _("web_log_empty", lang),
+            "web_logs_add_service": _("web_logs_add_service", lang),
+            "web_logs_close_service": _("web_logs_close_service", lang),
+            "web_logs_select_service": _("web_logs_select_service", lang),
+            "web_logs_no_tracked": _("web_logs_no_tracked", lang),
+            "web_logs_search_empty": _("web_logs_search_empty", lang),
+            "web_logs_did_you_mean": _("web_logs_did_you_mean", lang),
+            "web_logs_no_running": _("web_logs_no_running", lang),
+            "web_logs_no_services": _("web_logs_no_services", lang),
+            "web_logs_loading_services": _("web_logs_loading_services", lang),
+            "web_logs_services_error": _("web_logs_services_error", lang),
             "web_access_denied": _("web_access_denied", lang),
             "web_copied": _("web_copied", lang),
             "web_copy_ip": _("web_copy_ip", lang),
