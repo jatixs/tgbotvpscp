@@ -7,11 +7,6 @@
 </p>
 
 <p align="center">
-  <b>v1.27.2</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
-  (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)
-</p>
-
-<p align="center">
   <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.2-blue?style=flat-square" alt="Version 1.27.2"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-97-purple?style=flat-square" alt="Build 97"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%233670A0.svg?style=for-the-badge&logo=python&logoColor=ffdd54" alt="Python"/></a>
@@ -23,6 +18,13 @@
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/docker-ready-blueviolet?style=flat-square" alt="Docker"/></a>
   <a href="https://releases.ubuntu.com/focal/"><img src="https://img.shields.io/badge/platform-Ubuntu%2020.04%2B-important?style=flat-square" alt="Platform Ubuntu 20.04+"/></a>
 </p>
+
+<p align="center">
+  <b>v1.27.2</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)
+</p>
+
+
 
 <p align="center">
   <img src="assets/asset_webUI.jpg" alt="VPS Manager Web UI & PWA Showcase" width="100%">
