@@ -16,7 +16,7 @@
 * **Notification Toggle Synchronization Between WebUI and Bot:** Resolved unintended filtering of global notification preferences (`node_resources` and `node_logins`) in `_alerts_for_web`, which previously caused node alert toggles to render as disabled in the WebUI and risk overwriting active bot configurations during auto-save. Added explicit template context flags `check_node_resources` and `check_node_logins`.
 * **Node Settings UI Consistency in Telegram:** Standardized the placement of status checkmarks in node alert settings: moved the indicator for "Payment Reminder" to the right side (`💳 Payment Reminder : ✅/❌`), matching the format of all adjacent toggle controls.
 * **Logs Level Dropdown Positioning:** Adjusted alignment and positioning for the log filter menu (`left-0 top-full`), preventing the dropdown container from clipping beyond the left boundary of the dashboard card.
-* **Client Code Quality (SAST / Codacy):** Addressed static analysis warnings in `initGlobalLazyLoad` (`core/static/js/common.js`) by ensuring the `forEach` callback does not return an assignment value.
+* **Client-Side JavaScript:** Resolved an unnecessary return value inside the `forEach` callback in `initGlobalLazyLoad` (`core/static/js/common.js`).
 
 ## [1.27.1] - 2026-10-29
 
