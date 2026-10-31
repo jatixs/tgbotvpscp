@@ -4,11 +4,19 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Список изменений</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.27.1-blue?style=flat-square" alt="Version 1.27.1"/>
-    <img src="https://img.shields.io/badge/build-96-purple?style=flat-square" alt="Build 96"/>
-    <img src="https://img.shields.io/badge/date-Октябрь%2029%202026-green?style=flat-square" alt="Date Oct 29 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.27.2-blue?style=flat-square" alt="Version 1.27.2"/>
+    <img src="https://img.shields.io/badge/build-97-purple?style=flat-square" alt="Build 97"/>
+    <img src="https://img.shields.io/badge/date-Октябрь%2031%202026-green?style=flat-square" alt="Date Oct 31 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.27.2] - 2026-10-31
+
+### 🐛 Исправлено
+* **Синхронизация тумблеров уведомлений между WebUI и ботом:** устранена ложная фильтрация глобальных параметров `node_resources` и `node_logins` в функции `_alerts_for_web` веб-интерфейса, из-за которой настройки нод отображались в WebUI выключенными и могли непреднамеренно перезаписывать включённые состояния бота при автосохранении. В шаблон переданы соответствующие флаги состояния `check_node_resources` и `check_node_logins`.
+* **Единообразие интерфейса настроек ноды в Telegram:** в меню индивидуальных настроек ноды индикатор статуса для кнопки «Уведомление об оплате» перенесён в правую часть (через двоеточие: `💳 Уведомление об оплате : ✅/❌`), приводя элемент к общему стилю остальных переключателей.
+* **Позиционирование выпадающего списка фильтра логов:** скорректировано выравнивание дропдауна уровня логов (`left-0 top-full`), исключающее выход меню за левые границы родительского контейнера дашборда на десктопных и мобильных экранах.
+* **Качество клиентского кода (SAST / Codacy):** устранён возврат значения из callback-функции `forEach` в `initGlobalLazyLoad` (`core/static/js/common.js`), приводивший к предупреждениям статического анализатора.
 
 ## [1.27.1] - 2026-10-29
 

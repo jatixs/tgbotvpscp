@@ -580,7 +580,7 @@ def get_notifications_node_settings_keyboard(token: str, node: dict, user_id: in
             ],
             [
                 InlineKeyboardButton(
-                    text=f"{_('status_enabled', lang) if node.get('reminder_enabled', False) else _('status_disabled', lang)} 💳 {_('billing_toggle_reminder', lang)}",
+                    text=f"💳 {_('billing_toggle_reminder', lang)} : {_('status_enabled', lang) if node.get('reminder_enabled', False) else _('status_disabled', lang)}",
                     callback_data=f"billing_toggle_reminder_{token}",
                 )
             ],

@@ -183,7 +183,10 @@ def _render_html_response(template_name: str, context: dict[str, Any], request: 
 
 
 def _alerts_for_web(alerts: dict[str, Any], nodes: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    public_alerts = {key: value for key, value in alerts.items() if not key.startswith("node_")}
+    public_alerts = {
+        key: value for key, value in alerts.items()
+        if not key.startswith("node_") or key in {"node_resources", "node_logins"}
+    }
     for token, node in nodes.items():
         for alert_type in ("downtime", "node_resources", "node_logins"):
             key = f"node_{token}_{alert_type}"
@@ -1315,6 +1318,8 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
         "check_bans": "checked" if user_alerts.get("bans", False) else "",
         "check_downtime": "checked" if user_alerts.get("downtime", False) else "",
+        "check_node_resources": "checked" if user_alerts.get("node_resources", False) else "",
+        "check_node_logins": "checked" if user_alerts.get("node_logins", False) else "",
         "check_master_billing": "checked" if master_billing_enabled else "",
         "billing_toggle_reminder": _("billing_toggle_reminder", lang),
         "user_alerts": user_alerts,

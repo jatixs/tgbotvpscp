@@ -4,11 +4,19 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.27.1-blue?style=flat-square" alt="Version 1.27.1"/>
-    <img src="https://img.shields.io/badge/build-96-purple?style=flat-square" alt="Build 96"/>
-    <img src="https://img.shields.io/badge/date-Oct%2029%202026-green?style=flat-square" alt="Date Oct 29 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.27.2-blue?style=flat-square" alt="Version 1.27.2"/>
+    <img src="https://img.shields.io/badge/build-97-purple?style=flat-square" alt="Build 97"/>
+    <img src="https://img.shields.io/badge/date-Oct%2031%202026-green?style=flat-square" alt="Date Oct 31 2026"/>
 	<img src="https://img.shields.io/badge/status-stable-green?style=flat-square" alt="Status Stable"/>
 </p>
+
+## [1.27.2] - 2026-10-31
+
+### 🐛 Fixed
+* **Notification Toggle Synchronization Between WebUI and Bot:** Resolved unintended filtering of global notification preferences (`node_resources` and `node_logins`) in `_alerts_for_web`, which previously caused node alert toggles to render as disabled in the WebUI and risk overwriting active bot configurations during auto-save. Added explicit template context flags `check_node_resources` and `check_node_logins`.
+* **Node Settings UI Consistency in Telegram:** Standardized the placement of status checkmarks in node alert settings: moved the indicator for "Payment Reminder" to the right side (`💳 Payment Reminder : ✅/❌`), matching the format of all adjacent toggle controls.
+* **Logs Level Dropdown Positioning:** Adjusted alignment and positioning for the log filter menu (`left-0 top-full`), preventing the dropdown container from clipping beyond the left boundary of the dashboard card.
+* **Client Code Quality (SAST / Codacy):** Addressed static analysis warnings in `initGlobalLazyLoad` (`core/static/js/common.js`) by ensuring the `forEach` callback does not return an assignment value.
 
 ## [1.27.1] - 2026-10-29
 
