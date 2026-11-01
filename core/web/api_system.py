@@ -1,4 +1,4 @@
-"""
+﻿"""
 REST API controllers for system settings.
 Handles panel configuration changes, session management, and authentication.
 """
@@ -186,6 +186,8 @@ async def handle_save_notifications(request: web.Request) -> web.StreamResponse:
                 mb = await get_bot_config("master_billing") or {}
                 mb["reminder_enabled"] = bool(value)
                 await set_bot_config("master_billing", mb)
+            elif key in {"node_resources", "node_logins"}:
+                ALERTS_CONFIG[uid][key] = bool(value)
             elif key.startswith("node_"):
                 parts = key.split("_", 2)
                 if len(parts) != 3 or not parts[1].isdigit():

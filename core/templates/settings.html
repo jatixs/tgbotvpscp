@@ -733,14 +733,14 @@
                                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_node_resources').click()">
                                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_res }}</span>
                                     <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                                        <input type="checkbox" id="alert_node_resources" class="sr-only peer" onchange="triggerAutoSave('nodes_global')" {{ 'checked' if user_alerts.get('node_resources', False) else '' }}>
+                                        <input type="checkbox" id="alert_node_resources" class="sr-only peer" onchange="triggerAutoSave('nodes_global')" {{ check_node_resources }}>
                                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
                                     </label>
                                 </div>
                                 <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" onclick="document.getElementById('alert_node_logins').click()">
                                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ notifications_alert_name_logins }}</span>
                                     <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
-                                        <input type="checkbox" id="alert_node_logins" class="sr-only peer" onchange="triggerAutoSave('nodes_global')" {{ 'checked' if user_alerts.get('node_logins', False) else '' }}>
+                                        <input type="checkbox" id="alert_node_logins" class="sr-only peer" onchange="triggerAutoSave('nodes_global')" {{ check_node_logins }}>
                                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
                                     </label>
                                 </div>
