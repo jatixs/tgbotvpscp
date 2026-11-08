@@ -797,4 +797,116 @@
         grid: { drawOnChartArea: false }
     });
     window.CHART_RANGES = RANGES.map(r => r.key);
+
+    /* ---------- Chart Modal Expansion ---------- */
+    let activeExpandedChart = null;
+
+    function expandChartToModal(canvasId, overlayId) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        const overlay = overlayId
+            ? document.getElementById(overlayId)
+            : canvas.closest('.rounded-2xl')?.querySelector('.chart-expanded-overlay');
+        if (!overlay) return;
+
+        if (activeExpandedChart) {
+            collapseChartModal();
+        }
+
+        const originalParent = canvas.parentElement;
+        const body = overlay.querySelector('.chart-expanded-body');
+        if (!body || !originalParent) return;
+
+        const dialog = overlay.closest('.rounded-2xl');
+        const originalMinHeight = dialog ? dialog.style.minHeight : '';
+        const originalHeight = dialog ? dialog.style.height : '';
+
+        activeExpandedChart = {
+            canvasId,
+            originalParent,
+            overlay,
+            dialog,
+            originalMinHeight,
+            originalHeight
+        };
+
+        if (dialog) {
+            dialog.style.minHeight = '480px';
+            if (window.innerWidth >= 640) {
+                dialog.style.height = '75vh';
+            }
+        }
+
+        body.appendChild(canvas);
+        overlay.classList.remove('hidden');
+
+        const chart = (typeof Chart !== 'undefined' ? Chart.getChart(canvas) : null) || window.__chartRegistry?.[canvasId];
+        if (chart) {
+            requestAnimationFrame(() => {
+                try {
+                    chart.resize();
+                    chart.update('none');
+                } catch (_) {}
+            });
+        }
+    }
+
+    function collapseChartModal(overlayId) {
+        if (!activeExpandedChart) {
+            if (overlayId) {
+                const overlay = document.getElementById(overlayId);
+                if (overlay) overlay.classList.add('hidden');
+            }
+            return;
+        }
+
+        const { canvasId, originalParent, overlay, dialog, originalMinHeight, originalHeight } = activeExpandedChart;
+        const canvas = document.getElementById(canvasId);
+
+        if (canvas && originalParent) {
+            originalParent.appendChild(canvas);
+        }
+
+        if (dialog) {
+            dialog.style.minHeight = originalMinHeight;
+            dialog.style.height = originalHeight;
+        }
+
+        if (overlay) {
+            overlay.classList.add('hidden');
+        }
+
+        activeExpandedChart = null;
+
+        const chart = (typeof Chart !== 'undefined' ? Chart.getChart(canvas) : null) || window.__chartRegistry?.[canvasId];
+        if (chart) {
+            requestAnimationFrame(() => {
+                try {
+                    chart.resize();
+                    chart.update('none');
+                } catch (_) {}
+            });
+        }
+    }
+
+    window.expandChartToModal = expandChartToModal;
+    window.collapseChartModal = collapseChartModal;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-expand-chart]');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const canvasId = btn.getAttribute('data-expand-chart');
+        expandChartToModal(canvasId);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && activeExpandedChart) {
+            e.preventDefault();
+            e.stopPropagation();
+            collapseChartModal();
+        }
+    }, true);
 })();

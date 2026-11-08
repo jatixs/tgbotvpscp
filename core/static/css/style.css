@@ -2405,6 +2405,125 @@ html.amoled .chart-range-pop {
     position: relative;
 }
 
+/* ==========================================================================
+   Chart expand / fullscreen overlay button and modal
+   ========================================================================== */
+.chart-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.04);
+    color: #4b5563;
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease,
+        transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease;
+}
+
+.chart-expand-btn:hover {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.35);
+    color: #2563eb;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.12);
+    transform: scale(1.05);
+}
+
+.chart-expand-btn:active {
+    transform: scale(0.95);
+}
+
+.dark .chart-expand-btn {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: #d1d5db;
+}
+
+.dark .chart-expand-btn:hover {
+    background: rgba(59, 130, 246, 0.16);
+    border-color: rgba(96, 165, 250, 0.45);
+    color: #93c5fd;
+}
+
+.chart-expanded-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 35;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    display: flex;
+    flex-direction: column;
+    padding: 1.25rem 1.25rem 1rem 1.25rem;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3);
+    animation: chartExpandFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .chart-expanded-overlay {
+    background: rgba(17, 24, 39, 0.96);
+}
+
+html.amoled .chart-expanded-overlay {
+    background: rgba(0, 0, 0, 0.98);
+}
+
+@keyframes chartExpandFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.chart-expanded-body {
+    position: relative;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.chart-expand-close-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.chart-expand-close-btn:hover {
+    background: rgba(15, 23, 42, 0.75);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #ffffff;
+    transform: scale(1.08);
+}
+
+.chart-expand-close-btn:active {
+    transform: scale(0.95);
+}
+
 @media (max-width: 639px) {
     .chart-range-btn {
         height: 1.6rem;
@@ -2420,6 +2539,22 @@ html.amoled .chart-range-pop {
 
     .chart-range-group-label {
         flex-basis: auto;
+    }
+
+    .chart-expand-btn {
+        width: 1.6rem;
+        height: 1.6rem;
+    }
+
+    .chart-expanded-overlay {
+        padding: 0.75rem 0.5rem 0.75rem 0.5rem;
+    }
+
+    .chart-expand-close-btn {
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 2rem;
+        height: 2rem;
     }
 }
 

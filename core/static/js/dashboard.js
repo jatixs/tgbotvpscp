@@ -2306,6 +2306,7 @@ function updateNodeDetailsUI(data) {
 }
 
 function closeNodeModal() {
+    if (typeof window.collapseChartModal === 'function') window.collapseChartModal();
     const modal = document.getElementById('nodeModal');
     if (modal) {
         animateModalClose(modal);

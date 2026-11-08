@@ -742,6 +742,7 @@ function stopModalChartRanges() {
 }
 
 window.closeNodeDetailModal = function() {
+    if (typeof window.collapseChartModal === 'function') window.collapseChartModal();
     const modal = document.getElementById('nodeDetailModal');
     if (typeof animateModalClose === 'function') {
         animateModalClose(modal);
