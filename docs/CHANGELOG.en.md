@@ -4,11 +4,33 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.27.2-blue?style=for-the-badge" alt="Version 1.27.2"/>
-    <img src="https://img.shields.io/badge/build-97-purple?style=for-the-badge" alt="Build 97"/>
-    <img src="https://img.shields.io/badge/date-Oct%2031%202026-green?style=for-the-badge" alt="Date Oct 31 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.27.3-blue?style=for-the-badge" alt="Version 1.27.3"/>
+    <img src="https://img.shields.io/badge/build-98-purple?style=for-the-badge" alt="Build 98"/>
+    <img src="https://img.shields.io/badge/date-Nov%208%202026-green?style=for-the-badge" alt="Date Nov 8 2026"/>
     <img src="https://img.shields.io/badge/status-stable-green?style=for-the-badge" alt="Status Stable"/>
 </p>
+
+## [1.27.3] - 2026-11-08
+
+### ✨ Added
+* 🌐 **Per-Interface Network Monitoring** — Network charts are no longer limited to an aggregated total. A clean interface selector is now available directly in the chart header across both the main dashboard and node inspection modals:
+  * **Pinpoint bandwidth hogs instantly:** Effortlessly toggle between total server traffic and specific adapters, such as primary NICs (`eth0`), VPN tunnels (`wg0`), or Docker virtual networks (`docker0`).
+  * **Peak bandwidth capture:** In addition to average transfer rates, the system reliably captures short-lived ingress and egress traffic spikes so bursts never go unnoticed.
+  * **Smart state retention:** Your selected interface is preserved across views, and active interfaces are detected dynamically.
+* ⏱️ **Network Latency (Ping) Integrated into Traffic Charts** — Connection health and bandwidth usage are now unified on a single screen:
+  * **Effortless root-cause diagnosis:** Latency (ms) is plotted alongside incoming and outgoing traffic. You can immediately see whether latency spikes correlate with heavy downloads or if the bottleneck lies upstream with the provider.
+  * **Persistent latency trends:** Response times are automatically archived alongside standard metrics history, from live second-by-second updates to multi-day overviews.
+* 📊 **Expanded node charts.** Expand CPU/RAM and network charts in node dialogs on the dashboard and monitoring page for a closer look. Live updates continue in expanded view, and the translucent background and gradient fills adapt when the window is resized.
+* **Node client updates alongside agent updates.** Telegram, the WebUI, and the interactive installer prompt the main administrator to confirm updates for eligible nodes. Once the updated agent starts, confirmed nodes switch to the same Git commit. Older clients need a one-time manual installer update.
+
+### 🐛 Fixed
+* **Zoom reset.** The Reset button appears after zooming and hides when the default view is restored. Incoming data alone does not show the button.
+* **Network chart rendering.** Traffic lines are smoother, isolated samples appear as points, and the ping line updates smoothly without jumping from the bottom of the chart.
+* **Empty logs.** The dashboard shows an empty state when no entries match the selected log level and skips blank lines.
+* **Renaming nodes.** Opening the name editor preserves row height and column widths.
+* **Users table.** The ID column comes first, followed by name and role.
+* **Ping settings.** The interval field, protocol selector, and target button fit on a single row. The button uses the shorter “Internal” label, and the target dialog shows the full name.
+* **Russian label capitalization.** Standardized sentence case across labels in the web panel and bot menus, including the ping, service, and traffic update intervals.
 
 ## [1.27.2] - 2026-10-31
 

@@ -11,7 +11,7 @@ import psutil
 import sentry_sdk
 from tortoise import Tortoise
 
-from core import auth, config, i18n, keyboards, messaging, nodes_db, shared_state, utils
+from core import auth, config, i18n, keyboards, messaging, node_updates, nodes_db, shared_state, utils
 from core.i18n import I18nFilter, _, get_language_keyboard, log_text
 from core.middlewares import (
     AutoDeleteMessageMiddleware,
@@ -195,7 +195,7 @@ async def cat_tools_handler(message: types.Message):
     await _show_subcategory(message, "cat_tools")
 
 
-@dp.message(I18nFilter("cat_settings"))
+@dp.message(I18nFilter("cat_settings") | (F.text == "🔧 Настройки Бота"))
 async def cat_settings_handler(message: types.Message):
     await _show_subcategory(message, "cat_settings")
 
@@ -520,6 +520,7 @@ async def main():
     try:
         logging.info(log_text("bot_starting_mode", mode=config.INSTALL_MODE.upper()))
         await nodes_db.init_db()
+        await node_updates.initialize()
         await auth.load_users_async()
         await utils.load_alerts_config_async()
         await utils.load_services_config_async()

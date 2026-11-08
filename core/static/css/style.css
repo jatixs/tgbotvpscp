@@ -967,6 +967,7 @@ html.dark .header-billing-btn[data-status="gray"] {
 /* Equal mobile columns keep the divider at the panel's center. */
 @media (max-width: 484px) {
 	#networkBadgesContainer {
+		--network-divider-color: rgba(15, 23, 42, 0.1);
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
 		width: 100% !important;
@@ -979,6 +980,7 @@ html.dark .header-billing-btn[data-status="gray"] {
 	}
 
 	html.dark #networkBadgesContainer {
+		--network-divider-color: rgba(255, 255, 255, 0.08);
 		background-color: rgba(0, 0, 0, 0.2) !important;
 		border-color: rgba(255, 255, 255, 0.05) !important;
 	}
@@ -1001,7 +1003,7 @@ html.dark .header-billing-btn[data-status="gray"] {
 		width: 1px !important;
 		min-width: 1px !important;
 		height: 1.25rem !important;
-		background-color: #d1d5db !important;
+		background-color: var(--network-divider-color) !important;
 		margin: 0 !important;
 	}
 
@@ -1026,22 +1028,45 @@ html.dark .header-billing-btn[data-status="gray"] {
 	}
 
 	#networkBadgesContainer .chart-range {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
 		grid-column: 1 / -1;
 		grid-row: 1;
-		justify-content: center;
+		align-items: center;
+		gap: 0;
 		padding-bottom: 0.25rem;
-		border-bottom: 1px solid #e5e7eb;
+		border-bottom: 1px solid var(--network-divider-color);
 	}
 
-	html.dark #networkBadgesContainer .chart-range {
-		border-bottom-color: rgba(255, 255, 255, 0.08);
+	#networkBadgesContainer .chart-range::after {
+		content: '';
+		grid-column: 2;
+		grid-row: 1;
+		width: 1px;
+		height: 1.25rem;
+		background-color: var(--network-divider-color);
+		pointer-events: none;
 	}
 
 	#networkBadgesContainer .chart-range-btn {
+		grid-column: 3;
+		grid-row: 1;
+		justify-self: center;
+		min-width: 0;
+		max-width: 100%;
 		background: transparent;
 		border-color: transparent;
 		box-shadow: none;
 		padding: 0 0.4rem 0 0.45rem;
+	}
+
+	#networkBadgesContainer .chart-interface-button {
+		grid-column: 1;
+	}
+
+	#networkBadgesContainer .chart-range:empty,
+	.dashboard-block[data-current-size="small"] #networkBadgesContainer .chart-range {
+		display: none;
 	}
 }
 
@@ -2040,6 +2065,7 @@ html.amoled #log-loader {
     position: relative;
     flex-shrink: 0;
     display: inline-flex;
+    gap: 0.25rem;
 }
 
 .chart-range:empty {
@@ -2094,6 +2120,30 @@ html.amoled #log-loader {
     border-color: rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.05);
     color: #d1d5db;
+}
+
+.chart-interface-button {
+    max-width: 8rem;
+}
+
+.chart-interface-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chart-interface-options {
+    max-height: min(20rem, 60vh);
+    overflow-y: auto;
+    max-width: 22rem;
+    padding: 0.2rem;
+}
+
+.chart-interface-options .chart-range-chip {
+    height: auto;
+    min-height: 1.7rem;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .dark .chart-range-btn:hover,
@@ -2355,6 +2405,215 @@ html.amoled .chart-range-pop {
     position: relative;
 }
 
+/* ==========================================================================
+   Chart expand / fullscreen overlay button and modal
+   ========================================================================== */
+.chart-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.04);
+    color: #4b5563;
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease,
+        transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease;
+}
+
+.chart-expand-btn:hover {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.35);
+    color: #2563eb;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.12);
+    transform: scale(1.05);
+}
+
+.chart-expand-btn:active {
+    transform: scale(0.95);
+}
+
+.dark .chart-expand-btn {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: #d1d5db;
+}
+
+.dark .chart-expand-btn:hover {
+    background: rgba(59, 130, 246, 0.16);
+    border-color: rgba(96, 165, 250, 0.45);
+    color: #93c5fd;
+}
+
+.chart-expanded-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 35;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: none;
+    flex-direction: column;
+    padding: 2.75rem 1.25rem 1rem 1.25rem;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3);
+}
+
+.chart-expanded-overlay.is-active {
+    display: flex;
+    animation: chartExpandFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .chart-expanded-overlay {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.rounded-2xl:has(> .chart-expanded-overlay.is-active) {
+    background-color: transparent !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.chart-expanded-overlay.is-active ~ * {
+    visibility: hidden;
+}
+
+@keyframes chartExpandFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.chart-expanded-body {
+    position: relative;
+    flex: 1 1 0%;
+    width: 100%;
+    height: 100%;
+    min-height: 280px;
+}
+
+.chart-expand-close-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    color: #4b5563;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chart-expand-close-btn:hover {
+    background: rgba(0, 0, 0, 0.12);
+    border-color: rgba(0, 0, 0, 0.2);
+    color: #111827;
+    transform: scale(1.08);
+}
+
+.chart-expand-close-btn:active {
+    transform: scale(0.95);
+}
+
+.dark .chart-expand-close-btn {
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.dark .chart-expand-close-btn:hover {
+    background: rgba(15, 23, 42, 0.85);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #ffffff;
+}
+
+html.amoled .chart-expand-close-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+html.amoled .chart-expand-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+/* ---------- Chart Reset Zoom Button ---------- */
+.chart-reset-zoom-btn {
+    position: absolute;
+    top: 2px;
+    left: 8px;
+    z-index: 20;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    border-radius: 0.375rem;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    color: #2563eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.chart-reset-zoom-btn:not(.hidden) {
+    display: inline-flex;
+}
+
+.chart-reset-zoom-btn:hover {
+    background: rgba(239, 246, 255, 0.98);
+    border-color: rgba(59, 130, 246, 0.65);
+    color: #1d4ed8;
+    transform: scale(1.02);
+}
+
+.chart-reset-zoom-btn:active {
+    transform: scale(0.96);
+}
+
+.dark .chart-reset-zoom-btn {
+    background: rgba(17, 24, 39, 0.88);
+    border-color: rgba(96, 165, 250, 0.35);
+    color: #93c5fd;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.dark .chart-reset-zoom-btn:hover {
+    background: rgba(30, 58, 138, 0.45);
+    border-color: rgba(96, 165, 250, 0.7);
+    color: #bfdbfe;
+}
+
+html.amoled .chart-reset-zoom-btn {
+    background: rgba(0, 0, 0, 0.9);
+    border-color: rgba(96, 165, 250, 0.35);
+}
+
 @media (max-width: 639px) {
     .chart-range-btn {
         height: 1.6rem;
@@ -2371,11 +2630,35 @@ html.amoled .chart-range-pop {
     .chart-range-group-label {
         flex-basis: auto;
     }
+
+    .chart-expand-btn {
+        width: 1.6rem;
+        height: 1.6rem;
+    }
+
+    .chart-expanded-overlay {
+        padding: 2.5rem 0.5rem 0.5rem 0.5rem;
+    }
+
+    .chart-expand-close-btn {
+        top: 0.4rem;
+        right: 0.5rem;
+        width: 1.85rem;
+        height: 1.85rem;
+    }
 }
 
 /* ==========================================================================
    IP Copy Field & Touchscreen Styles
    ========================================================================== */
+.node-name-editor + .node-name-display {
+    min-width: 7rem;
+}
+
+.node-name-editor:not(.hidden) + .node-name-display {
+    visibility: hidden;
+}
+
 .ip-copy-container {
     display: inline-flex;
     align-items: center;

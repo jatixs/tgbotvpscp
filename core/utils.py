@@ -820,7 +820,7 @@ async def initial_restart_check(bot: Bot):
         try:
             with open(RESTART_FLAG_FILE, "r") as f:
                 content = f.read().strip()
-            if ":" in content:
+            if ":" in content and content != "web:admin":
                 cid, mid = content.split(":", 1)
                 lang = get_user_lang(int(cid))
                 await bot.edit_message_text(

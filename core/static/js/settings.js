@@ -30,10 +30,11 @@ window.initSettings = function () {
     }
 
     const btnCheckUpdate = document.getElementById('btn-check-update');
-    const btnDoUpdate = document.getElementById('btn-do-update');
+    let btnDoUpdate = document.getElementById('btn-do-update');
     const updateStatusArea = document.getElementById('update-status-area');
     const updateProgress = document.getElementById('update-progress');
     let targetBranch = null;
+    let nodeUpdatePlan = null;
 
     if (btnCheckUpdate) {
         const newBtn = btnCheckUpdate.cloneNode(true);
@@ -45,6 +46,8 @@ window.initSettings = function () {
             const checkingText = (typeof I18N !== 'undefined' && I18N.web_update_checking) ? I18N.web_update_checking : "Checking...";
             updateStatusArea.innerHTML = DOMPurify.sanitize(`${spinner} <span class="text-gray-500">${checkingText}</span>`);
             if (btnDoUpdate) btnDoUpdate.classList.add('d-none');
+            targetBranch = null;
+            nodeUpdatePlan = null;
 
             try {
                 const data = await sseRequest('/api/update/check', 'update_check');
@@ -55,10 +58,17 @@ window.initSettings = function () {
                     const updateAvailTitle = (typeof I18N !== 'undefined' && I18N.web_update_available_title) ? I18N.web_update_available_title : "Update Available!";
                     updateStatusArea.innerHTML = DOMPurify.sanitize(`<div><div class="font-bold text-green-600 dark:text-green-400">${updateAvailTitle}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`);
                     targetBranch = data.target_branch;
+                    nodeUpdatePlan = data.node_plan;
                     if (btnDoUpdate) btnDoUpdate.classList.remove('d-none');
                 } else {
                     const uptodateText = (I18N.web_update_uptodate || "Latest version installed ({version})").replace('{version}', data.local_version);
                     updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-gray-500 dark:text-gray-400 text-sm"><i class="fas fa-check-circle text-green-500 mr-1"></i> ${uptodateText}</span>`);
+                }
+                for (const node of data.node_updates || []) {
+                    const row = document.createElement('div');
+                    row.className = 'text-xs text-gray-500 dark:text-gray-400 mt-1';
+                    row.textContent = `${node.name} · ${I18N[`node_client_update_${node.status}`] || node.status}`;
+                    updateStatusArea.appendChild(row);
                 }
             } catch (error) {
                 const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
@@ -72,14 +82,32 @@ window.initSettings = function () {
     if (btnDoUpdate) {
         const newBtnDo = btnDoUpdate.cloneNode(true);
         btnDoUpdate.parentNode.replaceChild(newBtnDo, btnDoUpdate);
+        btnDoUpdate = newBtnDo;
 
         newBtnDo.addEventListener('click', async function () {
-            if (!await window.showModalConfirm(I18N.web_update_started || "Are you sure you want to update the bot? The server will restart.", I18N.modal_title_confirm)) return;
-
+            if (!targetBranch || newBtnDo.disabled) return;
             const currentCheckBtn = document.getElementById('btn-check-update');
             if (currentCheckBtn) currentCheckBtn.disabled = true;
-
             newBtnDo.disabled = true;
+            const skipped = nodeUpdatePlan?.skipped
+                ? '\n\n' + I18N.node_client_update_skipped.replace('{count}', nodeUpdatePlan.skipped)
+                : '';
+            if (!await window.showModalConfirm(I18N.web_update_confirm + skipped, I18N.modal_title_confirm)) {
+                if (currentCheckBtn) currentCheckBtn.disabled = false;
+                newBtnDo.disabled = false;
+                return;
+            }
+
+            const requestBody = { branch: targetBranch };
+            if (nodeUpdatePlan?.nodes?.length) {
+                const names = nodeUpdatePlan.nodes.map(node => `• #${node.id} ${node.name}`).join('\n');
+                const message = I18N.node_client_update_confirm.replace('{nodes}', () => names)
+                    + '\n\n' + I18N.web_node_client_update_cancel;
+                if (await window.showModalConfirm(message, I18N.modal_title_confirm)) {
+                    requestBody.node_confirmation = nodeUpdatePlan.token;
+                }
+            }
+
             if (updateProgress) updateProgress.classList.remove('d-none');
 
             const updatingText = (typeof I18N !== 'undefined' && I18N.web_update_started) ? I18N.web_update_started : "Updating...";
@@ -91,14 +119,16 @@ window.initSettings = function () {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        branch: targetBranch
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 const data = await response.json();
-                if (data.error) throw new Error(data.error);
+                if (!response.ok || data.error) throw new Error(data.error || response.statusText);
 
-                const alertMsg = (typeof I18N !== 'undefined' && I18N.web_update_started_alert) ? I18N.web_update_started_alert : "Update started! Page will reload in 15 seconds.";
+                let alertMsg = I18N.web_update_started_alert || "Update started! Page will reload in 15 seconds.";
+                if (data.nodes_confirmed) {
+                    alertMsg += '\n\n' + I18N.node_client_update_queued
+                        .replace('{count}', data.nodes_queued).replace('{total}', data.nodes_confirmed);
+                }
                 const alertTitle = (typeof I18N !== 'undefined' && I18N.modal_title_info) ? I18N.modal_title_info : "Info";
 
                 await window.showModalAlert(alertMsg, alertTitle);
@@ -342,9 +372,9 @@ function initSystemSettingsTracking() {
                 // Update active state
                 buttons.forEach(b => {
                     if (b.dataset.mode === mode) {
-                        b.className = 'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white';
+                        b.className = 'px-2 py-1.5 text-xs font-medium rounded-lg transition-colors bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white';
                     } else {
-                        b.className = 'px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200';
+                        b.className = 'px-2 py-1.5 text-xs font-medium rounded-lg transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200';
                     }
                 });
                 
@@ -679,9 +709,9 @@ function renderUsers() {
             const badgeClass = isAdmin ? 'border-green-500/30 bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'border-blue-500/30 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
             return `
             <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition">
+                <td class="px-2 sm:px-4 py-3 font-mono text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${u.id}</td>
                 <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white break-all max-w-[100px] sm:max-w-none">${escapeHtml(u.name)}</td>
                 <td class="px-2 sm:px-4 py-3"><span class="px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] uppercase font-bold border ${badgeClass}">${escapeHtml(u.role)}</span></td>
-                <td class="px-2 sm:px-4 py-3 font-mono text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${u.id}</td>
                 <td class="px-2 sm:px-4 py-3 text-right">
                     <button data-action="delete-user" data-id="${u.id}" data-name="${escapeHtml(u.name)}" class="text-red-500 hover:text-red-700 dark:hover:text-red-300 transition p-1" title="Delete">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -785,21 +815,26 @@ function renderNodes() {
         <tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition group">
             <td class="px-2 sm:px-4 py-3 font-mono text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">${nodeId}</td>
             <td class="px-2 sm:px-4 py-3 font-medium text-sm text-gray-900 dark:text-white w-full sm:w-auto">
-                <div id="disp_name_${nodeId}" class="flex items-center gap-2 max-w-[120px] sm:max-w-none">
-                    <span class="truncate block" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
+                <div class="relative">
                     ${isMainAdmin ? `
-                    <button data-action="start-node-rename" data-token="${nodeId}" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                    </button>
+                    <div id="edit_name_${nodeId}" class="node-name-editor hidden absolute inset-0 flex items-center gap-1">
+                        <input type="text" id="input_name_${nodeId}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 h-full min-w-0 w-24 sm:w-48 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500" data-action="node-rename-keydown" data-token="${nodeId}">
+                        <div class="flex items-center flex-shrink-0">
+                            <button data-action="save-node-rename" data-token="${nodeId}" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
+                            <button data-action="cancel-node-rename" data-token="${nodeId}" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                        </div>
+                    </div>
                     ` : ''}
-                </div>
-                <div id="edit_name_${nodeId}" class="hidden flex items-center gap-1">
-                    <input type="text" id="input_name_${nodeId}" value="${escapeHtml(n.name)}" class="bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-24 sm:w-48 transition-all" data-action="node-rename-keydown" data-token="${nodeId}">
-                    <div class="flex items-center flex-shrink-0">
-                        <button data-action="save-node-rename" data-token="${nodeId}" class="text-green-500 hover:text-green-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></button>
-                        <button data-action="cancel-node-rename" data-token="${nodeId}" class="text-red-500 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    <div class="node-name-display flex items-center gap-2 max-w-[120px] sm:max-w-none">
+                        <span class="truncate block" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span>
+                        ${isMainAdmin ? `
+                        <button data-action="start-node-rename" data-token="${nodeId}" class="text-gray-400 hover:text-blue-500 p-1 flex-shrink-0 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        </button>
+                        ` : ''}
                     </div>
                 </div>
+            </td>
             <td class="px-2 sm:px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                 <div class="ip-copy-container inline-flex items-center gap-1.5 group/ip" data-copy-ip="${escapeHtml(decryptedIp || '')}">
                     <span class="ip-copy-text font-mono select-all" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">${escapeHtml(decryptedIp) || 'Unknown'}</span>
@@ -827,7 +862,6 @@ function renderNodes() {
     }
 }
 window.startNodeRename = function (token) {
-    document.getElementById(`disp_name_${token}`).classList.add('hidden');
     document.getElementById(`edit_name_${token}`).classList.remove('hidden');
     const input = document.getElementById(`input_name_${token}`);
 
@@ -839,7 +873,6 @@ window.startNodeRename = function (token) {
 };
 
 window.cancelNodeRename = function (token) {
-    document.getElementById(`disp_name_${token}`).classList.remove('hidden');
     document.getElementById(`edit_name_${token}`).classList.add('hidden');
 };
 
@@ -2532,7 +2565,12 @@ window.savePingTargetModal = function() {
             hiddenInput.value = val;
             triggerAutoSave('intervals');
         }
-        if (btnLabel) btnLabel.textContent = text;
+        if (btnLabel) {
+            btnLabel.textContent = val === 'internal' && typeof I18N !== 'undefined'
+                ? I18N.web_ping_target_internal_short || text
+                : text;
+            btnLabel.title = text;
+        }
         if (window.showToast) window.showToast(text);
     }
     window.closePingTargetModal();

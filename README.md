@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.2-blue?style=for-the-badge" alt="Version 1.27.2"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-97-purple?style=for-the-badge" alt="Build 97"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.3-blue?style=for-the-badge" alt="Version 1.27.3"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-98-purple?style=for-the-badge" alt="Build 98"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%233670A0.svg?style=for-the-badge&logo=python&logoColor=ffdd54" alt="Python"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/stargazers"><img src="https://img.shields.io/github/stars/jatixs/tgbotvpscp?style=for-the-badge&logo=github&color=gold" alt="GitHub Stars"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/releases"><img src="https://img.shields.io/github/downloads/jatixs/tgbotvpscp/total?style=for-the-badge&logo=github&color=blue" alt="Downloads"/></a>
@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <b>v1.27.2</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
+  <b>v1.27.3</b> — профессиональная экосистема для мониторинга и управления серверной инфраструктурой<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)
 </p>
 
@@ -226,6 +226,8 @@ Managed TLS принимает домен или глобальный публи
 3. Укажите HTTPS origin master, например `https://panel.example.com` или `https://203.0.113.10`, и node token.
 
 Для существующих агентов сначала обновите master, затем обновите ноды. Агент проверяет same-host HTTPS endpoint и сохраняет новый URL; временный HTTP bridge принимает только discovery/bootstrap и HMAC-защищенный heartbeat. Проверьте прогресс командой `sudo tgcp-bot tls status`; после подтверждения всех нод закройте bridge: `sudo tgcp-bot tls finalize`.
+
+**Обновление клиентов нод.** При обновлении агента из Telegram, WebUI или интерактивного установщика главный администратор может подтвердить обновление перечисленных нод. В WebUI результаты отображаются при повторной проверке обновлений. Старые клиенты нужно один раз обновить установщиком на каждой ноде, чтобы включить удалённое обновление.
 
 ### 🔑 Доступ к WebUI
 
@@ -664,7 +666,7 @@ python bot.py
 ---
 
 <p align="center">
-  <b>Версия:</b> 1.27.2 (Build 97)<br>
+  <b>Версия:</b> 1.27.3 (Build 98)<br>
   <b>Лицензия:</b> GPL-3.0 license<br>
   <b>Статус:</b> Релиз<br>
   <br>

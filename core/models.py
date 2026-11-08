@@ -61,6 +61,17 @@ class Node(models.Model):
         table = "nodes"
 
 
+class NodeClientUpdate(models.Model):
+    id = fields.IntField(pk=True)
+    node = fields.ForeignKeyField("models.Node", on_delete=fields.CASCADE)
+    rollout = fields.CharField(max_length=32, index=True)
+    requested_by = fields.BigIntField(index=True)
+    branch = fields.CharField(max_length=255)
+    commit = fields.CharField(max_length=40)
+    status = fields.CharField(max_length=16, default="pending")
+    expires_at = fields.FloatField()
+
+
 class MetricSample(models.Model):
     """
     Resource history sample for an agent or node.
@@ -80,6 +91,36 @@ class MetricSample(models.Model):
     class Meta:
         table = "metric_samples"
         indexes = (("source", "res", "t"),)
+
+
+class NetworkSample(models.Model):
+    """Measured interface rates and per-interval RX/TX peaks, in bytes per second."""
+
+    id = fields.BigIntField(pk=True)
+    source = fields.CharField(max_length=32)
+    interface = fields.CharField(max_length=128)  # Empty string denotes total traffic.
+    res = fields.SmallIntField()
+    t = fields.IntField()
+    rx = fields.FloatField()
+    tx = fields.FloatField()
+
+    class Meta:
+        table = "network_samples"
+        indexes = (("source", "res", "t", "interface"), ("res", "t"))
+
+
+class PingSample(models.Model):
+    """Host latency in milliseconds, using the network history's retention tiers."""
+
+    id = fields.BigIntField(pk=True)
+    source = fields.CharField(max_length=32)
+    res = fields.SmallIntField(default=0)
+    t = fields.IntField()
+    ping = fields.FloatField(null=True)
+
+    class Meta:
+        table = "ping_samples"
+        indexes = (("source", "res", "t"), ("res", "t"))
 
 
 class WebPushSubscription(models.Model):

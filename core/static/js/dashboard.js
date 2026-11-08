@@ -50,6 +50,8 @@ let servicesSSESource = null;
 
 let agentChart = null;
 let agentRangeCtl = null;
+let agentTrafficSnapshot = null;
+let agentInterfaceSpeeds = {};
 let nodeResRangeCtl = null;
 let nodeNetRangeCtl = null;
 let quickCpuChart = null;
@@ -153,10 +155,16 @@ function initAgentChartRange() {
         mount: '[data-chart-range="agentChart"]',
         canvasId: 'agentChart',
         getSource: () => ({ source: 'agent' }),
-        getValues: point => [point.rx, point.tx],
+        network: true,
+        onInterfaceChange: () => {
+            window._agentPeakSpeed = 0;
+            renderAgentTraffic();
+        },
+        getValues: point => [point.rx, point.tx, point.ping],
         render: renderAgentChart
     });
     agentRangeCtl.start();
+    renderAgentTraffic();
 }
 
 function startNodeChartRanges() {
@@ -177,7 +185,8 @@ function startNodeChartRanges() {
         mount: '[data-chart-range="nodeNetChart"]',
         canvasId: 'nodeNetChart',
         getSource,
-        getValues: point => [point.rx, point.tx],
+        network: true,
+        getValues: point => [point.rx, point.tx, point.ping],
         render: renderNodeNetChart
     }).start();
 }
@@ -776,6 +785,75 @@ function applyAgentWarning(type, val, threshold, def) {
     }
 }
 
+function renderAgentTraffic() {
+    const data = agentTrafficSnapshot;
+    if (!data?.stats) return;
+    let rxSpeed = 0,
+        txSpeed = 0;
+    if (data.history && data.history.length >= 2) {
+        const last = data.history[data.history.length - 1];
+        const prev = data.history[data.history.length - 2];
+        const dt = last.t - prev.t;
+        if (dt > 0) {
+            rxSpeed = Math.max(0, (last.rx - prev.rx) * 8 / dt / 1024);
+            txSpeed = Math.max(0, (last.tx - prev.tx) * 8 / dt / 1024);
+        }
+    }
+
+    const name = agentRangeCtl?.getInterface() || '';
+    const selected = name ? data.stats.interfaces?.[name] : null;
+    const rxTotal = name ? selected?.bytes_recv : data.stats.net_recv;
+    const txTotal = name ? selected?.bytes_sent : data.stats.net_sent;
+    if (name) {
+        rxSpeed = agentInterfaceSpeeds[name]?.rx;
+        txSpeed = agentInterfaceSpeeds[name]?.tx;
+    }
+    const badge = document.getElementById('trafficInterfaceName');
+    if (badge) badge.textContent = name || I18N.web_chart_all_interfaces || 'All interfaces';
+    const interfaceStats = name ? (selected ? { [name]: selected } : {}) : data.stats.interfaces;
+    const speedStyle = "text-xs text-gray-400 font-normal ml-2 pl-2 border-l border-gray-300 dark:border-white/20";
+    const rxEl = document.getElementById('stat_net_recv');
+    if (rxEl) rxEl.innerHTML = DOMPurify.sanitize(`${(rxTotal == null ? '—' : formatBytes(rxTotal))} <span class="${speedStyle}">${(rxSpeed == null ? '—' : formatSpeed(rxSpeed))}</span>`);
+
+    const txEl = document.getElementById('stat_net_sent');
+    if (txEl) txEl.innerHTML = DOMPurify.sanitize(`${(txTotal == null ? '—' : formatBytes(txTotal))} <span class="${speedStyle}">${(txSpeed == null ? '—' : formatSpeed(txSpeed))}</span>`);
+
+    // Update S-size agent stats bars (TX/RX speed + progress)
+    const barTxText = document.getElementById('agentStatsBarTxText');
+    if (barTxText) barTxText.textContent = (txSpeed == null ? '—' : formatSpeed(txSpeed));
+    const barRxText = document.getElementById('agentStatsBarRxText');
+    if (barRxText) barRxText.textContent = (rxSpeed == null ? '—' : formatSpeed(rxSpeed));
+
+    const peakSpeed = Math.max(rxSpeed || 0, txSpeed || 0, window._agentPeakSpeed || 0, 1);
+    window._agentPeakSpeed = peakSpeed;
+    const barTxProg = document.getElementById('agentStatsBarTxProg');
+    if (barTxProg) barTxProg.style.width = Math.min(100, ((txSpeed || 0) / peakSpeed) * 100).toFixed(1) + '%';
+    const barRxProg = document.getElementById('agentStatsBarRxProg');
+    if (barRxProg) barRxProg.style.width = Math.min(100, ((rxSpeed || 0) / peakSpeed) * 100).toFixed(1) + '%';
+
+    if (interfaceStats) {
+        const hintRx = document.getElementById('hint-rx');
+        if (hintRx) {
+            const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
+            hintRx.innerHTML = DOMPurify.sanitize(formatInterfaceList(interfaceStats, 'rx', title, "text-green-500"));
+        }
+        const hintTx = document.getElementById('hint-tx');
+        if (hintTx) {
+            const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
+            hintTx.innerHTML = DOMPurify.sanitize(formatInterfaceList(interfaceStats, 'tx', title, "text-blue-500"));
+        }
+    }
+
+    const totalNet = (rxTotal || 0) + (txTotal || 0);
+    const rxPercent = totalNet > 0 ? rxTotal / totalNet * 100 : 0;
+    const txPercent = totalNet > 0 ? txTotal / totalNet * 100 : 0;
+    const barRx = document.getElementById('trafficBarRx');
+    const barTx = document.getElementById('trafficBarTx');
+    if (barRx) barRx.style.width = rxPercent + '%';
+    if (barTx) barTx.style.width = txPercent + '%';
+
+}
+
 function updateAgentStatsUI(data) {
     try {
         const freeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
@@ -860,62 +938,22 @@ function updateAgentStatsUI(data) {
                 }
             }
 
-            let rxSpeed = 0,
-                txSpeed = 0;
-            if (data.history && data.history.length >= 2) {
-                const last = data.history[data.history.length - 1];
-                const prev = data.history[data.history.length - 2];
-                const dt = last.t - prev.t;
-                if (dt > 0) {
-                    rxSpeed = Math.max(0, (last.rx - prev.rx) * 8 / dt / 1024);
-                    txSpeed = Math.max(0, (last.tx - prev.tx) * 8 / dt / 1024);
+            const previous = agentTrafficSnapshot;
+            const dt = data.stats.network_sample_time - (previous?.stats.network_sample_time || 0);
+            agentInterfaceSpeeds = {};
+            if (previous && dt > 0 && dt <= 120) {
+                for (const [name, counters] of Object.entries(data.stats.interfaces || {})) {
+                    const old = previous.stats.interfaces?.[name];
+                    if (old && counters.bytes_recv >= old.bytes_recv && counters.bytes_sent >= old.bytes_sent) {
+                        agentInterfaceSpeeds[name] = {
+                            rx: (counters.bytes_recv - old.bytes_recv) * 8 / dt / 1024,
+                            tx: (counters.bytes_sent - old.bytes_sent) * 8 / dt / 1024
+                        };
+                    }
                 }
             }
-
-            const speedStyle = "text-xs text-gray-400 font-normal ml-2 pl-2 border-l border-gray-300 dark:border-white/20";
-            const rxEl = document.getElementById('stat_net_recv');
-            if (rxEl) rxEl.innerHTML = DOMPurify.sanitize(`${formatBytes(data.stats.net_recv)} <span class="${speedStyle}">${formatSpeed(rxSpeed)}</span>`);
-
-            const txEl = document.getElementById('stat_net_sent');
-            if (txEl) txEl.innerHTML = DOMPurify.sanitize(`${formatBytes(data.stats.net_sent)} <span class="${speedStyle}">${formatSpeed(txSpeed)}</span>`);
-
-            // Update S-size agent stats bars (TX/RX speed + progress)
-            const barTxText = document.getElementById('agentStatsBarTxText');
-            if (barTxText) barTxText.textContent = formatSpeed(txSpeed);
-            const barRxText = document.getElementById('agentStatsBarRxText');
-            if (barRxText) barRxText.textContent = formatSpeed(rxSpeed);
-
-            const peakSpeed = Math.max(rxSpeed, txSpeed, window._agentPeakSpeed || 0, 1);
-            window._agentPeakSpeed = peakSpeed;
-            const barTxProg = document.getElementById('agentStatsBarTxProg');
-            if (barTxProg) barTxProg.style.width = Math.min(100, (txSpeed / peakSpeed) * 100).toFixed(1) + '%';
-            const barRxProg = document.getElementById('agentStatsBarRxProg');
-            if (barRxProg) barRxProg.style.width = Math.min(100, (rxSpeed / peakSpeed) * 100).toFixed(1) + '%';
-
-            if (data.stats.interfaces) {
-                const hintRx = document.getElementById('hint-rx');
-                if (hintRx) {
-                    const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
-                    hintRx.innerHTML = DOMPurify.sanitize(formatInterfaceList(data.stats.interfaces, 'rx', title, "text-green-500"));
-                }
-                const hintTx = document.getElementById('hint-tx');
-                if (hintTx) {
-                    const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
-                    hintTx.innerHTML = DOMPurify.sanitize(formatInterfaceList(data.stats.interfaces, 'tx', title, "text-blue-500"));
-                }
-            }
-
-            const rxTotal = data.stats.net_recv || 0;
-            const txTotal = data.stats.net_sent || 0;
-            const totalNet = rxTotal + txTotal;
-            if (totalNet > 0) {
-                const rxPercent = (rxTotal / totalNet) * 100;
-                const txPercent = 100 - rxPercent;
-                const barRx = document.getElementById('trafficBarRx');
-                const barTx = document.getElementById('trafficBarTx');
-                if (barRx) barRx.style.width = rxPercent + '%';
-                if (barTx) barTx.style.width = txPercent + '%';
-            }
+            agentTrafficSnapshot = data;
+            renderAgentTraffic();
 
             const uptimeEl = document.getElementById('stat_uptime');
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
@@ -1097,7 +1135,7 @@ function renderAgentChart(series, animate = true) {
     const labels = series.labels;
     const netRx = series.rx;
     const netTx = series.tx;
-    if (series.points.length < 2) {
+    if (!series.labels.length) {
         if (agentChart) {
             agentChart.data.labels = [];
             agentChart.data.datasets.forEach(ds => { ds.data = []; });
@@ -1121,6 +1159,7 @@ function renderAgentChart(series, animate = true) {
             intersect: false
         },
         scales: {
+            ping: window.createPingScale(tickColor),
             x: {
                 min: series.minIndex,
                 max: series.maxIndex,
@@ -1173,40 +1212,45 @@ function renderAgentChart(series, animate = true) {
                 mode: 'index',
                 intersect: false,
                 callbacks: {
-                    label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw)
+                    label: (c) => c.dataset.label + ': ' + (c.dataset.yAxisID === 'ping' ? c.raw + ' ms' : formatSpeed(c.raw))
                 }
             }
         },
         elements: {
             line: {
-                tension: 0.4
+                tension: 0.35
             },
             point: {
-                radius: 0,
+                radius: window.networkHistoryPointRadius,
                 hitRadius: 20,
                 hoverRadius: 4
             }
         }
     };
-    const opts = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(optsBase) : optsBase;
-
     if (agentChart) {
         const applyAgentChartData = () => {
             agentChart.data.labels = labels;
             agentChart.data.datasets[0].data = netRx;
             agentChart.data.datasets[1].data = netTx;
+            agentChart.data.datasets[2].data = series.ping;
             agentChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
-            agentChart.options = opts;
+            Object.assign(agentChart.options.scales.x.ticks, optsBase.scales.x.ticks);
+            agentChart.options.scales.y.grid.color = gridColor;
+            agentChart.options.scales.y.ticks.color = tickColor;
+            agentChart.options.scales.ping.ticks.color = tickColor;
+            agentChart.options.scales.ping.title.color = tickColor;
+            agentChart.options.plugins.legend.labels.color = tickColor;
         };
 
         if (window.updateChartWithLiveData) {
             window.updateChartWithLiveData(agentChart, applyAgentChartData, 'agentChart', animate);
         } else {
             applyAgentChartData();
-            agentChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
+            agentChart.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
             if (window.attachChartInteractions) window.attachChartInteractions(agentChart, 'agentChart');
         }
     } else {
+        const opts = window.buildInteractiveChartOptions ? window.buildInteractiveChartOptions(optsBase) : optsBase;
         const rxGrad = getGradient(ctx, 'rgb(34, 197, 94)');
         const txGrad = getGradient(ctx, 'rgb(59, 130, 246)');
 
@@ -1216,19 +1260,19 @@ function renderAgentChart(series, animate = true) {
                 labels,
                 datasets: [{
                     label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ',
-                    data: netRx,
+                    data: netRx, yAxisID: 'y',
                     borderColor: '#22c55e',
                     borderWidth: 2,
                     backgroundColor: rxGrad,
                     fill: true
                 }, {
                     label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ',
-                    data: netTx,
+                    data: netTx, yAxisID: 'y',
                     borderColor: '#3b82f6',
                     borderWidth: 2,
                     backgroundColor: txGrad,
                     fill: true
-                }]
+                }, window.createPingDataset(series.ping)]
             },
             options: opts
         });
@@ -1331,6 +1375,34 @@ function removeLogLoading() {
     }, 300);
 }
 
+function updateLogEmptyState() {
+    const container = document.getElementById('logsContainer');
+    if (!container) return;
+    const level = ['INFO', 'WARN', 'ERROR'].find(value => container.classList.contains('filter-' + value));
+    const selector = level ? '.log-line[data-level="' + level + '"]' : '.log-line';
+    const emptyState = document.getElementById('empty-logs-state');
+    if (container.querySelector(selector)) {
+        if (emptyState) emptyState.remove();
+        return;
+    }
+    if (emptyState) return;
+
+    const emptyTitle = (typeof I18N !== 'undefined' && I18N.web_logs_empty_title) ? I18N.web_logs_empty_title : "Logs are empty";
+    const emptyDesc = (typeof I18N !== 'undefined' && I18N.web_logs_empty_desc) ? I18N.web_logs_empty_desc : "No new entries found";
+
+    const emptyHtml = `
+    <div id="empty-logs-state" class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400 dark:text-gray-600 animate-fade-in-up select-none opacity-80">
+        <div class="bg-gray-100 dark:bg-white/5 p-4 rounded-full mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+        </div>
+        <span class="text-sm font-bold text-gray-500 dark:text-gray-400">${escapeHtml(emptyTitle)}</span>
+        <span class="text-[10px] uppercase tracking-wider opacity-60 mt-1">${escapeHtml(emptyDesc)}</span>
+    </div>`;
+    container.insertAdjacentHTML('beforeend', emptyHtml);
+}
+
 window.selectLogFilter = function (level) {
     const container = document.getElementById('logsContainer');
     const label = document.getElementById('logFilterSelectedText');
@@ -1342,6 +1414,8 @@ window.selectLogFilter = function (level) {
     }
     if (label) label.textContent = level;
     if (menu) menu.classList.add('hidden');
+    const loader = document.getElementById('log-loader');
+    if (!loader || loader.classList.contains('opacity-0')) updateLogEmptyState();
 };
 
 const SERVICE_LOGS_KEY = 'dashboardServiceLogs';
@@ -1877,41 +1951,8 @@ window.switchLogType = function (
 
         try {
             const data = JSON.parse(e.data);
-            const logs = data.logs || [];
+            const logs = (data.logs || []).filter(line => typeof line === 'string' && line.trim().length > 0);
             const container = document.getElementById('logsContainer');
-
-            // --- EMPTY LOGS HANDLING ---
-            if (logs.length === 0) {
-                if (document.getElementById('log-loader')) {
-                    container.classList.remove('overflow-hidden');
-                    container.style.minHeight = '';
-                    removeLogLoading();
-
-                    if (!document.getElementById('empty-logs-state')) {
-                        const emptyTitle = (typeof I18N !== 'undefined' && I18N.web_logs_empty_title) ? I18N.web_logs_empty_title : "Logs are empty";
-                        const emptyDesc = (typeof I18N !== 'undefined' && I18N.web_logs_empty_desc) ? I18N.web_logs_empty_desc : "No new entries found";
-
-                        const emptyHtml = `
-                        <div id="empty-logs-state" class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400 dark:text-gray-600 animate-fade-in-up select-none opacity-80">
-                            <div class="bg-gray-100 dark:bg-white/5 p-4 rounded-full mb-3">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                                </svg>
-                            </div>
-                            <span class="text-sm font-bold text-gray-500 dark:text-gray-400">${escapeHtml(emptyTitle)}</span>
-                            <span class="text-[10px] uppercase tracking-wider opacity-60 mt-1">${escapeHtml(emptyDesc)}</span>
-                        </div>`;
-                        container.insertAdjacentHTML('beforeend', emptyHtml);
-                    }
-                }
-                return;
-            }
-
-            const emptyState = document.getElementById('empty-logs-state');
-            if (emptyState) {
-                emptyState.remove();
-            }
-            // ---------------------------
 
             const html = logs.map(line => {
                 let cls = "text-gray-500";
@@ -1940,6 +1981,7 @@ window.switchLogType = function (
                 }
             }
 
+            updateLogEmptyState();
             container.classList.remove('overflow-hidden');
             container.style.minHeight = '';
             if (isInitialLoad) {
@@ -2264,6 +2306,7 @@ function updateNodeDetailsUI(data) {
 }
 
 function closeNodeModal() {
+    if (typeof window.collapseChartModal === 'function') window.collapseChartModal();
     const modal = document.getElementById('nodeModal');
     if (modal) {
         animateModalClose(modal);
@@ -2479,6 +2522,8 @@ function renderNodeResChart(series, animate = true) {
             }
         });
         chartRes.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
+        window.__chartRegistry = window.__chartRegistry || {};
+        window.__chartRegistry['nodeResChart'] = chartRes;
         if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
     }
 }
@@ -2486,7 +2531,7 @@ function renderNodeResChart(series, animate = true) {
 function renderNodeNetChart(series, animate = true) {
     const canvas = document.getElementById('nodeNetChart');
     if (!canvas) return;
-    if (series.points.length < 2) {
+    if (!series.labels.length) {
         clearChartData(chartNet, animate);
         return;
     }
@@ -2501,6 +2546,7 @@ function renderNodeNetChart(series, animate = true) {
             chartNet.data.labels = labels;
             chartNet.data.datasets[0].data = netRx;
             chartNet.data.datasets[1].data = netTx;
+            chartNet.data.datasets[2].data = series.ping;
             chartNet.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
         };
 
@@ -2508,16 +2554,22 @@ function renderNodeNetChart(series, animate = true) {
             window.updateChartWithLiveData(chartNet, applyNetChartData, 'nodeNetChart', animate);
         } else {
             applyNetChartData();
-            chartNet.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
+            chartNet.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
             if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
         }
     } else {
         const netOpts = {
             ...commonOptions,
+            elements: {
+                line: { tension: 0.35 },
+                point: { ...commonOptions.elements.point, radius: window.networkHistoryPointRadius }
+            },
             scales: {
                 ...commonOptions.scales,
+                ping: window.createPingScale(commonOptions.scales.y.ticks?.color),
                 y: {
                     ...commonOptions.scales.y,
+                    position: 'right',
                     ticks: {
                         ...commonOptions.scales.y.ticks,
                         callback: (v) => formatSpeed(v)
@@ -2530,36 +2582,38 @@ function renderNodeNetChart(series, animate = true) {
                     mode: 'index',
                     intersect: false,
                     callbacks: {
-                        label: (c) => c.dataset.label + ': ' + formatSpeed(c.raw)
+                        label: (c) => c.dataset.label + ': ' + (c.dataset.yAxisID === 'ping' ? c.raw + ' ms' : formatSpeed(c.raw))
                     }
                 }
             }
         };
         const rxGrad = getGradient(ctxNet, 'rgb(34, 197, 94)');
-        const txGrad = getGradient(ctxNet, 'rgb(239, 68, 68)');
+        const txGrad = getGradient(ctxNet, 'rgb(59, 130, 246)');
         chartNet = new Chart(ctxNet, {
             type: 'line',
             data: {
                 labels,
                 datasets: [{
                     label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ',
-                    data: netRx,
+                    data: netRx, yAxisID: 'y',
                     borderColor: '#22c55e',
                     borderWidth: 2,
                     backgroundColor: rxGrad,
                     fill: true
                 }, {
                     label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ',
-                    data: netTx,
-                    borderColor: '#ef4444',
+                    data: netTx, yAxisID: 'y',
+                    borderColor: '#3b82f6',
                     borderWidth: 2,
                     backgroundColor: txGrad,
                     fill: true
-                }]
+                }, window.createPingDataset(series.ping)]
             },
             options: netOpts
         });
         chartNet.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
+        window.__chartRegistry = window.__chartRegistry || {};
+        window.__chartRegistry['nodeNetChart'] = chartNet;
         if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
     }
 }
@@ -4089,9 +4143,9 @@ function updateHiddenBlocksPanel() {
                 'quick_stats_disk': 'SSD',
                 'agent_stats': (typeof I18N !== 'undefined' && I18N.web_agent_stats_title) ? I18N.web_agent_stats_title : 'График Агента',
                 'traffic_stats': (typeof I18N !== 'undefined' && I18N.web_traffic_total) ? I18N.web_traffic_total : 'Трафик',
-                'services_manager': (typeof I18N !== 'undefined' && I18N.web_services_title) ? I18N.web_services_title : 'Менеджер Сервисов',
+                'services_manager': (typeof I18N !== 'undefined' && I18N.web_services_title) ? I18N.web_services_title : 'Менеджер сервисов',
                 'nodes_manager': (typeof I18N !== 'undefined' && I18N.web_node_mgmt_title) ? I18N.web_node_mgmt_title : 'Менеджер Нод',
-                'system_logs': (typeof I18N !== 'undefined' && I18N.web_system_logs_title) ? I18N.web_system_logs_title : 'Системные Логи'
+                'system_logs': (typeof I18N !== 'undefined' && I18N.web_system_logs_title) ? I18N.web_system_logs_title : 'Системные логи'
             };
             const blockName = namesMap[blockId] || blockId;
             

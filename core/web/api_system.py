@@ -15,7 +15,7 @@ from typing import Any
 from aiohttp import web
 
 from .. import config as current_config
-from .. import nodes_db
+from .. import node_updates, nodes_db
 
 # Lazy imports for modules
 from .. import shared_state
@@ -369,11 +369,17 @@ async def api_check_update(request: web.Request) -> web.StreamResponse:
         else:
             return response
 
+        user_id = int(user["id"])
+        plan = None
+        if update_available and user_id == ADMIN_USER_ID:
+            plan = await node_updates.prepare(user_id, update_module.validate_branch_name(target_branch))
         payload = json.dumps({
             "local_version": local_ver,
             "remote_version": remote_ver,
             "target_branch": target_branch,
             "update_available": update_available,
+            "node_plan": plan,
+            "node_updates": await node_updates.latest_results(user_id) if user_id == ADMIN_USER_ID else [],
         })
         event_str = f"event: update_check\ndata: {payload}\n\n"
         await response.write(event_str.encode("utf-8"))
@@ -397,8 +403,25 @@ async def api_run_update(request: web.Request) -> web.StreamResponse:
             return encrypted_json_response({"error": "No branch specified"}, status=400)
 
         from modules import update as update_module
-        await update_module.execute_bot_update(branch.replace("origin/", ""), restart_source="web:admin")
-        return encrypted_json_response({"status": "Update started, server restarting..."})
+        branch = update_module.validate_branch_name(branch.removeprefix("origin/"))
+        user_id = int(user["id"])
+        node_ids = ()
+        confirmation = data.get("node_confirmation")
+        if confirmation is not None:
+            if user_id != ADMIN_USER_ID:
+                return web.json_response({"error": "Unauthorized"}, status=403)
+            plan = node_updates.consume(confirmation, user_id, branch) if isinstance(confirmation, str) else None
+            if not plan:
+                return web.json_response({"error": _("node_client_update_plan_expired", get_user_lang(user_id))}, status=409)
+            node_ids = plan.nodes
+        queued = await update_module.execute_bot_update(
+            branch, restart_source="web:admin", node_ids=node_ids, user_id=user_id,
+        )
+        return encrypted_json_response({
+            "status": "Update started, server restarting...",
+            "nodes_queued": queued,
+            "nodes_confirmed": len(node_ids),
+        })
     except Exception as exc:
         logging.error("Internal API error: %s", exc)
         return web.json_response({"error": "Internal Server Error"}, status=500)

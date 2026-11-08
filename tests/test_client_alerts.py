@@ -134,14 +134,14 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         text_default = _render_broadcast_confirm_text(10, pin=False, silent=False)
         self.assertIn("Получателей: <b>10</b>", text_default)
         self.assertIn("Закрепить у всех: <b>Нет</b>", text_default)
-        self.assertIn("Доставка: <b>Со звуком</b>", text_default)
+        self.assertIn("Доставка: <b>со звуком</b>", text_default)
         self.assertIn("Кнопка: <i>не задана</i>", text_default)
 
         text_custom = _render_broadcast_confirm_text(
             5, pin=True, silent=True, btn_title="Новости", btn_url="https://t.me/news"
         )
         self.assertIn("Закрепить у всех: <b>Да</b>", text_custom)
-        self.assertIn("Доставка: <b>Без звука</b>", text_custom)
+        self.assertIn("Доставка: <b>без звука</b>", text_custom)
         self.assertIn("Новости", text_custom)
         self.assertIn("https://t.me/news", text_custom)
 
@@ -171,7 +171,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
 
             # Should contain mute_all toggle showing it is ON (muted)
             self.assertIn("cst_toggle_all", callback_datas)
-            self.assertTrue(any("Заглушены" in t or "Muted" in t for t in btn_texts))
+            self.assertTrue(any("заглушены" in t or "Muted" in t for t in btn_texts))
             # When mute_all is True, sub-toggles (broadcasts, nodes) should be hidden
             self.assertNotIn("cst_toggle_broadcasts", callback_datas)
             self.assertFalse(any("Node Alpha" in t for t in btn_texts))
@@ -191,7 +191,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
             callback_datas = [btn.callback_data for row in kb.inline_keyboard for btn in row]
 
             self.assertIn("cst_toggle_all", callback_datas)
-            self.assertTrue(any("Включены" in t or "Active" in t for t in btn_texts))
+            self.assertTrue(any("включены" in t or "Active" in t for t in btn_texts))
             # Sub-toggles should be visible
             self.assertIn("cst_toggle_broadcasts", callback_datas)
             self.assertIn("cst_node_tok1", callback_datas)
@@ -654,7 +654,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
              patch("core.nodes_db.get_all_nodes", AsyncMock(return_value={})):
             kb = await _get_client_settings_keyboard(777)
             texts = [btn.text for row in kb.inline_keyboard for btn in row]
-            self.assertIn("🌐 Язык: 🇷🇺 Русский", texts)
+            self.assertIn("🌐 Язык: 🇷🇺 русский", texts)
 
         fake_subscribers_en = {
             777: {"name": "Test User", "mute_all": False, "mute_broadcasts": False, "muted_nodes": [], "lang": "en"}

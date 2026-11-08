@@ -33,8 +33,10 @@ from network_validation import (
 
 try:
     from .endpoint_migration import validate_https_migration_url
+    from .software_update import ClientUpdater
 except ImportError:
     from endpoint_migration import validate_https_migration_url
+    from software_update import ClientUpdater
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
@@ -442,6 +444,8 @@ SSH_EVENTS = collections.deque(maxlen=100)
 # Commands that take a long time and must run in a background thread
 # so heartbeats are not blocked.
 LONG_RUNNING_COMMANDS = {"speedtest", "update"}
+CLIENT_UPDATER = None
+BACKGROUND_COMMANDS = []
 
 # Agent health tracking
 AGENT_DOWN_SINCE = None
@@ -802,7 +806,12 @@ def _do_icmp_ping(target_ip="8.8.8.8"):
 def get_system_stats():
     global _HEARTBEAT_NET_STATS
     try:
-        net = psutil.net_io_counters()
+        interfaces = {
+            name: (net.bytes_recv, net.bytes_sent)
+            for name, net in psutil.net_io_counters(pernic=True).items()
+        }
+        rx_bytes = sum(rx for rx, _ in interfaces.values())
+        tx_bytes = sum(tx for _, tx in interfaces.values())
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         freq = psutil.cpu_freq()
@@ -819,16 +828,16 @@ def get_system_stats():
             prev_time = _HEARTBEAT_NET_STATS.get('time', 0)
             dt = now - prev_time
             if 1 <= dt <= 120:
-                net_rx_speed = max(0.0, (net.bytes_recv - prev_rx) * 8 / 1024 / dt)
-                net_tx_speed = max(0.0, (net.bytes_sent - prev_tx) * 8 / 1024 / dt)
+                net_rx_speed = max(0.0, (rx_bytes - prev_rx) * 8 / 1024 / dt)
+                net_tx_speed = max(0.0, (tx_bytes - prev_tx) * 8 / 1024 / dt)
             else:
                 # Keep previous speed if interval is abnormal
                 net_rx_speed = _HEARTBEAT_NET_STATS.get('last_rx_speed', 0.0)
                 net_tx_speed = _HEARTBEAT_NET_STATS.get('last_tx_speed', 0.0)
         
         _HEARTBEAT_NET_STATS = {
-            'rx': net.bytes_recv,
-            'tx': net.bytes_sent,
+            'rx': rx_bytes,
+            'tx': tx_bytes,
             'time': now,
             'last_rx_speed': net_rx_speed,
             'last_tx_speed': net_tx_speed
@@ -907,8 +916,9 @@ def get_system_stats():
             "disk_total": disk.total,
             "disk_free": disk.free,
             "cpu_freq": freq.current if freq else 0,
-            "net_rx": net.bytes_recv,
-            "net_tx": net.bytes_sent,
+            "net_rx": rx_bytes,
+            "net_tx": tx_bytes,
+            "interface_counters": interfaces,
             "net_rx_speed": round(net_rx_speed, 2),
             "net_tx_speed": round(net_tx_speed, 2),
             "uptime": int(time.time() - psutil.boot_time()),
@@ -1976,6 +1986,7 @@ def send_heartbeat():
         "services": services,
         "agent_status": agent_status,
         "agent_https": AGENT_BASE_URL.startswith("https://"),
+        "client_update": CLIENT_UPDATER.report() if CLIENT_UPDATER else {},
         "timestamp": int(time.time())
     }
     
@@ -2049,14 +2060,19 @@ def send_heartbeat():
                     pass
 
             tasks = data.get("tasks", [])
+            BACKGROUND_COMMANDS[:] = [worker for worker in BACKGROUND_COMMANDS if worker.is_alive()]
             for task in tasks:
                 cmd = task.get("command", "")
                 if cmd in LONG_RUNNING_COMMANDS:
-                    threading.Thread(
+                    worker = threading.Thread(
                         target=execute_command, args=(task,), daemon=True
-                    ).start()
+                    )
+                    worker.start()
+                    BACKGROUND_COMMANDS.append(worker)
                 else:
                     execute_command(task)
+            if CLIENT_UPDATER and not tasks and not BACKGROUND_COMMANDS and not PENDING_RESULTS:
+                CLIENT_UPDATER.offer(data.get("client_update"))
 
             # Heartbeat delivery succeeded - wait for stable recovery before notifying
             if AGENT_DOWN_SINCE is not None:
@@ -2121,6 +2137,8 @@ def send_heartbeat():
                 logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
 
 def main():
+    global CLIENT_UPDATER
+    CLIENT_UPDATER = ClientUpdater(BASE_DIR)
     # Check and update environment variables
     ensure_env_variables()
 

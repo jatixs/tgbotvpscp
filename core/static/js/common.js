@@ -515,6 +515,7 @@ function updateChartWithLiveData(chart, applyData, canvasOrId, animate = true) {
     const shouldAnimate = animate && !document.documentElement.classList.contains('perf-mode');
     if (changed) chart.update(shouldAnimate ? undefined : 'none');
     refreshChartZoomState(chart, canvasOrId);
+    window.syncActiveExpandedChart?.(chart);
     return changed;
 }
 window.updateChartWithLiveData = updateChartWithLiveData;
@@ -643,7 +644,7 @@ function attachChartInteractions(chart, canvasOrId) {
         if (!resetBtn) {
             resetBtn = document.createElement('button');
             resetBtn.type = 'button';
-            resetBtn.className = 'chart-reset-zoom-btn hidden absolute top-2 left-2 z-10 px-2 py-1 rounded-md text-[10px] font-bold bg-white/90 dark:bg-gray-900/90 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-sm hover:bg-blue-50 dark:hover:bg-blue-500/10 transition';
+            resetBtn.className = 'chart-reset-zoom-btn hidden';
             resetBtn.textContent = getChartResetLabel();
             resetBtn.title = getChartResetLabel();
             resetBtn.addEventListener('click', (e) => {
@@ -3269,7 +3270,7 @@ window.renderHeaderBilling = function() {
     if (badgeBtn) {
         badgeBtn.onclick = () => {
             showBillingModal(
-                I18N?.master_server_name || "Мой сервер (Агент)",
+                I18N?.master_server_name || "Мой сервер (агент)",
                 master_billing_json.amount !== null && master_billing_json.amount !== undefined ? master_billing_json.amount : null,
                 master_billing_json.currency || '$',
                 master_billing_json.next_payment_date || null,

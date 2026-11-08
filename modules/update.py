@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
 
-from core import config, shared_state, utils
+from core import config, node_updates, shared_state, utils
 from core.auth import is_allowed, send_access_denied_message
 from core.config import DEPLOY_MODE, RESTART_FLAG_FILE
 from core.i18n import I18nFilter, _, get_user_lang
@@ -21,6 +21,7 @@ from core.utils import AuditEvent, escape_html, log_audit_event
 BUTTON_KEY = "btn_update"
 CHECK_INTERVAL = 21600
 LAST_NOTIFIED_VERSION = None
+README_VERSION = re.compile(r"img\.shields\.io/badge/version-v([\d.]+)")
 
 
 def get_button() -> KeyboardButton:
@@ -41,7 +42,7 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
 
 def validate_branch_name(branch: str) -> str:
     branch = (branch or "").strip()
-    if not re.fullmatch("[A-Za-z0-9._/\\-]+", branch):
+    if not node_updates.BRANCH.fullmatch(branch):
         return "main"
     return branch
 
@@ -92,9 +93,7 @@ async def get_remote_version_github(branch="main"):
             async with session.get(url, timeout=5) as response:
                 if response.status == 200:
                     text = await response.text()
-                    match = re.search(
-                        "img\\.shields\\.io/badge/version-v([\\d\\.]+)", text
-                    )
+                    match = README_VERSION.search(text)
                     if match:
                         return f"v{match.group(1)}"
     except Exception as e:
@@ -103,7 +102,7 @@ async def get_remote_version_github(branch="main"):
 
 
 async def get_changelog_entry(branch: str, lang: str) -> str:
-    filename = "CHANGELOG.en.md" if lang == "en" else "CHANGELOG.md"
+    filename = "docs/CHANGELOG.en.md" if lang == "en" else "docs/CHANGELOG.md"
     code, out, err = await run_command("git", "show", f"origin/{branch}:{filename}")
     if code != 0 or not out:
         url = f"https://raw.githubusercontent.com/jatixs/tgbotvpscp/{branch}/{filename}"
@@ -130,7 +129,8 @@ async def get_changelog_entry(branch: str, lang: str) -> str:
             result.append(line)
     if not result:
         return "No release notes found."
-    return "\n".join(result).strip()
+    notes = "\n".join(result).strip()
+    return notes if len(notes) <= 3000 else notes[:2999] + "…"
 
 
 async def get_update_info():
@@ -138,6 +138,9 @@ async def get_update_info():
         branch = await get_current_branch()
         branch = validate_branch_name(branch)
         local_ver = utils.get_app_version()
+        code, readme, _ = await run_command("git", "show", "HEAD:README.md")
+        if code == 0 and (match := README_VERSION.search(readme)):
+            local_ver = f"v{match.group(1)}"
         await run_command("git", "fetch", "origin")
         remote_ver = await get_remote_version_github(branch)
         if not remote_ver:
@@ -158,15 +161,25 @@ async def get_update_info():
         return ("Error", "Error", "main", False)
 
 
-async def execute_bot_update(branch: str, restart_source: str = "unknown"):
-    try:
+async def execute_bot_update(
+    branch: str,
+    restart_source: str = "unknown",
+    *,
+    node_ids: tuple[int, ...] = (),
+    user_id: int = config.ADMIN_USER_ID,
+) -> int:
+    if node_ids and user_id != config.ADMIN_USER_ID:
+        raise PermissionError("Only the main administrator can update node clients")
+    if node_updates.agent_update_lock.locked() or shared_state.IS_RESTARTING:
+        raise RuntimeError("An agent update or restart is already in progress")
+    async with node_updates.agent_update_lock:
         branch = validate_branch_name(branch)
         logging.info(f"Starting bot update on branch '{branch}'...")
         # Audit logging
         log_audit_event(
             AuditEvent.SYSTEM_UPDATE_STARTED,
-            config.ADMIN_USER_ID,
-            details={"branch": branch, "source": restart_source},
+            user_id,
+            details={"branch": branch, "source": restart_source, "confirmed_node_ids": node_ids},
             severity="CRITICAL"
         )
 
@@ -180,20 +193,40 @@ async def execute_bot_update(branch: str, restart_source: str = "unknown"):
             logging.warning(f"Pre-update backup warning: {be}")
 
         code, _, err = await run_command("git", "fetch", "origin")
-        code, _, err = await run_command("git", "reset", "--hard", f"origin/{branch}")
         if code != 0:
-            raise Exception(f"Git reset failed: {err}")
-        await run_command(
+            raise RuntimeError(f"Git fetch failed: {err}")
+        code, commit, err = await run_command("git", "rev-parse", "--verify", f"refs/remotes/origin/{branch}^{{commit}}")
+        if code != 0 or not node_updates.COMMIT.fullmatch(commit):
+            raise RuntimeError(f"Could not resolve the update revision: {err}")
+        previous_commit = await node_updates.read_agent_commit()
+        code, _, err = await run_command("git", "reset", "--hard", commit)
+        if code != 0:
+            raise RuntimeError(f"Git reset failed: {err}")
+        code, _, err = await run_command(
             sys.executable, "-m", "pip", "install", "-r", "requirements.txt"
         )
+        if code != 0:
+            if previous_commit:
+                rollback, _, rollback_error = await run_command("git", "reset", "--hard", previous_commit)
+                if rollback != 0:
+                    logging.error("Could not restore the agent revision: %s", rollback_error)
+            raise RuntimeError(f"Dependency installation failed: {err}")
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
-        with open(RESTART_FLAG_FILE, "w") as f:
+        with open(RESTART_FLAG_FILE, "w", encoding="utf-8") as f:
             f.write(restart_source)
-        logging.info("Update finished. Restarting...")
-        asyncio.create_task(self_terminate())
-    except Exception as e:
-        logging.error(f"Execute update failed: {e}")
-        raise e
+        shared_state.IS_RESTARTING = True
+        queued = 0
+        try:
+            if node_ids:
+                code, _, _ = await run_command("git", "cat-file", "-e", f"{commit}:node/software_update.py")
+                if code == 0:
+                    queued = await node_updates.queue_updates(node_ids, branch, commit, user_id)
+        except Exception:
+            logging.exception("Could not queue the confirmed node updates")
+        finally:
+            logging.info("Update finished. Restarting...")
+            asyncio.create_task(self_terminate())
+        return queued
 
 
 async def self_terminate():
@@ -397,18 +430,59 @@ async def run_bot_update(callback: types.CallbackQuery):
     if not is_allowed(user_id, "update"):
         await callback.answer(_("access_denied_generic", lang), show_alert=True)
         return
+    action, _separator, value = callback.data.partition(":")
+    node_ids = ()
+    if action in {"do_bot_update_agent", "do_bot_update_nodes"}:
+        plan = node_updates.consume(value, user_id)
+        if not plan:
+            await callback.answer(_("node_client_update_plan_expired", lang), show_alert=True)
+            return
+        branch = plan.branch
+        if action == "do_bot_update_nodes":
+            node_ids = plan.nodes
+    elif action == "do_bot_update":
+        branch = validate_branch_name(value)
+        plan = await node_updates.prepare(user_id, branch)
+        if plan["nodes"]:
+            names = [f"• #{node['id']} {escape_html(node['name'][:100])}" for node in plan["nodes"]]
+            listing = "\n".join(names)
+            if len(listing) > 3200:
+                for start in range(0, len(names), 15):
+                    await callback.message.answer("\n".join(names[start:start + 15]), parse_mode="HTML")
+                listing = _("node_client_update_list_above", lang, count=len(names))
+            prompt = _("node_client_update_confirm", lang, nodes=listing)
+            if plan["skipped"]:
+                prompt += "\n\n" + _("node_client_update_skipped", lang, count=plan["skipped"])
+            token = plan["token"]
+            await callback.message.edit_text(
+                prompt,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=_("btn_update_agent_and_nodes", lang), callback_data=f"do_bot_update_nodes:{token}", style="success")],
+                    [InlineKeyboardButton(text=_("btn_update_agent_only", lang), callback_data=f"do_bot_update_agent:{token}")],
+                    [InlineKeyboardButton(text=_("btn_cancel", lang), callback_data="back_to_menu", style="danger")],
+                ]),
+                parse_mode="HTML",
+            )
+            await callback.answer()
+            return
+        if plan["skipped"]:
+            await callback.answer(_("node_client_update_skipped", lang, count=plan["skipped"]), show_alert=True)
+    else:
+        return
+
     chat_id = callback.message.chat.id
-    data_parts = callback.data.split(":")
-    branch = data_parts[1] if len(data_parts) > 1 else "main"
     await callback.message.edit_text(_("bot_update_start", lang), parse_mode="HTML")
     try:
         restart_token = f"{chat_id}:{callback.message.message_id}"
-        await execute_bot_update(branch, restart_source=restart_token)
-        await callback.message.edit_text(
-            _("bot_update_success", lang), parse_mode="HTML"
+        queued = await execute_bot_update(
+            branch, restart_source=restart_token, node_ids=node_ids, user_id=user_id,
         )
+        message = _("bot_update_success", lang)
+        if node_ids:
+            message += "\n" + _("node_client_update_queued", lang, count=queued, total=len(node_ids))
+        await callback.message.edit_text(message, parse_mode="HTML")
     except Exception as e:
         logging.error(f"Update failed: {e}")
         await callback.message.edit_text(
-            _("bot_update_fail", lang, error=str(e)), parse_mode="HTML"
+            _("bot_update_fail", lang, error=escape_html(str(e)[-2000:])), parse_mode="HTML"
         )
