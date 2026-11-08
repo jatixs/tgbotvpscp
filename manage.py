@@ -408,8 +408,8 @@ def cmd_integrity(args):
         return 0
 
 
-async def cmd_update_nodes(args):
-    from core import config, node_updates
+async def cmd_update_nodes(args, config):
+    from core import node_updates
     from core.i18n import _
 
     lang = config.DEFAULT_LANGUAGE
@@ -561,7 +561,10 @@ def main(argv=None):
         elif args.command == "status":
             asyncio.run(cmd_status(args))
         elif args.command == "update-nodes":
-            asyncio.run(cmd_update_nodes(args))
+            # Importing config initializes the settings database synchronously.
+            from core import config
+
+            asyncio.run(cmd_update_nodes(args, config))
         elif args.command == "tls" and args.tls_command == "status":
             asyncio.run(cmd_tls_status(args))
         elif args.command == "tls" and args.tls_command == "check":

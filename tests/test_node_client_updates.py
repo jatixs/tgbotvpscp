@@ -200,6 +200,43 @@ class AgentUpdateTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.subject.execute_bot_update.call_args.kwargs["node_ids"], (9,))
 
 
+class NodeUpdateCliTests(unittest.TestCase):
+    def test_cold_start_loads_config_before_the_event_loop(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copyfile(ROOT / "manage.py", root / "manage.py")
+            core = root / "core"
+            core.mkdir()
+            (core / "__init__.py").touch()
+            (core / "config.py").write_text(
+                "import asyncio\nasyncio.run(asyncio.sleep(0))\n"
+                "DEFAULT_LANGUAGE = 'en'\nADMIN_USER_ID = 1\n",
+                encoding="utf-8",
+            )
+            (core / "node_updates.py").write_text(
+                "from . import config\n"
+                "async def read_agent_commit(): return 'a' * 40\n"
+                "async def eligible_nodes(): return [{'id': 8, 'name': 'Node'}], 0\n"
+                "async def queue_updates(*args): raise AssertionError('No confirmation given')\n",
+                encoding="utf-8",
+            )
+            (core / "nodes_db.py").write_text("async def init_db(): pass\n", encoding="utf-8")
+            (core / "i18n.py").write_text("def _(key, lang, **params): return key\n", encoding="utf-8")
+            (root / "tortoise.py").write_text(
+                "class Tortoise:\n    @staticmethod\n    async def close_connections(): pass\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [sys.executable, "-B", str(root / "manage.py"), "update-nodes"],
+                cwd=root, input="n\n", capture_output=True, text=True, timeout=15,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("node_client_update_cli_prompt", result.stdout)
+        self.assertNotIn("RuntimeWarning", result.stderr)
+
+
 @unittest.skipUnless(shutil.which("git"), "Git is required to exercise the node checkout")
 class NodeCheckoutTests(unittest.TestCase):
     def setUp(self):
