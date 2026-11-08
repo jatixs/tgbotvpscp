@@ -391,21 +391,21 @@
                                         <div id="hint-ping-set" class="hidden">{{ web_hint_ping_interval }}</div>
                                     </div>
                                 </div>
-                                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 gap-y-3">
+                                <div class="flex items-center gap-2">
                                     <input type="number"
                                            id="conf_ping"
                                            value="{{ val_ping }}"
-                                           class="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
+                                           class="w-16 flex-grow shrink-0 bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-900 dark:text-white transition-all">
                                     
                                     <div class="flex bg-gray-100 dark:bg-black/40 p-1 rounded-xl shrink-0" id="conf_ping_mode_group">
-                                        <button type="button" data-mode="http" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'http' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">HTTP</button>
-                                        <button type="button" data-mode="tcp" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'tcp' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">TCP</button>
-                                        <button type="button" data-mode="icmp" class="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'icmp' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">ICMP</button>
+                                        <button type="button" data-mode="http" class="px-2 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'http' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">HTTP</button>
+                                        <button type="button" data-mode="tcp" class="px-2 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'tcp' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">TCP</button>
+                                        <button type="button" data-mode="icmp" class="px-2 py-1.5 text-xs font-medium rounded-lg transition-colors {{ 'bg-white dark:bg-gray-800 shadow text-gray-900 dark:text-white' if val_ping_mode == 'icmp' else 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' }}">ICMP</button>
                                         <input type="hidden" id="conf_ping_mode" value="{{ val_ping_mode }}">
                                     </div>
-                                    <button type="button" onclick="window.openPingTargetModal()" class="flex items-center gap-1.5 bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl px-3 py-2 text-sm font-medium transition-colors shrink-0 text-gray-700 dark:text-gray-300">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                                        <span id="label_ping_server">{% if val_ping_target == 'cloudflare' %}Cloudflare{% elif val_ping_target == 'internal' %}{{ web_ping_target_internal }}{% else %}Google{% endif %}</span>
+                                    <button type="button" onclick="window.openPingTargetModal()" class="flex min-w-0 items-center gap-1 bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl px-2 py-2 text-sm font-medium transition-colors text-gray-700 dark:text-gray-300">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                        <span id="label_ping_server" class="truncate whitespace-nowrap"{% if val_ping_target == 'internal' %} title="{{ web_ping_target_internal }}"{% endif %}>{% if val_ping_target == 'cloudflare' %}Cloudflare{% elif val_ping_target == 'internal' %}{{ web_ping_target_internal_short }}{% else %}Google{% endif %}</span>
                                     </button>
                                     <input type="hidden" id="conf_ping_target" value="{{ val_ping_target }}">
                                 </div>
@@ -912,15 +912,15 @@
                                         <tr>
                                             <th scope="col"
                                                 class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                {{ web_user_id }}
+                                            </th>
+                                            <th scope="col"
+                                                class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                 {{ web_user_name }}
                                             </th>
                                             <th scope="col"
                                                 class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                 {{ web_user_role }}
-                                            </th>
-                                            <th scope="col"
-                                                class="px-2 sm:px-4 py-2 text-left text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                {{ web_user_id }}
                                             </th>
                                             <th scope="col"
                                                 class="px-2 sm:px-4 py-2 text-right text-[10px] sm:text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1164,7 +1164,7 @@
                     <h3 id="sysModalTitle"
                         class="text-lg font-bold text-gray-900 dark:text-white mb-2">Title</h3>
                     <p id="sysModalMessage"
-                       class="text-sm text-gray-600 dark:text-gray-300 mb-4 whitespace-pre-wrap">Message</p>
+                       class="text-sm text-gray-600 dark:text-gray-300 mb-4 whitespace-pre-wrap max-h-[300px] overflow-y-auto break-words">Message</p>
                     <input type="text"
                            id="sysModalInput"
                            class="hidden w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white mb-4">

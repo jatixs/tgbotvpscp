@@ -752,8 +752,13 @@
     }
 
     window.createChartRangeController = createChartRangeController;
-    window.networkHistoryPointRadius = ({ dataset, dataIndex }) =>
-        dataset.data[dataIndex - 1] == null && dataset.data[dataIndex + 1] == null ? 3 : 0;
+    window.networkHistoryPointRadius = ctx => {
+        if (!ctx || !ctx.dataset || !Array.isArray(ctx.dataset.data) || typeof ctx.dataIndex !== 'number') {
+            return 0;
+        }
+        const { dataset, dataIndex } = ctx;
+        return dataset.data[dataIndex - 1] == null && dataset.data[dataIndex + 1] == null ? 3 : 0;
+    };
     window.createPingDataset = data => ({
         label: t('web_label_ping', 'Ping'),
         data,
@@ -766,7 +771,7 @@
         animations: {
             y: {
                 from: ctx => {
-                    if (ctx.type === 'data') {
+                    if (ctx && ctx.type === 'data') {
                         if (ctx.element?.$animations) {
                             return undefined;
                         }
@@ -801,35 +806,51 @@
     /* ---------- Chart Modal Expansion ---------- */
     let activeExpandedChart = null;
 
+    function createExpandedGradient(color) {
+        const fillColor = Chart.helpers.color(color);
+        const topColor = fillColor.alpha(0.5).rgbString();
+        // Keep the fill visible near zero, where CPU usage often sits.
+        const bottomColor = fillColor.alpha(0.25).rgbString();
+        let gradient, gradientTop, gradientBottom;
+
+        return ({ chart: { ctx, chartArea } }) => {
+            if (!chartArea || chartArea.bottom <= chartArea.top) return bottomColor;
+            const { top, bottom } = chartArea;
+            if (top !== gradientTop || bottom !== gradientBottom) {
+                gradient = ctx.createLinearGradient(0, top, 0, bottom);
+                gradient.addColorStop(0, topColor);
+                gradient.addColorStop(1, bottomColor);
+                gradientTop = top;
+                gradientBottom = bottom;
+            }
+            return gradient;
+        };
+    }
+
     function expandChartToModal(canvasId, overlayId) {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
+        const sourceCanvas = document.getElementById(canvasId);
+        if (!sourceCanvas) return;
+
+        const sourceChart = (typeof Chart !== 'undefined' ? Chart.getChart(sourceCanvas) : null)
+            || window.__chartRegistry?.[canvasId]
+            || window[canvasId];
+        if (!sourceChart || !sourceChart.data) return;
 
         const overlay = overlayId
             ? document.getElementById(overlayId)
-            : canvas.closest('.rounded-2xl')?.querySelector('.chart-expanded-overlay');
+            : sourceCanvas.closest('.rounded-2xl')?.querySelector('.chart-expanded-overlay');
         if (!overlay) return;
 
         if (activeExpandedChart) {
             collapseChartModal();
         }
 
-        const originalParent = canvas.parentElement;
         const body = overlay.querySelector('.chart-expanded-body');
-        if (!body || !originalParent) return;
+        if (!body) return;
 
         const dialog = overlay.closest('.rounded-2xl');
         const originalMinHeight = dialog ? dialog.style.minHeight : '';
         const originalHeight = dialog ? dialog.style.height : '';
-
-        activeExpandedChart = {
-            canvasId,
-            originalParent,
-            overlay,
-            dialog,
-            originalMinHeight,
-            originalHeight
-        };
 
         if (dialog) {
             dialog.style.minHeight = '480px';
@@ -838,17 +859,103 @@
             }
         }
 
-        body.appendChild(canvas);
+        overlay.classList.add('is-active');
         overlay.classList.remove('hidden');
 
-        const chart = (typeof Chart !== 'undefined' ? Chart.getChart(canvas) : null) || window.__chartRegistry?.[canvasId];
-        if (chart) {
-            requestAnimationFrame(() => {
-                try {
-                    chart.resize();
-                    chart.update('none');
-                } catch (_) {}
-            });
+        // Clean & create fresh canvas element inside expanded body
+        body.innerHTML = '<canvas style="display:block;width:100%;height:100%;"></canvas>';
+        const expandedCanvas = body.querySelector('canvas');
+        const expandedCtx = expandedCanvas.getContext('2d');
+
+        const isDark = document.documentElement.classList.contains('dark');
+        const tickColor = isDark ? '#9ca3af' : '#6b7280';
+
+        // Resolve each gradient after the expanded chart has laid out its plot area.
+        const datasets = sourceChart.data.datasets.map(ds => {
+            const copy = { ...ds };
+            if (copy.fill) {
+                const color = (typeof copy.borderColor === 'string' && copy.borderColor)
+                    || (typeof copy.backgroundColor === 'string' && copy.backgroundColor);
+                if (color) {
+                    copy.backgroundColor = createExpandedGradient(color);
+                }
+            }
+            return copy;
+        });
+
+        const baseOptions = sourceChart.config?.options || sourceChart.options || {};
+
+        // Sanitize scales to avoid passing resolver proxies (which trigger Chart.js warnings)
+        const sanitizedScales = {};
+        const rawScales = baseOptions.scales || {};
+        for (const [key, val] of Object.entries(rawScales)) {
+            if (val && typeof val === 'object') {
+                const s = { ...val };
+                if (s.ticks && typeof s.ticks === 'object') s.ticks = { ...s.ticks };
+                if (s.grid && typeof s.grid === 'object') s.grid = { ...s.grid };
+                if (s.title && typeof s.title === 'object') s.title = { ...s.title };
+                delete s._proxy;
+                delete s._context;
+                delete s._subProxy;
+                delete s._stack;
+                delete s._descriptors;
+                sanitizedScales[key] = s;
+            }
+        }
+
+        const options = {
+            ...baseOptions,
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: sanitizedScales,
+            layout: {
+                ...(baseOptions.layout || {}),
+                padding: {
+                    ...(baseOptions.layout?.padding || {}),
+                    top: 6,
+                    right: 8
+                }
+            },
+            plugins: {
+                ...(baseOptions.plugins || {}),
+                legend: {
+                    ...(baseOptions.plugins?.legend || {}),
+                    display: true,
+                    labels: {
+                        ...(baseOptions.plugins?.legend?.labels || {}),
+                        color: tickColor
+                    }
+                }
+            }
+        };
+
+        const expandedChart = new Chart(expandedCtx, {
+            type: sourceChart.config.type || 'line',
+            data: {
+                labels: [...(sourceChart.data.labels || [])],
+                datasets
+            },
+            options
+        });
+
+        if (sourceChart.__chartTimeWindow) {
+            expandedChart.__chartTimeWindow = { ...sourceChart.__chartTimeWindow };
+        }
+
+        activeExpandedChart = {
+            canvasId,
+            sourceChart,
+            expandedChart,
+            overlay,
+            dialog,
+            originalMinHeight,
+            originalHeight
+        };
+        window.__activeExpandedChart = activeExpandedChart;
+
+        if (window.attachChartInteractions) {
+            window.attachChartInteractions(expandedChart, expandedCanvas);
         }
     }
 
@@ -856,16 +963,25 @@
         if (!activeExpandedChart) {
             if (overlayId) {
                 const overlay = document.getElementById(overlayId);
-                if (overlay) overlay.classList.add('hidden');
+                if (overlay) {
+                    overlay.classList.remove('is-active');
+                    overlay.classList.add('hidden');
+                }
             }
             return;
         }
 
-        const { canvasId, originalParent, overlay, dialog, originalMinHeight, originalHeight } = activeExpandedChart;
-        const canvas = document.getElementById(canvasId);
+        const { expandedChart, overlay, dialog, originalMinHeight, originalHeight } = activeExpandedChart;
 
-        if (canvas && originalParent) {
-            originalParent.appendChild(canvas);
+        if (expandedChart) {
+            try {
+                expandedChart.destroy();
+            } catch (_) {}
+        }
+
+        const body = overlay?.querySelector('.chart-expanded-body');
+        if (body) {
+            body.innerHTML = '';
         }
 
         if (dialog) {
@@ -874,22 +990,35 @@
         }
 
         if (overlay) {
+            overlay.classList.remove('is-active');
             overlay.classList.add('hidden');
         }
 
         activeExpandedChart = null;
-
-        const chart = (typeof Chart !== 'undefined' ? Chart.getChart(canvas) : null) || window.__chartRegistry?.[canvasId];
-        if (chart) {
-            requestAnimationFrame(() => {
-                try {
-                    chart.resize();
-                    chart.update('none');
-                } catch (_) {}
-            });
-        }
+        window.__activeExpandedChart = null;
     }
 
+    function syncActiveExpandedChart(sourceChart) {
+        if (!activeExpandedChart || !activeExpandedChart.expandedChart) return;
+        if (activeExpandedChart.sourceChart !== sourceChart) return;
+        const exp = activeExpandedChart.expandedChart;
+        exp.data.labels = [...(sourceChart.data.labels || [])];
+        sourceChart.data.datasets.forEach((ds, i) => {
+            if (exp.data.datasets[i]) {
+                exp.data.datasets[i].data = [...(ds.data || [])];
+            }
+        });
+        if (sourceChart.__chartTimeWindow) {
+            exp.__chartTimeWindow = { ...sourceChart.__chartTimeWindow };
+        }
+        if (!exp.__liveZoomState?.isZoomed) {
+            window.alignChartToLiveWindow?.(exp);
+        }
+        exp.update('none');
+        window.refreshChartZoomState?.(exp);
+    }
+
+    window.syncActiveExpandedChart = syncActiveExpandedChart;
     window.expandChartToModal = expandChartToModal;
     window.collapseChartModal = collapseChartModal;
 

@@ -408,6 +408,37 @@ def cmd_integrity(args):
         return 0
 
 
+async def cmd_update_nodes(args):
+    from core import config, node_updates
+    from core.i18n import _
+
+    lang = config.DEFAULT_LANGUAGE
+    commit = await node_updates.read_agent_commit()
+    if not commit:
+        raise RuntimeError("Could not determine the installed agent revision")
+    await init_services()
+    try:
+        nodes, skipped = await node_updates.eligible_nodes()
+        if skipped:
+            print(_("node_client_update_skipped", lang, count=skipped))
+        if not nodes:
+            print(_("node_client_update_no_eligible", lang))
+            return
+        names = "\n".join(f"  #{node['id']} {node['name']!r}" for node in nodes)
+        print(_("node_client_update_confirm", lang, nodes=names))
+        try:
+            confirmed = input(_("node_client_update_cli_prompt", lang)).strip().lower() in {"y", "yes"}
+        except EOFError:
+            confirmed = False
+        if confirmed:
+            queued = await node_updates.queue_updates(
+                tuple(node["id"] for node in nodes), args.branch, commit, config.ADMIN_USER_ID,
+            )
+            print(_("node_client_update_queued", lang, count=queued, total=len(nodes)))
+    finally:
+        await close_services()
+
+
 def print_banner():
     """Print pretty CLI banner with commands"""
     banner = """
@@ -483,6 +514,8 @@ def main(argv=None):
 
     # Show bot status command
     subparsers.add_parser("status", help="Показать статус бота")
+    p_update_nodes = subparsers.add_parser("update-nodes", help="Подтвердить обновление клиентов нод до ревизии агента")
+    p_update_nodes.add_argument("--branch", default="main", help="Ветка Git, с которой обновлён агент")
 
     tls_parser = subparsers.add_parser("tls", help="Управление миграцией HTTPS нод")
     tls_commands = tls_parser.add_subparsers(dest="tls_command", required=True)
@@ -527,6 +560,8 @@ def main(argv=None):
             asyncio.run(cmd_restart(args))
         elif args.command == "status":
             asyncio.run(cmd_status(args))
+        elif args.command == "update-nodes":
+            asyncio.run(cmd_update_nodes(args))
         elif args.command == "tls" and args.tls_command == "status":
             asyncio.run(cmd_tls_status(args))
         elif args.command == "tls" and args.tls_command == "check":

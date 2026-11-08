@@ -61,6 +61,17 @@ class Node(models.Model):
         table = "nodes"
 
 
+class NodeClientUpdate(models.Model):
+    id = fields.IntField(pk=True)
+    node = fields.ForeignKeyField("models.Node", on_delete=fields.CASCADE)
+    rollout = fields.CharField(max_length=32, index=True)
+    requested_by = fields.BigIntField(index=True)
+    branch = fields.CharField(max_length=255)
+    commit = fields.CharField(max_length=40)
+    status = fields.CharField(max_length=16, default="pending")
+    expires_at = fields.FloatField()
+
+
 class MetricSample(models.Model):
     """
     Resource history sample for an agent or node.

@@ -27,7 +27,7 @@ from modules.services import (
 )
 
 from .. import config as current_config
-from .. import nodes_db, shared_state
+from .. import node_updates, nodes_db, shared_state
 from ..config import (
     ADMIN_USER_ID,
     DEFAULT_LANGUAGE,
@@ -43,6 +43,7 @@ from ..utils import (
     decrypt_request_payload,
     encrypt_for_web,
     encrypted_json_response,
+    escape_html,
     format_traffic,
     format_uptime,
     get_country_flag,
@@ -371,6 +372,8 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
             )
 
     stats = data.get("stats", {})
+    client_report = node_updates.normalize_report(data.get("client_update"))
+    stats["client_update"] = client_report
     results = data.get("results", [])
     if isinstance(data.get("agent_https"), bool):
         await nodes_db.update_node_extra(token, "agent_https", data["agent_https"])
@@ -404,9 +407,20 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
         await nodes_db.update_node_extra(token, "services", services)
 
     current_node = await nodes_db.get_node_by_token(token)
-    tasks_to_send = current_node.get("tasks", []) if current_node else []
+    tasks_to_send = current_node.get("tasks", []) if current_node and not client_report.get("busy") else []
     if tasks_to_send:
         await nodes_db.clear_node_tasks(token)
+
+    client_task = None
+    if client_report and not shared_state.IS_RESTARTING:
+        client_task, outcome = await node_updates.heartbeat_task(node["id"], client_report)
+        if outcome and bot:
+            user_id, status = outcome
+            asyncio.create_task(process_node_result_background(
+                bot, user_id, "client_update",
+                {"type": "i18n", "key": f"node_client_update_{status}", "params": {}},
+                token, escape_html(node["name"]),
+            ))
 
     all_nodes = await nodes_db.get_all_nodes()
     alert_reporter_hash = _get_alert_reporter_hash(all_nodes, now=time.time())
@@ -419,6 +433,7 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
         {
             "status": "ok",
             "tasks": tasks_to_send,
+            "client_update": client_task,
             "alert_lang": alert_lang,
             "agent_alert_reporter_hash": alert_reporter_hash,
             "node_name": (current_node or node).get("name", ""),

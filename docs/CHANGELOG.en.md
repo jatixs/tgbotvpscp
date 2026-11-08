@@ -20,6 +20,17 @@
 * ⏱️ **Network Latency (Ping) Integrated into Traffic Charts** — Connection health and bandwidth usage are now unified on a single screen:
   * **Effortless root-cause diagnosis:** Latency (ms) is plotted alongside incoming and outgoing traffic. You can immediately see whether latency spikes correlate with heavy downloads or if the bottleneck lies upstream with the provider.
   * **Persistent latency trends:** Response times are automatically archived alongside standard metrics history, from live second-by-second updates to multi-day overviews.
+* 📊 **Expanded node charts.** Expand CPU/RAM and network charts in node dialogs on the dashboard and monitoring page for a closer look. Live updates continue in expanded view, and the translucent background and gradient fills adapt when the window is resized.
+* **Node client updates alongside agent updates.** Telegram, the WebUI, and the interactive installer prompt the main administrator to confirm updates for eligible nodes. Once the updated agent starts, confirmed nodes switch to the same Git commit. Older clients need a one-time manual installer update.
+
+### 🐛 Fixed
+* **Zoom reset.** The Reset button appears after zooming and hides when the default view is restored. Incoming data alone does not show the button.
+* **Network chart rendering.** Traffic lines are smoother, isolated samples appear as points, and the ping line updates smoothly without jumping from the bottom of the chart.
+* **Empty logs.** The dashboard shows an empty state when no entries match the selected log level and skips blank lines.
+* **Renaming nodes.** Opening the name editor preserves row height and column widths.
+* **Users table.** The ID column comes first, followed by name and role.
+* **Ping settings.** The interval field, protocol selector, and target button fit on a single row. The button uses the shorter “Internal” label, and the target dialog shows the full name.
+* **Russian label capitalization.** Standardized sentence case across labels in the web panel and bot menus, including the ping, service, and traffic update intervals.
 
 ## [1.27.2] - 2026-10-31
 

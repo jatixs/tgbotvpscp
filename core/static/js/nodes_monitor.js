@@ -197,10 +197,12 @@ function initNodesMonitor() {
     if (modalResChart) {
         modalResChart.destroy();
         modalResChart = null;
+        if (window.__chartRegistry) delete window.__chartRegistry['modalResChart'];
     }
     if (modalNetChart) {
         modalNetChart.destroy();
         modalNetChart = null;
+        if (window.__chartRegistry) delete window.__chartRegistry['modalNetChart'];
     }
     
     // Subscribe to node updates
@@ -762,10 +764,12 @@ window.closeNodeDetailModal = function() {
     if (modalResChart) {
         modalResChart.destroy();
         modalResChart = null;
+        if (window.__chartRegistry) delete window.__chartRegistry['modalResChart'];
     }
     if (modalNetChart) {
         modalNetChart.destroy();
         modalNetChart = null;
+        if (window.__chartRegistry) delete window.__chartRegistry['modalNetChart'];
     }
 }
 
@@ -1030,6 +1034,8 @@ function updateModalCharts(series, which, animate = true) {
             }
         });
         modalResChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
+        window.__chartRegistry = window.__chartRegistry || {};
+        window.__chartRegistry['modalResChart'] = modalResChart;
         if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
     }
     
@@ -1111,10 +1117,12 @@ function updateModalCharts(series, which, animate = true) {
                         }
                     }
                 },
-                elements: { line: { tension: 0 }, point: { radius: window.networkHistoryPointRadius, hitRadius: 10 } }
+                elements: { line: { tension: 0.35 }, point: { radius: window.networkHistoryPointRadius, hitRadius: 10 } }
             }
         });
         modalNetChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
+        window.__chartRegistry = window.__chartRegistry || {};
+        window.__chartRegistry['modalNetChart'] = modalNetChart;
         if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
     }
 }

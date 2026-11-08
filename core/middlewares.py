@@ -127,6 +127,9 @@ class CallbackTTLMiddleware(BaseMiddleware):
     ) -> Any:
         if event.data in ["selftest_refresh", "cmd_memstats"] or str(event.data).startswith("alert_reply_"):
             return await handler(event, data)
+        if str(event.data).startswith(("do_bot_update_agent:", "do_bot_update_nodes:")):
+            # The one-use update plan enforces its own expiry.
+            return await handler(event, data)
             
         if event.message and event.message.date:
             now = datetime.now(timezone.utc)

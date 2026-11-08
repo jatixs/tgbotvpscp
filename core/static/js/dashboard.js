@@ -1218,7 +1218,7 @@ function renderAgentChart(series, animate = true) {
         },
         elements: {
             line: {
-                tension: 0
+                tension: 0.35
             },
             point: {
                 radius: window.networkHistoryPointRadius,
@@ -2522,6 +2522,8 @@ function renderNodeResChart(series, animate = true) {
             }
         });
         chartRes.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
+        window.__chartRegistry = window.__chartRegistry || {};
+        window.__chartRegistry['nodeResChart'] = chartRes;
         if (window.attachChartInteractions) window.attachChartInteractions(chartRes, 'nodeResChart');
     }
 }
@@ -2559,7 +2561,7 @@ function renderNodeNetChart(series, animate = true) {
         const netOpts = {
             ...commonOptions,
             elements: {
-                line: { tension: 0 },
+                line: { tension: 0.35 },
                 point: { ...commonOptions.elements.point, radius: window.networkHistoryPointRadius }
             },
             scales: {
@@ -2610,6 +2612,8 @@ function renderNodeNetChart(series, animate = true) {
             options: netOpts
         });
         chartNet.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
+        window.__chartRegistry = window.__chartRegistry || {};
+        window.__chartRegistry['nodeNetChart'] = chartNet;
         if (window.attachChartInteractions) window.attachChartInteractions(chartNet, 'nodeNetChart');
     }
 }
@@ -4139,9 +4143,9 @@ function updateHiddenBlocksPanel() {
                 'quick_stats_disk': 'SSD',
                 'agent_stats': (typeof I18N !== 'undefined' && I18N.web_agent_stats_title) ? I18N.web_agent_stats_title : 'График Агента',
                 'traffic_stats': (typeof I18N !== 'undefined' && I18N.web_traffic_total) ? I18N.web_traffic_total : 'Трафик',
-                'services_manager': (typeof I18N !== 'undefined' && I18N.web_services_title) ? I18N.web_services_title : 'Менеджер Сервисов',
+                'services_manager': (typeof I18N !== 'undefined' && I18N.web_services_title) ? I18N.web_services_title : 'Менеджер сервисов',
                 'nodes_manager': (typeof I18N !== 'undefined' && I18N.web_node_mgmt_title) ? I18N.web_node_mgmt_title : 'Менеджер Нод',
-                'system_logs': (typeof I18N !== 'undefined' && I18N.web_system_logs_title) ? I18N.web_system_logs_title : 'Системные Логи'
+                'system_logs': (typeof I18N !== 'undefined' && I18N.web_system_logs_title) ? I18N.web_system_logs_title : 'Системные логи'
             };
             const blockName = namesMap[blockId] || blockId;
             

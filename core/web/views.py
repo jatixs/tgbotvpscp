@@ -1077,6 +1077,12 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_update_info": _("web_update_info", lang),
         "web_update_uptodate": _("web_update_uptodate", lang),
         "web_update_started": _("web_update_started", lang),
+        "web_update_confirm": _("web_update_confirm", lang),
+        "web_node_client_update_cancel": _("web_node_client_update_cancel", lang),
+        **{
+            f"node_client_update_{key}": _(f"node_client_update_{key}", lang)
+            for key in ("confirm", "skipped", "queued", "pending", "current", "updated", "failed", "expired", "superseded")
+        },
         "web_update_error": _("web_update_error", lang),
         "web_no_notifications": _("web_no_notifications", lang),
         "web_notif_source_agent": _("web_notif_source_agent", lang),
@@ -1162,6 +1168,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_billing_status_expired": _("web_billing_status_expired", lang),
         "web_billing_status": _("web_billing_status", lang),
         "web_ping_target_internal": _("web_ping_target_internal", lang),
+        "web_ping_target_internal_short": _("web_ping_target_internal_short", lang),
         "web_ping_target_no_nodes": _("web_ping_target_no_nodes", lang),
         "web_push_title": _("web_push_title", lang),
         "web_push_desc": _("web_push_desc", lang),
@@ -1237,6 +1244,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "val_ping_mode": getattr(current_config, "PING_MODE", "http"),
         "val_ping_target": getattr(current_config, "PING_TARGET", "google"),
         "web_ping_target_internal": _("web_ping_target_internal", lang),
+        "web_ping_target_internal_short": _("web_ping_target_internal_short", lang),
         "val_timeout": str(current_config.NODE_OFFLINE_TIMEOUT),
         "web_settings_page_title": _("web_settings_page_title", lang),
         "web_back": _("web_back", lang),

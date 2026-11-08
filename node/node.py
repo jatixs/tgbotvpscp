@@ -33,8 +33,10 @@ from network_validation import (
 
 try:
     from .endpoint_migration import validate_https_migration_url
+    from .software_update import ClientUpdater
 except ImportError:
     from endpoint_migration import validate_https_migration_url
+    from software_update import ClientUpdater
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
@@ -442,6 +444,8 @@ SSH_EVENTS = collections.deque(maxlen=100)
 # Commands that take a long time and must run in a background thread
 # so heartbeats are not blocked.
 LONG_RUNNING_COMMANDS = {"speedtest", "update"}
+CLIENT_UPDATER = None
+BACKGROUND_COMMANDS = []
 
 # Agent health tracking
 AGENT_DOWN_SINCE = None
@@ -1982,6 +1986,7 @@ def send_heartbeat():
         "services": services,
         "agent_status": agent_status,
         "agent_https": AGENT_BASE_URL.startswith("https://"),
+        "client_update": CLIENT_UPDATER.report() if CLIENT_UPDATER else {},
         "timestamp": int(time.time())
     }
     
@@ -2055,14 +2060,19 @@ def send_heartbeat():
                     pass
 
             tasks = data.get("tasks", [])
+            BACKGROUND_COMMANDS[:] = [worker for worker in BACKGROUND_COMMANDS if worker.is_alive()]
             for task in tasks:
                 cmd = task.get("command", "")
                 if cmd in LONG_RUNNING_COMMANDS:
-                    threading.Thread(
+                    worker = threading.Thread(
                         target=execute_command, args=(task,), daemon=True
-                    ).start()
+                    )
+                    worker.start()
+                    BACKGROUND_COMMANDS.append(worker)
                 else:
                     execute_command(task)
+            if CLIENT_UPDATER and not tasks and not BACKGROUND_COMMANDS and not PENDING_RESULTS:
+                CLIENT_UPDATER.offer(data.get("client_update"))
 
             # Heartbeat delivery succeeded - wait for stable recovery before notifying
             if AGENT_DOWN_SINCE is not None:
@@ -2127,6 +2137,8 @@ def send_heartbeat():
                 logging.warning(f"Critical alert sent: Agent down for {format_downtime(downtime)}")
 
 def main():
+    global CLIENT_UPDATER
+    CLIENT_UPDATER = ClientUpdater(BASE_DIR)
     # Check and update environment variables
     ensure_env_variables()
 

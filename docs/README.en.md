@@ -228,6 +228,8 @@ Managed TLS accepts a domain or globally routable public IPv4. Let's Encrypt IP 
 
 For existing agents, update the master first, then update each node. The agent validates a same-host HTTPS endpoint and persists its new URL; the temporary HTTP bridge only accepts discovery/bootstrap and HMAC-protected heartbeats. Check progress with `sudo tgcp-bot tls status`; after all nodes confirm, close the bridge with `sudo tgcp-bot tls finalize`.
 
+**Updating node clients.** When updating the agent through Telegram, the WebUI, or the interactive installer, the main administrator can confirm an update for the listed nodes. Check for updates again in the WebUI to see the results. Older clients need a one-time installer update on each node to enable remote updates.
+
 ### 🔑 WebUI Access
 
 Open the HTTPS origin selected during installation, for example `https://panel.example.com/`. The installer generates and displays a random initial password at completion; there is no shared `admin` password. Change it with `sudo tgcp-bot webpass`.

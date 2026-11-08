@@ -248,7 +248,7 @@ async def refresh_user_names(bot: Bot):
     lang = config.DEFAULT_LANGUAGE
     new_user_prefix = _("default_new_user_name", lang, uid="").split("_")[0]
     id_user_prefix = _("default_id_user_name", lang, uid="").split(" ")[0]
-    admin_name_default = _("default_admin_name", lang)
+    admin_name_default = _("default_admin_name", lang).casefold()
     for uid in user_ids_to_check:
         uid_str = str(uid)
         current_name = USER_NAMES.get(uid_str)
@@ -256,7 +256,7 @@ async def refresh_user_names(bot: Bot):
             not current_name
             or current_name.startswith(new_user_prefix)
             or current_name.startswith(id_user_prefix)
-            or (current_name == admin_name_default and uid == ADMIN_USER_ID)
+            or (uid == ADMIN_USER_ID and current_name.casefold() == admin_name_default)
         )
         if should_refresh:
             new_name = _("default_id_user_name", lang, uid=uid)

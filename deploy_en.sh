@@ -894,13 +894,22 @@ setup_repo_and_dirs() {
     fi
 
     local live_path="${BOT_INSTALL_PATH}"
-    BOT_INSTALL_PATH="${staging_path}"
-    if ! download_vendor_assets; then
+    if [ "${FORCE_NODE_MODE:-no}" = "yes" ]; then
+        # Keep a shallow Git checkout of the client so it can apply a confirmed revision later.
+        if [ -d "${staging_path}/.git" ] && ! sudo git -C "${staging_path}" sparse-checkout set --no-cone \
+            '/node/' '/network_validation.py' '/README.md' '/.gitignore'; then
+            sudo rm -rf "${staging_path}"
+            return 1
+        fi
+    else
+        BOT_INSTALL_PATH="${staging_path}"
+        if ! download_vendor_assets; then
+            BOT_INSTALL_PATH="${live_path}"
+            sudo rm -rf "${staging_path}"
+            return 1
+        fi
         BOT_INSTALL_PATH="${live_path}"
-        sudo rm -rf "${staging_path}"
-        return 1
     fi
-    BOT_INSTALL_PATH="${live_path}"
     sudo chown -R "${owner_user}:${owner_user}" "${staging_path}"
 
     if [ -d "${BOT_INSTALL_PATH}" ]; then
@@ -1267,10 +1276,10 @@ cleanup_for_docker() {
 cleanup_for_node() {
     local action_name=$1
     msg_info "Finishing ${action_name}..."
-    cleanup_common_trash
+    if [ ! -d "${BOT_INSTALL_PATH}/.git" ]; then cleanup_common_trash; fi
     sudo rm -rf "${BOT_INSTALL_PATH}/core" "${BOT_INSTALL_PATH}/modules" "${BOT_INSTALL_PATH}/bot.py" \
         "${BOT_INSTALL_PATH}/watchdog.py" "${BOT_INSTALL_PATH}/Dockerfile" \
-        "${BOT_INSTALL_PATH}/docker-compose.yml" "${BOT_INSTALL_PATH}/.git" "${BOT_INSTALL_PATH}/assets" \
+        "${BOT_INSTALL_PATH}/docker-compose.yml" "${BOT_INSTALL_PATH}/assets" \
         "${BOT_INSTALL_PATH}/scripts" "${BOT_INSTALL_PATH}/requirements.txt"
     sudo rm -rf "${BOT_INSTALL_PATH}/logs/bot" "${BOT_INSTALL_PATH}/logs/watchdog" \
         "${BOT_INSTALL_PATH}/logs/traffic_backups" "${BOT_INSTALL_PATH}/logs/config_backups" \
@@ -1914,7 +1923,7 @@ install_node_logic() {
     if [ -n "$AUTO_AGENT_URL" ]; then AGENT_URL="$AUTO_AGENT_URL"; fi
     if [ -n "$AUTO_NODE_TOKEN" ]; then NODE_TOKEN="$AUTO_NODE_TOKEN"; fi
     common_install_steps
-    setup_repo_and_dirs "root"
+    if ! setup_repo_and_dirs "root"; then FORCE_NODE_MODE="no"; return 1; fi
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
     run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
     run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
@@ -2207,6 +2216,13 @@ EOF
     fi
 
     msg_success "Agent updated."
+    local node_update_runner=()
+    if [ "$current_mode" != "docker" ] && [ -n "$exec_cmd" ]; then
+        node_update_runner=(sudo -u "$SERVICE_USER")
+    fi
+    if [ -t 0 ] && ! "${node_update_runner[@]}" /usr/local/bin/tgcp-bot update-nodes --branch "$GIT_BRANCH"; then
+        msg_warning "Could not offer a node update. Try: tgcp-bot update-nodes --branch $GIT_BRANCH"
+    fi
 }
 
 check_agent_monitoring_status() {
@@ -2581,7 +2597,7 @@ main_menu() {
 }
 
 if [ "$(id -u)" -ne 0 ]; then msg_error "Root required."; exit 1; fi
-if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN" ]; then install_node_logic; exit 0; fi
+if [ "$AUTO_MODE" = true ] && [ -n "$AUTO_AGENT_URL" ] && [ -n "$AUTO_NODE_TOKEN" ]; then install_node_logic; exit $?; fi
 
 check_integrity
 if [ "$INSTALL_TYPE" == "NONE" ]; then
