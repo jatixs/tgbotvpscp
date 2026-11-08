@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.2-blue?style=for-the-badge" alt="Version 1.27.2"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-97-purple?style=for-the-badge" alt="Build 97"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.27.3-blue?style=for-the-badge" alt="Version 1.27.3"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-98-purple?style=for-the-badge" alt="Build 98"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%233670A0.svg?style=for-the-badge&logo=python&logoColor=ffdd54" alt="Python"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/stargazers"><img src="https://img.shields.io/github/stars/jatixs/tgbotvpscp?style=for-the-badge&logo=github&color=gold" alt="GitHub Stars"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/releases"><img src="https://img.shields.io/github/downloads/jatixs/tgbotvpscp/total?style=for-the-badge&logo=github&color=blue" alt="Downloads"/></a>
@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <b>v1.27.2</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.27.3</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)
 </p>
 
@@ -665,8 +665,8 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.27.2 (Build 97)<br>
-  <b>Release Date:</b> October 31, 2026<br>
+  <b>Version:</b> 1.27.3 (Build 98)<br>
+  <b>Release Date:</b> November 8, 2026<br>
   <b>License:</b> GPL-3.0 license<br>
   <b>Status:</b> Release<br>
   <br>
