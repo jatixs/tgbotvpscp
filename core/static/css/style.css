@@ -967,6 +967,7 @@ html.dark .header-billing-btn[data-status="gray"] {
 /* Equal mobile columns keep the divider at the panel's center. */
 @media (max-width: 484px) {
 	#networkBadgesContainer {
+		--network-divider-color: rgba(15, 23, 42, 0.1);
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
 		width: 100% !important;
@@ -979,6 +980,7 @@ html.dark .header-billing-btn[data-status="gray"] {
 	}
 
 	html.dark #networkBadgesContainer {
+		--network-divider-color: rgba(255, 255, 255, 0.08);
 		background-color: rgba(0, 0, 0, 0.2) !important;
 		border-color: rgba(255, 255, 255, 0.05) !important;
 	}
@@ -1001,7 +1003,7 @@ html.dark .header-billing-btn[data-status="gray"] {
 		width: 1px !important;
 		min-width: 1px !important;
 		height: 1.25rem !important;
-		background-color: #d1d5db !important;
+		background-color: var(--network-divider-color) !important;
 		margin: 0 !important;
 	}
 
@@ -1026,22 +1028,45 @@ html.dark .header-billing-btn[data-status="gray"] {
 	}
 
 	#networkBadgesContainer .chart-range {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
 		grid-column: 1 / -1;
 		grid-row: 1;
-		justify-content: center;
+		align-items: center;
+		gap: 0;
 		padding-bottom: 0.25rem;
-		border-bottom: 1px solid #e5e7eb;
+		border-bottom: 1px solid var(--network-divider-color);
 	}
 
-	html.dark #networkBadgesContainer .chart-range {
-		border-bottom-color: rgba(255, 255, 255, 0.08);
+	#networkBadgesContainer .chart-range::after {
+		content: '';
+		grid-column: 2;
+		grid-row: 1;
+		width: 1px;
+		height: 1.25rem;
+		background-color: var(--network-divider-color);
+		pointer-events: none;
 	}
 
 	#networkBadgesContainer .chart-range-btn {
+		grid-column: 3;
+		grid-row: 1;
+		justify-self: center;
+		min-width: 0;
+		max-width: 100%;
 		background: transparent;
 		border-color: transparent;
 		box-shadow: none;
 		padding: 0 0.4rem 0 0.45rem;
+	}
+
+	#networkBadgesContainer .chart-interface-button {
+		grid-column: 1;
+	}
+
+	#networkBadgesContainer .chart-range:empty,
+	.dashboard-block[data-current-size="small"] #networkBadgesContainer .chart-range {
+		display: none;
 	}
 }
 
@@ -2040,6 +2065,7 @@ html.amoled #log-loader {
     position: relative;
     flex-shrink: 0;
     display: inline-flex;
+    gap: 0.25rem;
 }
 
 .chart-range:empty {
@@ -2094,6 +2120,30 @@ html.amoled #log-loader {
     border-color: rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.05);
     color: #d1d5db;
+}
+
+.chart-interface-button {
+    max-width: 8rem;
+}
+
+.chart-interface-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chart-interface-options {
+    max-height: min(20rem, 60vh);
+    overflow-y: auto;
+    max-width: 22rem;
+    padding: 0.2rem;
+}
+
+.chart-interface-options .chart-range-chip {
+    height: auto;
+    min-height: 1.7rem;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .dark .chart-range-btn:hover,

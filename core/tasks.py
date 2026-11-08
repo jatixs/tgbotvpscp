@@ -163,7 +163,12 @@ async def agent_monitor() -> None:
             cpu = psutil.cpu_percent(interval=None)
             mem = psutil.virtual_memory()
             ram_pct = round((mem.total - mem.available) / mem.total * 100, 1) if mem.total > 0 else 0
-            net = psutil.net_io_counters()
+            interfaces = {
+                name: (net.bytes_recv, net.bytes_sent)
+                for name, net in psutil.net_io_counters(pernic=True).items()
+            }
+            rx_bytes = sum(rx for rx, _ in interfaces.values())
+            tx_bytes = sum(tx for _, tx in interfaces.values())
             disk = psutil.disk_usage('/')
             disk_pct = disk.percent
             AGENT_HISTORY.append(
@@ -172,8 +177,8 @@ async def agent_monitor() -> None:
                     "c": cpu,
                     "r": ram_pct,
                     "d": disk_pct,
-                    "rx": net.bytes_recv,
-                    "tx": net.bytes_sent,
+                    "rx": rx_bytes,
+                    "tx": tx_bytes,
                 }
             )
             metrics_history.record_sample(
@@ -181,8 +186,10 @@ async def agent_monitor() -> None:
                 cpu=cpu,
                 ram=ram_pct,
                 disk=disk_pct,
-                rx_bytes=net.bytes_recv,
-                tx_bytes=net.bytes_sent,
+                rx_bytes=rx_bytes,
+                tx_bytes=tx_bytes,
+                interfaces=interfaces,
+                ping=shared_state.AGENT_PING_CACHE,
             )
 
             # Accumulate online time

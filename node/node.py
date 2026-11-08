@@ -802,7 +802,12 @@ def _do_icmp_ping(target_ip="8.8.8.8"):
 def get_system_stats():
     global _HEARTBEAT_NET_STATS
     try:
-        net = psutil.net_io_counters()
+        interfaces = {
+            name: (net.bytes_recv, net.bytes_sent)
+            for name, net in psutil.net_io_counters(pernic=True).items()
+        }
+        rx_bytes = sum(rx for rx, _ in interfaces.values())
+        tx_bytes = sum(tx for _, tx in interfaces.values())
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         freq = psutil.cpu_freq()
@@ -819,16 +824,16 @@ def get_system_stats():
             prev_time = _HEARTBEAT_NET_STATS.get('time', 0)
             dt = now - prev_time
             if 1 <= dt <= 120:
-                net_rx_speed = max(0.0, (net.bytes_recv - prev_rx) * 8 / 1024 / dt)
-                net_tx_speed = max(0.0, (net.bytes_sent - prev_tx) * 8 / 1024 / dt)
+                net_rx_speed = max(0.0, (rx_bytes - prev_rx) * 8 / 1024 / dt)
+                net_tx_speed = max(0.0, (tx_bytes - prev_tx) * 8 / 1024 / dt)
             else:
                 # Keep previous speed if interval is abnormal
                 net_rx_speed = _HEARTBEAT_NET_STATS.get('last_rx_speed', 0.0)
                 net_tx_speed = _HEARTBEAT_NET_STATS.get('last_tx_speed', 0.0)
         
         _HEARTBEAT_NET_STATS = {
-            'rx': net.bytes_recv,
-            'tx': net.bytes_sent,
+            'rx': rx_bytes,
+            'tx': tx_bytes,
             'time': now,
             'last_rx_speed': net_rx_speed,
             'last_tx_speed': net_tx_speed
@@ -907,8 +912,9 @@ def get_system_stats():
             "disk_total": disk.total,
             "disk_free": disk.free,
             "cpu_freq": freq.current if freq else 0,
-            "net_rx": net.bytes_recv,
-            "net_tx": net.bytes_sent,
+            "net_rx": rx_bytes,
+            "net_tx": tx_bytes,
+            "interface_counters": interfaces,
             "net_rx_speed": round(net_rx_speed, 2),
             "net_tx_speed": round(net_tx_speed, 2),
             "uptime": int(time.time() - psutil.boot_time()),

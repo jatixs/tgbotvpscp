@@ -730,7 +730,8 @@ function startModalChartRanges() {
         mount: '[data-chart-range="modalNetChart"]',
         canvasId: 'modalNetChart',
         getSource,
-        getValues: point => [point.rx, point.tx],
+        network: true,
+        getValues: point => [point.rx, point.tx, point.ping],
         render: (series, animate) => updateModalCharts(series, 'net', animate)
     }).start();
 }
@@ -930,7 +931,7 @@ function updateNodeModal(data) {
 function updateModalCharts(series, which, animate = true) {
     const canvas = document.getElementById(which === 'res' ? 'modalResChart' : 'modalNetChart');
     if (!canvas) return;
-    if (!series || series.points.length < 2) {
+    if (!series || (which === 'net' ? !series.labels.length : series.points.length < 2)) {
         const chart = which === 'res' ? modalResChart : modalNetChart;
         if (chart) {
             chart.data.labels = [];
@@ -1038,14 +1039,17 @@ function updateModalCharts(series, which, animate = true) {
             modalNetChart.data.labels = labels;
             modalNetChart.data.datasets[0].data = rxData;
             modalNetChart.data.datasets[1].data = txData;
+            modalNetChart.data.datasets[2].data = series.ping;
             modalNetChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
 
             modalNetChart.data.datasets[0].backgroundColor = getGradient(netCtx, 'rgb(34, 197, 94)');
-            modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(239, 68, 68)');
+            modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(59, 130, 246)');
 
             modalNetChart.options.scales.x.ticks.color = tickColor;
             modalNetChart.options.scales.y.grid.color = gridColor;
             modalNetChart.options.scales.y.ticks.color = tickColor;
+            modalNetChart.options.scales.ping.ticks.color = tickColor;
+            modalNetChart.options.scales.ping.title.color = tickColor;
             modalNetChart.options.plugins.legend.labels.color = tickColor;
         };
 
@@ -1053,7 +1057,7 @@ function updateModalCharts(series, which, animate = true) {
             window.updateChartWithLiveData(modalNetChart, applyModalNetChartData, 'modalNetChart', animate);
         } else {
             applyModalNetChartData();
-            modalNetChart.update(document.documentElement.classList.contains('perf-mode') ? 'none' : undefined);
+            modalNetChart.update(animate && !document.documentElement.classList.contains('perf-mode') ? undefined : 'none');
             if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
         }
     } else {
@@ -1062,8 +1066,9 @@ function updateModalCharts(series, which, animate = true) {
             data: {
                 labels,
                 datasets: [
-                    { label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ', data: rxData, borderColor: '#22c55e', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
-                    { label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ', data: txData, borderColor: '#ef4444', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(239, 68, 68)'), fill: true }
+                    { label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ', data: rxData, yAxisID: 'y', borderColor: '#22c55e', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
+                    { label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ', data: txData, yAxisID: 'y', borderColor: '#3b82f6', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(59, 130, 246)'), fill: true },
+                    window.createPingDataset(series.ping)
                 ]
             },
             options: {
@@ -1082,18 +1087,20 @@ function updateModalCharts(series, which, animate = true) {
                         mode: 'index',
                         intersect: false,
                         callbacks: {
-                            label: function(c) { return c.dataset.label + ': ' + formatSpeed(c.raw); }
+                            label: function(c) { return c.dataset.label + ': ' + (c.dataset.yAxisID === 'ping' ? c.raw + ' ms' : formatSpeed(c.raw)); }
                         }
                     }
                 },
                 scales: {
+                    ping: window.createPingScale(tickColor),
                     x: { 
                         min: series.minIndex,
                         max: series.maxIndex,
                         grid: { display: false },
                         ticks: { display: !isMobile, maxTicksLimit: isMobile ? 3 : 6, color: tickColor }
                     },
-                    y: { 
+                    y: {
+                        position: 'right',
                         beginAtZero: true,
                         grid: { color: gridColor },
                         ticks: { 
@@ -1103,7 +1110,7 @@ function updateModalCharts(series, which, animate = true) {
                         }
                     }
                 },
-                elements: { line: { tension: 0.4 }, point: { radius: 0, hitRadius: 10 } }
+                elements: { line: { tension: 0 }, point: { radius: window.networkHistoryPointRadius, hitRadius: 10 } }
             }
         });
         modalNetChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };

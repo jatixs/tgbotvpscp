@@ -279,6 +279,8 @@ def _record_node_metrics(node_id: int, prev_stats: dict, prev_last_seen: float, 
         disk=_coerce_float(stats.get("disk")),
         rx_rate=rx_rate,
         tx_rate=tx_rate,
+        interfaces=stats.get("interface_counters"),
+        ping=stats.get("ping"),
         t=now,
     )
 

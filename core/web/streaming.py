@@ -407,6 +407,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                 from modules import traffic as traffic_module
                 rx_total, tx_total = traffic_module.get_current_traffic_total()
                 net_if = psutil.net_io_counters(pernic=True)
+                network_sample_time = time.time()
                 mem = psutil.virtual_memory()
                 disk = psutil.disk_usage(get_host_path("/"))
                 freq = psutil.cpu_freq()
@@ -427,6 +428,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                         "process_ram": proc_ram,
                         "process_disk": proc_disk,
                         "interfaces": {key: value._asdict() for key, value in net_if.items()},
+                        "network_sample_time": network_sample_time,
                     }
                 )
             except Exception:
@@ -1488,6 +1490,11 @@ async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
     if range_key not in metrics_history.RANGES:
         return web.Response(status=400)
 
+    network = request.query.get("metric") == "network"
+    interface = request.query.get("interface", "")
+    if network and (len(interface) > 128 or "\0" in interface):
+        return web.Response(status=400)
+
     source_kind = request.query.get("source", "agent")
     if source_kind == "agent":
         source = metrics_history.AGENT_SOURCE
@@ -1540,8 +1547,15 @@ async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
                 break
 
             await metrics_history.flush_pending()
-            series = await metrics_history.query_series(source, range_key, last_t)
+            if network:
+                # Revisit the previous bucket in case a late sample changed its peak.
+                tier = metrics_history.RANGES[range_key][1]
+                since = last_t - tier if last_t is not None else None
+                series = await metrics_history.query_network_series(source, range_key, interface, since)
+            else:
+                series = await metrics_history.query_series(source, range_key, last_t)
             points = series["points"]
+            data = {"points": points, "interfaces": series["interfaces"]} if network else points
             payload = {
                 "source": source_kind,
                 "range": series["range"],
@@ -1550,7 +1564,7 @@ async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
                 "now": series["now"],
                 "full": last_t is None,
                 # The last bucket is re-sent on the next tick because it may still be filling up.
-                "data": encrypt_for_web(json.dumps(points, separators=(",", ":"))),
+                "data": encrypt_for_web(json.dumps(data, separators=(",", ":"))),
             }
             if points:
                 last_t = int(points[-1]["t"])

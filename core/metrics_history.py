@@ -1,19 +1,20 @@
 """
 Metrics history (CPU/RAM/disk/network) for the agent and nodes, powering time-range charts.
 
-Tiered storage pattern similar to RRD: raw samples live ~1 hour, 1-minute
-buckets last 24 hours, and 5-minute buckets last 1 week. Network speed is stored in bytes/sec.
+Raw samples live ~1 hour, 1-minute buckets last 24 hours, and 5-minute buckets
+last 1 week. Network charts use the measured RX/TX peaks in each bucket.
 """
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections import defaultdict
 from typing import Any, Final
 
 from tortoise.transactions import in_transaction
 
-from .models import MetricSample
+from .models import MetricSample, NetworkSample, PingSample
 
 AGENT_SOURCE: Final[str] = "agent"
 
@@ -64,7 +65,10 @@ MINUTE_REBUILD_WINDOW: Final[int] = 3 * 60
 FIVE_MIN_REBUILD_WINDOW: Final[int] = 15 * 60
 
 _pending: list[dict[str, Any]] = []
+_pending_network: list[NetworkSample] = []
+_pending_ping: list[PingSample] = []
 _last_counters: dict[str, tuple[float, float, float]] = {}
+_last_interfaces: dict[str, tuple[float, dict[str, tuple[int, int]]]] = {}
 
 
 def node_source(node_id: int) -> str:
@@ -85,6 +89,36 @@ def _rate_from_counters(source: str, now: float, rx_bytes: float, tx_bytes: floa
     return (rx_bytes - prev_rx) / dt, (tx_bytes - prev_tx) / dt
 
 
+def _record_interfaces(source: str, now: float, counters: Any) -> None:
+    current = {}
+    if isinstance(counters, dict):
+        for name, pair in counters.items():
+            if not isinstance(name, str) or not 0 < len(name) <= 128 or "\0" in name:
+                continue
+            if isinstance(pair, (list, tuple)) and len(pair) == 2 and all(
+                type(value) is int and 0 <= value < 2**64 for value in pair
+            ):
+                current[name] = tuple(pair)
+
+    previous = _last_interfaces.pop(source, None)
+    if current:
+        _last_interfaces[source] = (now, current)
+    if not previous:
+        return
+    previous_t, previous_counters = previous
+    dt = now - previous_t
+    if not 0 < dt <= 120:
+        return
+
+    for name, (rx, tx) in current.items():
+        old = previous_counters.get(name)
+        if old and rx >= old[0] and tx >= old[1]:
+            _pending_network.append(NetworkSample(
+                source=source, interface=name, res=RES_RAW, t=int(now),
+                rx=(rx - old[0]) / dt, tx=(tx - old[1]) / dt,
+            ))
+
+
 def record_sample(
     source: str,
     *,
@@ -95,10 +129,20 @@ def record_sample(
     tx_bytes: float | None = None,
     rx_rate: float | None = None,
     tx_rate: float | None = None,
+    interfaces: Any = None,
+    ping: Any = None,
     t: float | None = None,
 ) -> None:
-    """Queue one raw sample. Pass counters (rx_bytes/tx_bytes) or ready rates in bytes/s."""
+    """Queue a raw sample with total counters or rates and optional per-interface byte counters."""
     now = float(t if t is not None else time.time())
+    try:
+        latency = float(ping) if not isinstance(ping, bool) else None
+    except (TypeError, ValueError):
+        latency = None
+    if latency is not None and (not math.isfinite(latency) or latency < 0):
+        latency = None
+    _pending_ping.append(PingSample(source=source, t=int(now), ping=latency))
+    _record_interfaces(source, now, interfaces)
     if rx_rate is None or tx_rate is None:
         if rx_bytes is None or tx_bytes is None:
             rx_rate, tx_rate = 0.0, 0.0
@@ -123,14 +167,24 @@ def record_sample(
 
 
 async def flush_pending() -> int:
-    if not _pending:
+    if not _pending and not _pending_network and not _pending_ping:
         return 0
     batch = _pending[:]
-    del _pending[: len(batch)]
+    network_batch = _pending_network[:]
+    ping_batch = _pending_ping[:]
+    _pending.clear()
+    _pending_network.clear()
+    _pending_ping.clear()
     try:
-        await MetricSample.bulk_create([MetricSample(**row) for row in batch])
+        async with in_transaction() as conn:
+            if batch:
+                await MetricSample.bulk_create([MetricSample(**row) for row in batch], using_db=conn)
+            if network_batch:
+                await NetworkSample.bulk_create(network_batch, using_db=conn)
+            if ping_batch:
+                await PingSample.bulk_create(ping_batch, using_db=conn)
     except Exception:
-        logging.debug("Metrics flush failed, %d samples dropped", len(batch), exc_info=True)
+        logging.debug("Metrics flush failed, %d samples dropped", len(batch) + len(network_batch) + len(ping_batch), exc_info=True)
         return 0
     return len(batch)
 
@@ -172,8 +226,39 @@ async def _rebuild_tier(target_res: int, source_res: int, now: int, window: int)
         await MetricSample.bulk_create(new_rows)
 
 
+async def _rebuild_network_tier(target_res: int, source_res: int, now: int, window: int) -> None:
+    # Keep the oldest stored bucket if the source tier only contains part of it.
+    start = (now - window + target_res - 1) // target_res * target_res
+    async with in_transaction() as conn:
+        await NetworkSample.filter(res=target_res, t__gte=start).using_db(conn).delete()
+        # Raw total traffic already lives in metric_samples. Only interface rates need new raw rows.
+        await conn.execute_query(
+            """
+            INSERT INTO network_samples (source, interface, res, t, rx, tx)
+            SELECT source, interface, ?, (t / ?) * ?, MAX(rx), MAX(tx)
+            FROM (
+                SELECT source, interface, t, rx, tx FROM network_samples WHERE res = ? AND t >= ?
+                UNION ALL
+                SELECT source, '', t, rx, tx FROM metric_samples WHERE ? = 0 AND res = 0 AND t >= ?
+            )
+            GROUP BY source, interface, t / ?
+            """,
+            [target_res, target_res, target_res, source_res, start, source_res, start, target_res],
+        )
+        await PingSample.filter(res=target_res, t__gte=start).using_db(conn).delete()
+        await conn.execute_query(
+            """
+            INSERT INTO ping_samples (source, res, t, ping)
+            SELECT source, ?, (t / ?) * ?, MAX(ping)
+            FROM ping_samples WHERE res = ? AND t >= ?
+            GROUP BY source, t / ?
+            """,
+            [target_res, target_res, target_res, source_res, start, target_res],
+        )
+
+
 async def aggregate(now: float | None = None, *, full: bool = False) -> None:
-    """Roll raw samples into minute buckets and minute buckets into 5-minute ones.
+    """Roll samples into 1- and 5-minute resource averages and network peaks.
 
     ``full`` rebuilds everything still covered by the lower tier's retention —
     used once after startup so samples left unaggregated by a shutdown are not lost.
@@ -183,17 +268,28 @@ async def aggregate(now: float | None = None, *, full: bool = False) -> None:
     five_min_window = RETENTION[RES_MINUTE] if full else FIVE_MIN_REBUILD_WINDOW
     await _rebuild_tier(RES_MINUTE, RES_RAW, now_i, minute_window)
     await _rebuild_tier(RES_FIVE_MIN, RES_MINUTE, now_i, five_min_window)
+    await _rebuild_network_tier(RES_MINUTE, RES_RAW, now_i, minute_window)
+    await _rebuild_network_tier(RES_FIVE_MIN, RES_MINUTE, now_i, five_min_window)
 
 
 async def apply_retention(now: float | None = None) -> None:
     now_i = int(now if now is not None else time.time())
     for res, keep in RETENTION.items():
         await MetricSample.filter(res=res, t__lt=now_i - keep).delete()
+        await NetworkSample.filter(res=res, t__lt=now_i - keep).delete()
+        await PingSample.filter(res=res, t__lt=now_i - keep).delete()
 
 
 async def delete_source(source: str) -> None:
     _last_counters.pop(source, None)
-    await MetricSample.filter(source=source).delete()
+    _last_interfaces.pop(source, None)
+    _pending[:] = [row for row in _pending if row["source"] != source]
+    _pending_network[:] = [row for row in _pending_network if row.source != source]
+    _pending_ping[:] = [row for row in _pending_ping if row.source != source]
+    async with in_transaction() as conn:
+        await MetricSample.filter(source=source).using_db(conn).delete()
+        await NetworkSample.filter(source=source).using_db(conn).delete()
+        await PingSample.filter(source=source).using_db(conn).delete()
 
 
 def _bucketize(rows: list[tuple[Any, ...]], step: int) -> list[tuple[Any, ...]]:
@@ -232,6 +328,33 @@ async def query_series(source: str, range_key: str, since: int | None = None) ->
         for row in rows
     ]
     return {"range": range_key, "step": step, "span": span, "now": now, "points": points}
+
+
+async def query_network_series(source: str, range_key: str, interface: str, since: int | None = None) -> dict[str, Any]:
+    span, tier, _ = RANGES[range_key]
+    now = int(time.time())
+    start = now - span
+    if span >= 3 * 86400:
+        start = start // RES_FIVE_MIN * RES_FIVE_MIN
+    samples = NetworkSample.filter(source=source, res=tier, t__gte=start)
+    interfaces = await samples.exclude(interface="").distinct().order_by("interface").values_list("interface", flat=True)
+    if since is not None:
+        start = max(start, since)
+
+    model = NetworkSample if tier or interface else MetricSample
+    selected = model.filter(source=source, res=tier, t__gte=start)
+    if model is NetworkSample:
+        selected = selected.filter(interface=interface)
+    rows = await selected.order_by("t").values_list("t", "rx", "tx")
+    points = {t: {"t": t, "rx": round(rx), "tx": round(tx), "ping": None} for t, rx, tx in rows}
+    ping_rows = await PingSample.filter(source=source, res=tier, t__gte=start).order_by("t").values_list("t", "ping")
+    for t, ping in ping_rows:
+        point = points.setdefault(t, {"t": t, "rx": None, "tx": None})
+        point["ping"] = round(ping, 2) if ping is not None else None
+    return {
+        "range": range_key, "step": tier, "span": span, "now": now, "interfaces": interfaces,
+        "points": [points[t] for t in sorted(points)],
+    }
 
 
 async def maintenance_loop() -> None:
