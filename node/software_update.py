@@ -2,7 +2,7 @@
 import logging
 import os
 import re
-import subprocess
+import subprocess  # nosec B404
 import threading
 import time
 from pathlib import Path
@@ -28,19 +28,25 @@ class ClientUpdater:
             self.commit = self._git("rev-parse", "HEAD").decode().strip()
             if not COMMIT.fullmatch(self.commit) or not hasattr(os, "geteuid") or os.geteuid() != 0:
                 return
-            main_pid = self._run("systemctl", "show", "--property=MainPID", "--value", SERVICE)
+            main_pid = self._systemctl("show", "--property=MainPID", "--value")
             self.supported = main_pid.decode().strip() == str(os.getpid())
         except (OSError, subprocess.SubprocessError):
             logging.debug("Node client updates are unavailable", exc_info=True)
 
-    def _run(self, *args, timeout=30):
-        return subprocess.run(
-            args, cwd=self.root, stdin=subprocess.DEVNULL, capture_output=True,
+    def _git(self, *args, timeout=30):
+        # The update path validates the branch and commit before passing them as Git arguments.
+        return subprocess.run(  # nosec B603
+            ["/usr/bin/git", *args], cwd=self.root, stdin=subprocess.DEVNULL,
+            shell=False, capture_output=True,
             timeout=timeout, check=True, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         ).stdout
 
-    def _git(self, *args, timeout=30):
-        return self._run("git", *args, timeout=timeout)
+    def _systemctl(self, *args):
+        # Callers use fixed show/restart options for this service.
+        return subprocess.run(  # nosec B603
+            ["/usr/bin/systemctl", *args, SERVICE], cwd=self.root, stdin=subprocess.DEVNULL,
+            shell=False, capture_output=True, timeout=30, check=True,
+        ).stdout
 
     def report(self):
         return {
@@ -85,7 +91,7 @@ class ClientUpdater:
             self._git("checkout", "--detach", "--no-overwrite-ignore", commit)
             try:
                 self.restarting = True
-                self._run("systemctl", "--no-block", "restart", SERVICE)
+                self._systemctl("--no-block", "restart")
             except (OSError, subprocess.SubprocessError):
                 self.restarting = False
                 self._git("checkout", "--detach", "--no-overwrite-ignore", self.commit)

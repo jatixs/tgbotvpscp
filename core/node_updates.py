@@ -85,7 +85,7 @@ async def prepare(user_id: int, branch: str):
         if plan.expires_at <= now or plan.user_id == user_id:
             del _plans[key]
     if not eligible:
-        return {"token": "", "nodes": [], "skipped": skipped}
+        return {"nodes": [], "skipped": skipped}
     token = secrets.token_urlsafe(16)
     _plans[token] = UpdatePlan(user_id, branch, tuple(node["id"] for node in eligible), now + PLAN_TTL)
     return {"token": token, "nodes": eligible, "skipped": skipped}

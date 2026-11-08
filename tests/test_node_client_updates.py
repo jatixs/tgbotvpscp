@@ -1,8 +1,10 @@
 import asyncio
 import importlib.util
 import re
+import runpy
+import secrets
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import sys
 import tempfile
 import time
@@ -16,6 +18,7 @@ from node import software_update
 ROOT = Path(__file__).resolve().parents[1]
 OLD = "a" * 40
 NEW = "b" * 40
+TEST_GIT = shutil.which("git")
 
 
 def load_subject(name, path, dependencies):
@@ -48,6 +51,11 @@ class ConfirmationTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(self.subject.time, "monotonic", return_value=1 + self.subject.PLAN_TTL):
             self.assertIsNone(self.subject.consume(token, 1, "main"))
 
+    async def test_no_token_is_issued_without_eligible_nodes(self):
+        self.subject.eligible_nodes.return_value = ([], 2)
+        plan = await self.subject.prepare(1, "main")
+        self.assertEqual(plan, {"nodes": [], "skipped": 2})
+
     async def test_heartbeat_only_completes_update_on_running_target(self):
         subject = self.subject
         report = {"commit": OLD, "supported": True}
@@ -72,12 +80,15 @@ class AgentUpdateTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
+        self.confirmation = secrets.token_urlsafe(16)
         self.node_updates = SimpleNamespace(
             COMMIT=re.compile(r"[0-9a-f]{40}"), BRANCH=re.compile(r"[A-Za-z0-9._/-]{1,255}"),
             agent_update_lock=asyncio.Lock(),
             read_agent_commit=AsyncMock(return_value=OLD),
             queue_updates=AsyncMock(return_value=1),
-            prepare=AsyncMock(return_value={"token": "ticket", "nodes": [{"id": 8, "name": "<Node>"}], "skipped": 0}),
+            prepare=AsyncMock(return_value={
+                "token": self.confirmation, "nodes": [{"id": 8, "name": "<Node>"}], "skipped": 0,
+            }),
             consume=Mock(),
         )
         self.config = SimpleNamespace(
@@ -117,15 +128,15 @@ class AgentUpdateTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("&lt;Node&gt;", preview.message.edit_text.call_args.args[0])
 
         self.node_updates.consume.return_value = None
-        await self.subject.run_bot_update(self.callback("do_bot_update_nodes:ticket"))
+        await self.subject.run_bot_update(self.callback(f"do_bot_update_nodes:{self.confirmation}"))
         self.subject.execute_bot_update.assert_not_awaited()
 
         self.node_updates.consume.return_value = SimpleNamespace(branch="main", nodes=(8,))
-        await self.subject.run_bot_update(self.callback("do_bot_update_nodes:ticket", user_id=2))
+        await self.subject.run_bot_update(self.callback(f"do_bot_update_nodes:{self.confirmation}", user_id=2))
         self.subject.execute_bot_update.assert_not_awaited()
-        await self.subject.run_bot_update(self.callback("do_bot_update_agent:ticket"))
+        await self.subject.run_bot_update(self.callback(f"do_bot_update_agent:{self.confirmation}"))
         self.assertEqual(self.subject.execute_bot_update.call_args.kwargs["node_ids"], ())
-        await self.subject.run_bot_update(self.callback("do_bot_update_nodes:ticket"))
+        await self.subject.run_bot_update(self.callback(f"do_bot_update_nodes:{self.confirmation}"))
         self.assertEqual(self.subject.execute_bot_update.call_args.kwargs["node_ids"], (8,))
 
     async def test_failed_agent_dependencies_do_not_queue_nodes(self):
@@ -189,7 +200,7 @@ class AgentUpdateTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.subject.execute_bot_update.call_args.kwargs["node_ids"], ())
             self.subject.execute_bot_update.reset_mock()
 
-            payload.return_value["node_confirmation"] = "ticket"
+            payload.return_value["node_confirmation"] = self.confirmation
             self.assertEqual((await api.api_run_update(admin)).status, 403)
             self.node_updates.consume.return_value = None
             self.assertEqual((await api.api_run_update(owner)).status, 409)
@@ -227,17 +238,17 @@ class NodeUpdateCliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = subprocess.run(
-                [sys.executable, "-B", str(root / "manage.py"), "update-nodes"],
-                cwd=root, input="n\n", capture_output=True, text=True, timeout=15,
-            )
+            with patch.dict(sys.modules), patch.object(sys, "path", [str(root), *sys.path]):
+                for name in ("core", "core.config", "core.node_updates", "core.nodes_db", "core.i18n", "tortoise"):
+                    sys.modules.pop(name, None)
+                cli = runpy.run_path(str(root / "manage.py"))
+                with patch("builtins.input", return_value="n") as confirm, patch("builtins.print"):
+                    self.assertEqual(cli["main"](["update-nodes"]), 0)
 
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("node_client_update_cli_prompt", result.stdout)
-        self.assertNotIn("RuntimeWarning", result.stderr)
+        confirm.assert_called_once_with("node_client_update_cli_prompt")
 
 
-@unittest.skipUnless(shutil.which("git"), "Git is required to exercise the node checkout")
+@unittest.skipUnless(TEST_GIT, "Git is required to exercise the node checkout")
 class NodeCheckoutTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -263,7 +274,11 @@ class NodeCheckoutTests(unittest.TestCase):
 
     @staticmethod
     def git(path, *args):
-        return subprocess.check_output(["git", "-C", str(path), *args], stderr=subprocess.PIPE, text=True).strip()
+        # The executable is resolved on the test host. Arguments come from the temporary repo fixture.
+        return subprocess.check_output(  # nosec B603, B607
+            ["git", "-C", str(path), *args], executable=TEST_GIT, shell=False,
+            stderr=subprocess.PIPE, text=True,
+        ).strip()
 
     def commit(self, message):
         self.git(self.origin, "add", ".")
@@ -271,21 +286,30 @@ class NodeCheckoutTests(unittest.TestCase):
         return self.git(self.origin, "rev-parse", "HEAD")
 
     def updater(self, *, fail_restart=False):
-        class LocalUpdater(software_update.ClientUpdater):
-            restarts = 0
+        real_run = subprocess.run
+        self.restarts = 0
 
-            def _run(self, *args, timeout=30):
-                if args[:2] == ("systemctl", "show"):
-                    return str(software_update.os.getpid()).encode()
-                if args[0] == "systemctl":
-                    self.restarts += 1
-                    if fail_restart:
-                        raise subprocess.CalledProcessError(1, args)
-                    return b""
-                return super()._run(*args, timeout=timeout)
+        def run(argv, *args, **kwargs):
+            if argv[0] == "/usr/bin/systemctl":
+                self.assertFalse(kwargs["shell"])
+                self.assertEqual(argv[-1], software_update.SERVICE)
+                if argv[1] == "show":
+                    return SimpleNamespace(stdout=str(software_update.os.getpid()).encode())
+                self.assertEqual(argv[1:-1], ["--no-block", "restart"])
+                self.restarts += 1
+                if fail_restart:
+                    raise subprocess.CalledProcessError(1, argv)
+                return SimpleNamespace(stdout=b"")
+            if argv[0] == "/usr/bin/git":
+                self.assertFalse(kwargs["shell"])
+                argv = [TEST_GIT, *argv[1:]]
+            return real_run(argv, *args, **kwargs)
 
+        patcher = patch.object(software_update.subprocess, "run", side_effect=run)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         with patch.object(software_update.os, "geteuid", return_value=0, create=True):
-            return LocalUpdater(str(self.checkout))
+            return software_update.ClientUpdater(str(self.checkout))
 
     def update(self, updater, commit):
         with patch.object(software_update, "REPOSITORY", self.origin.as_uri()):
@@ -304,7 +328,7 @@ class NodeCheckoutTests(unittest.TestCase):
         self.assertEqual((self.checkout / ".env").read_text(), "MODE=node\n")
         self.assertEqual((self.checkout / "config" / "state").read_text(), "state")
         self.assertFalse((self.checkout / "excluded.py").exists())
-        self.assertEqual(updater.restarts, 1)
+        self.assertEqual(self.restarts, 1)
         self.assertTrue(updater.report()["busy"])
 
     def test_failed_restart_restores_previous_commit(self):
@@ -325,7 +349,7 @@ class NodeCheckoutTests(unittest.TestCase):
         with self.assertLogs(level="ERROR"):
             self.update(updater, other)
         self.assertEqual(self.git(self.checkout, "rev-parse", "HEAD"), updater.commit)
-        self.assertEqual(updater.restarts, 0)
+        self.assertEqual(self.restarts, 0)
 
 
 if __name__ == "__main__":
