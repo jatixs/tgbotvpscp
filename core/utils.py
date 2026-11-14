@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 import urllib.parse
 from datetime import datetime
@@ -20,6 +21,7 @@ from typing import Any
 import aiohttp
 import requests
 from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup
 
 try:
@@ -818,6 +820,16 @@ async def detect_xray_client():
 async def initial_restart_check(bot: Bot):
     if os.path.exists(RESTART_FLAG_FILE):
         try:
+            # Clean up pre-update backup directories if present after successful update
+            for b_name in [".backups", ".backup"]:
+                b_path = os.path.join(config.BASE_DIR, b_name)
+                if os.path.isdir(b_path):
+                    try:
+                        shutil.rmtree(b_path, ignore_errors=True)
+                        logging.info("Removed leftover update backup directory: %s", b_path)
+                    except Exception as exc:
+                        logging.warning("Failed to remove %s: %s", b_path, exc)
+
             with open(RESTART_FLAG_FILE, "r") as f:
                 content = f.read().strip()
             if ":" in content and content != "web:admin":
@@ -852,6 +864,96 @@ async def initial_reboot_check(bot: Bot):
         finally:
             if os.path.exists(REBOOT_FLAG_FILE):
                 os.remove(REBOOT_FLAG_FILE)
+
+
+async def safe_delete_webhook(
+    bot: Bot,
+    drop_pending_updates: bool = True,
+    max_retries: int = 5,
+    request_timeout: int = 30,
+    initial_delay: float = 2.0,
+) -> bool:
+    """Safely attempt to delete Telegram webhook with retries.
+
+    Protects against transient network timeouts, rate-limits, or temporary
+    Telegram API outages during bot startup so the application doesn't crash.
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            logging.info("Checking/clearing Telegram webhook (attempt %d/%d)...", attempt, max_retries)
+            await bot.delete_webhook(
+                drop_pending_updates=drop_pending_updates,
+                request_timeout=request_timeout,
+            )
+            logging.info("Telegram webhook successfully cleared.")
+            return True
+        except TelegramRetryAfter as e:
+            delay = max(float(e.retry_after), initial_delay)
+            logging.warning(
+                "Telegram rate limit on delete_webhook (attempt %d/%d). Waiting %.1fs...",
+                attempt, max_retries, delay,
+            )
+            await asyncio.sleep(delay)
+        except (TelegramNetworkError, asyncio.TimeoutError) as e:
+            delay = initial_delay * attempt
+            logging.warning(
+                "Network timeout/error clearing Telegram webhook (attempt %d/%d): %s. Retrying in %.1fs...",
+                attempt, max_retries, e, delay,
+            )
+            if attempt < max_retries:
+                await asyncio.sleep(delay)
+        except TelegramBadRequest as e:
+            logging.warning("TelegramBadRequest on delete_webhook: %s", e)
+            return False
+        except Exception as e:
+            logging.warning("Unexpected error during delete_webhook (attempt %d/%d): %s", attempt, max_retries, e)
+            if attempt < max_retries:
+                await asyncio.sleep(initial_delay * attempt)
+    logging.warning("Proceeding with polling despite webhook clearance issues after %d attempts.", max_retries)
+    return False
+
+
+def cleanup_old_logs(log_root: str | None = None, max_days: int | None = None) -> int:
+    """Removes rotated log files older than `max_days` from the log directory.
+
+    Active log files (*.log) are preserved; only rotated history files (*.log.*, *.log_*)
+    exceeding the retention threshold are safely pruned to reclaim disk space.
+    Returns the count of deleted files.
+    """
+    if max_days is None:
+        max_days = getattr(config, "LOG_RETENTION_DAYS", 7)
+    if not log_root:
+        log_root = config.LOG_DIR
+    if not os.path.isdir(log_root):
+        return 0
+
+    cutoff = time.time() - (max_days * 86400)
+    deleted_count = 0
+
+    for root, _, files in os.walk(log_root):
+        for name in files:
+            # Match rotated files like bot.log.2026-10-14, or temporary/archived logs
+            is_rotated = (
+                bool(re.search(r"\.log\.\d{4}-\d{2}-\d{2}", name))
+                or bool(re.search(r"\.log\.\d+$", name))
+                or (".log." in name)
+            )
+            if not is_rotated:
+                continue
+
+            filepath = os.path.join(root, name)
+            try:
+                mtime = os.path.getmtime(filepath)
+                if mtime < cutoff:
+                    os.remove(filepath)
+                    deleted_count += 1
+                    logging.info("Cleaned up old log file (>%d days): %s", max_days, filepath)
+            except OSError as exc:
+                logging.debug("Could not remove old log %s: %s", filepath, exc)
+
+    if deleted_count > 0:
+        logging.info("Log cleanup completed: removed %d files older than %d days.", deleted_count, max_days)
+    return deleted_count
 
 
 def get_app_version() -> str:

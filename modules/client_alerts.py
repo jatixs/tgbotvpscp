@@ -25,6 +25,7 @@ import os
 import time
 
 from aiogram import Bot, Dispatcher, F, types
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -36,7 +37,7 @@ from aiogram.types import (
     ReplyParameters,
 )
 
-from core import config
+from core import config, utils
 from core.i18n import I18nFilter, _, get_user_lang, log_text
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -2095,15 +2096,21 @@ def start_background_tasks(bot: Bot) -> list[asyncio.Task]:
         """Starts Alert Bot polling with graceful shutdown."""
         logging.info(log_text("client_alerts_polling_start"))
         try:
-            await alert_bot.delete_webhook(drop_pending_updates=True)
+            await utils.safe_delete_webhook(alert_bot, drop_pending_updates=True)
             # handle_signals=False: the main bot owns the single process-wide SIGINT/SIGTERM
             # handler (see bot.py); a second dispatcher registering its own would silently
             # steal the signal and prevent the main bot from shutting down gracefully.
-            await alert_dp.start_polling(
-                alert_bot,
-                allowed_updates=list(set((alert_dp.resolve_used_update_types() or []) + ["message", "callback_query", "message_reaction", "poll_answer"])),
-                handle_signals=False,
-            )
+            while True:
+                try:
+                    await alert_dp.start_polling(
+                        alert_bot,
+                        allowed_updates=list(set((alert_dp.resolve_used_update_types() or []) + ["message", "callback_query", "message_reaction", "poll_answer"])),
+                        handle_signals=False,
+                    )
+                    break
+                except (TelegramNetworkError, asyncio.TimeoutError) as e:
+                    logging.warning(f"[client_alerts] Alert Bot network error: {e}. Retrying in 5s...")
+                    await asyncio.sleep(5)
         except asyncio.CancelledError:
             logging.info("[client_alerts] Alert Bot polling stopped.")
         except Exception as e:

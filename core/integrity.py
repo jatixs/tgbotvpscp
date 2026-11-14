@@ -59,6 +59,7 @@ IGNORED_PATTERNS = {
     ".git",
     ".env",
     ".backups",
+    ".backup",
     "custom",
     "modules/custom",
     "core/static/vendor",

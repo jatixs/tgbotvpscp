@@ -450,6 +450,14 @@ class ModuleOrchestrator:
             try:
                 await asyncio.sleep(60)  # Check every 60 seconds
                 now = time.time()
+                if now - getattr(self, "_last_log_cleanup", 0) > 3600 * 6:
+                    self._last_log_cleanup = now
+                    try:
+                        from .utils import cleanup_old_logs
+                        await asyncio.to_thread(cleanup_old_logs, max_days=config.LOG_RETENTION_DAYS)
+                    except Exception as exc:
+                        logging.debug("Periodic log cleanup error: %s", exc)
+
                 for module_name, info in self._modules.items():
                     if (
                         info.tier == ModuleTier.ON_DEMAND

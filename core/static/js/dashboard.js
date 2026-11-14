@@ -786,6 +786,10 @@ function applyAgentWarning(type, val, threshold, def) {
 }
 
 function renderAgentTraffic() {
+    const name = agentRangeCtl?.getInterface() || '';
+    const badge = document.getElementById('trafficInterfaceName');
+    if (badge) badge.textContent = name || (typeof I18N !== 'undefined' && I18N.web_chart_all_interfaces) || 'All interfaces';
+
     const data = agentTrafficSnapshot;
     if (!data?.stats) return;
     let rxSpeed = 0,
@@ -800,7 +804,6 @@ function renderAgentTraffic() {
         }
     }
 
-    const name = agentRangeCtl?.getInterface() || '';
     const selected = name ? data.stats.interfaces?.[name] : null;
     const rxTotal = name ? selected?.bytes_recv : data.stats.net_recv;
     const txTotal = name ? selected?.bytes_sent : data.stats.net_sent;
@@ -808,8 +811,6 @@ function renderAgentTraffic() {
         rxSpeed = agentInterfaceSpeeds[name]?.rx;
         txSpeed = agentInterfaceSpeeds[name]?.tx;
     }
-    const badge = document.getElementById('trafficInterfaceName');
-    if (badge) badge.textContent = name || I18N.web_chart_all_interfaces || 'All interfaces';
     const interfaceStats = name ? (selected ? { [name]: selected } : {}) : data.stats.interfaces;
     const speedStyle = "text-xs text-gray-400 font-normal ml-2 pl-2 border-l border-gray-300 dark:border-white/20";
     const rxEl = document.getElementById('stat_net_recv');

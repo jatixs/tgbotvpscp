@@ -203,7 +203,7 @@ async def execute_bot_update(
         if code != 0:
             raise RuntimeError(f"Git reset failed: {err}")
         code, _, err = await run_command(
-            sys.executable, "-m", "pip", "install", "-r", "requirements.txt"
+            sys.executable, "-m", "pip", "install", "--upgrade", "-r", "requirements.txt"
         )
         if code != 0:
             if previous_commit:
@@ -211,6 +211,17 @@ async def execute_bot_update(
                 if rollback != 0:
                     logging.error("Could not restore the agent revision: %s", rollback_error)
             raise RuntimeError(f"Dependency installation failed: {err}")
+        # Remove temporary pre-update backup folders after successful update
+        import shutil
+        for b_name in [".backups", ".backup"]:
+            b_path = os.path.join(config.BASE_DIR, b_name)
+            if os.path.isdir(b_path):
+                try:
+                    shutil.rmtree(b_path, ignore_errors=True)
+                    logging.info(f"Removed {b_name} directory after successful update.")
+                except Exception as exc:
+                    logging.warning(f"Could not remove {b_name}: {exc}")
+
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
         with open(RESTART_FLAG_FILE, "w", encoding="utf-8") as f:
             f.write(restart_source)

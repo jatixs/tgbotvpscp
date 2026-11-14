@@ -1246,6 +1246,8 @@ resolve_node_name_defaults() {
     printf '%s\n%s\n' "$resolved_name" "$resolved_mode"
 }
 cleanup_common_trash() {
+    if [ -d "$BOT_INSTALL_PATH/.backups" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.backups"; fi
+    if [ -d "$BOT_INSTALL_PATH/.backup" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.backup"; fi
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/docs" ]; then sudo rm -rf "$BOT_INSTALL_PATH/docs"; fi
     if [ -d "$BOT_INSTALL_PATH/tests" ]; then sudo rm -rf "$BOT_INSTALL_PATH/tests"; fi
@@ -1821,13 +1823,13 @@ install_systemd_logic() {
         if ! id "${SERVICE_USER}" &>/dev/null; then sudo useradd -r -s /bin/false -d ${BOT_INSTALL_PATH} ${SERVICE_USER}; fi
         setup_repo_and_dirs "${SERVICE_USER}"
         sudo -u ${SERVICE_USER} ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Updating pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
+        run_with_spinner "Updating pip" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=84.1.0' wheel
         run_with_spinner "Installing dependencies" sudo -u ${SERVICE_USER} "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         exec_cmd="sudo -u ${SERVICE_USER}"
     else
         setup_repo_and_dirs "root"
         ${PYTHON_BIN} -m venv "${VENV_PATH}"
-        run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
+        run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=84.1.0' wheel
         run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install -r "${BOT_INSTALL_PATH}/requirements.txt"
         exec_cmd=""
     fi
@@ -1925,7 +1927,7 @@ install_node_logic() {
     common_install_steps
     if ! setup_repo_and_dirs "root"; then FORCE_NODE_MODE="no"; return 1; fi
     if [ ! -d "${VENV_PATH}" ]; then run_with_spinner "Creating venv" ${PYTHON_BIN} -m venv "${VENV_PATH}"; fi
-    run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=83.0.0' wheel
+    run_with_spinner "Updating pip" "${VENV_PATH}/bin/pip" install --upgrade pip 'setuptools>=84.1.0' wheel
     run_with_spinner "Installing dependencies" "${VENV_PATH}/bin/pip" install psutil requests pyyaml
 
     # Detect node location and install appropriate speedtest tool
@@ -2214,6 +2216,7 @@ EOF
          run_db_migrations "$exec_cmd"
          cleanup_for_systemd "update"
     fi
+    sudo rm -rf "${BOT_INSTALL_PATH}/.backups" "${BOT_INSTALL_PATH}/.backup" 2>/dev/null || true
 
     msg_success "Agent updated."
     local node_update_runner=()

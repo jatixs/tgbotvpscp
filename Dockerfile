@@ -43,7 +43,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/wheels /wheels
-RUN pip install --no-cache-dir --upgrade pip 'setuptools>=83.0.0' wheel && \
+RUN pip install --no-cache-dir --upgrade pip 'setuptools>=84.1.0' wheel && \
     pip install --no-cache-dir /wheels/* && \
     rm -rf /wheels
 

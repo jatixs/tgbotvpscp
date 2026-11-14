@@ -24,7 +24,7 @@ from core.web.app import start_web_server
 if os.path.isdir("/proc_host"):
     psutil.PROCFS_PATH = "/proc_host"
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -521,6 +521,7 @@ async def main():
         logging.info(log_text("bot_starting_mode", mode=config.INSTALL_MODE.upper()))
         await nodes_db.init_db()
         await node_updates.initialize()
+        await asyncio.to_thread(utils.cleanup_old_logs, max_days=config.LOG_RETENTION_DAYS)
         await auth.load_users_async()
         await utils.load_alerts_config_async()
         await utils.load_services_config_async()
@@ -544,8 +545,14 @@ async def main():
         if not web_runner:
             logging.warning("Web Server NOT started.")
         logging.info(log_text("polling_starting"))
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), handle_signals=False)
+        await utils.safe_delete_webhook(bot, drop_pending_updates=True)
+        while True:
+            try:
+                await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), handle_signals=False)
+                break
+            except (TelegramNetworkError, asyncio.TimeoutError) as e:
+                logging.warning("Telegram network error in polling loop: %s. Reconnecting in 5s...", e)
+                await asyncio.sleep(5)
     except (KeyboardInterrupt, SystemExit):
         logging.info("Exit main.")
     except Exception as e:

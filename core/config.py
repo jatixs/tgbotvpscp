@@ -32,6 +32,7 @@ os.makedirs(TRAFFIC_BACKUP_DIR, exist_ok=True)
 os.makedirs(CONFIG_BACKUP_DIR, exist_ok=True)
 os.makedirs(LOGS_BACKUP_DIR, exist_ok=True)
 os.makedirs(NODES_BACKUP_DIR, exist_ok=True)
+LOG_RETENTION_DAYS = 7
 
 BOT_DB_PATH = os.path.join(CONFIG_DIR, "bot.db")
 REBOOT_FLAG_FILE = os.path.join(CONFIG_DIR, "reboot_flag.txt")
@@ -492,7 +493,7 @@ def setup_logging(log_directory, log_filename_prefix):
     secure_formatter = RedactingFormatter(base_formatter)
     log_file_path = os.path.join(log_directory, f"{log_filename_prefix}.log")
     rotating_handler = logging.handlers.TimedRotatingFileHandler(
-        log_file_path, when="midnight", interval=1, backupCount=30, encoding="utf-8"
+        log_file_path, when="midnight", interval=1, backupCount=LOG_RETENTION_DAYS, encoding="utf-8"
     )
     rotating_handler.suffix = "%Y-%m-%d"
     rotating_handler.setFormatter(secure_formatter)
