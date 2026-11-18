@@ -1,4 +1,5 @@
 import time
+import uuid
 
 from cryptography.fernet import InvalidToken
 from tortoise import fields, models
@@ -59,6 +60,22 @@ class Node(models.Model):
 
     class Meta:
         table = "nodes"
+
+
+class NodeOperation(models.Model):
+    id = fields.IntField(pk=True)
+    delivery_id = fields.UUIDField(default=uuid.uuid4, unique=True)
+    node_id = fields.IntField(index=True)
+    command = fields.CharField(max_length=128)
+    requested_by = fields.BigIntField()
+    payload = EncryptedTextField()
+    result = EncryptedTextField(null=True)
+    status = fields.CharField(max_length=16, default="queued", index=True)
+    created_at = fields.FloatField()
+    updated_at = fields.FloatField(default=time.time)
+
+    class Meta:
+        table = "node_operations"
 
 
 class NodeClientUpdate(models.Model):

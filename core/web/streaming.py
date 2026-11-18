@@ -203,7 +203,10 @@ _SAVED_KEY_PLACEHOLDER = "*** SAVED SECURE KEY ***"
 
 def _get_top_folders() -> list[str]:
     global _cached_top_folders, _last_folder_check
-    import time, subprocess, sys, psutil
+    import subprocess
+    import sys
+
+    import psutil
     
     if sys.platform == 'win32': return []
     
@@ -215,20 +218,30 @@ def _get_top_folders() -> list[str]:
         total_disk_mb = float(psutil.disk_usage(get_host_path("/")).total) / (1024 * 1024)
         if total_disk_mb <= 0: total_disk_mb = 1.0
         
-        cmd = "du -sm --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run /* 2>/dev/null | sort -nr | head -n 5"
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15.0)  # nosec B602
+        paths = sorted(
+            entry.path for entry in os.scandir("/")
+            if not entry.name.startswith(".") and entry.name not in {"proc", "sys", "dev", "run"}
+        )
+        if not paths:
+            return []
+        # GNU du reads NUL-delimited filenames on stdin. Its executable and options are fixed.
+        result = subprocess.run(  # nosec B603
+            ["/usr/bin/du", "-sm", "--null", "--files0-from=-"],
+            input=b"".join(os.fsencode(path) + b"\0" for path in paths),
+            capture_output=True, timeout=15,
+        )
         if result.stdout:
-            lines = result.stdout.strip().split('\n')
+            records = (line.partition("\t") for line in result.stdout.decode(errors="replace").split("\0") if line)
+            largest = sorted(
+                ((int(size), path) for size, sep, path in records if sep and size.isdecimal()),
+                reverse=True,
+            )[:5]
             folders = []
-            for line in lines:
-                parts = line.strip().split('\t')
-                if len(parts) == 2:
-                    size_mb = int(parts[0])
-                    path = parts[1]
-                    size_fmt = f"{size_mb / 1024:.1f} GB" if size_mb >= 1024 else f"{size_mb} MB"
-                    percent = (size_mb / total_disk_mb) * 100
-                    folders.append({"name": path[:15], "fmt": size_fmt, "percent": percent})
-            
+            for size_mb, path in largest:
+                size_fmt = f"{size_mb / 1024:.1f} GB" if size_mb >= 1024 else f"{size_mb} MB"
+                percent = (size_mb / total_disk_mb) * 100
+                folders.append({"name": path[:15], "fmt": size_fmt, "percent": percent})
+
             if folders:
                 _cached_top_folders = [f"{f['name']} ({f['fmt']}|{f['percent']:.2f}%)" for f in folders]
             _last_folder_check = now
@@ -351,6 +364,8 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
     response.headers["Content-Type"] = "text/event-stream"
     response.headers["Cache-Control"] = "no-cache"
     response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.enable_compression(False)
     if not await _prepare_sse(response, request):
         return response
 
@@ -365,7 +380,7 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                 try:
                     await response.write(b"event: shutdown\ndata: restarting\n\n")
                 except Exception:
-                    pass
+                    logging.debug("Unable to send shutdown event", exc_info=True)
                 break
 
             try:
@@ -379,8 +394,11 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                     await response.write(b"event: session_status\ndata: expired\n\n")
                     await response.drain()
                 except Exception:
-                    pass
+                    logging.debug("Unable to send session expiry event", exc_info=True)
                 break
+
+            from core.utils import get_cached_agent_availability_pills
+            cached_pills, rolling_pct = get_cached_agent_availability_pills()
 
             current_stats: dict[str, Any] = {
                 "cpu": 0,
@@ -400,6 +418,8 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                     "total_downtime_secs": shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds", 0),
                     "internet_downtime_secs": shared_state.AGENT_AVAILABILITY.get("total_internet_downtime_seconds", 0),
                     "physical_downtime_secs": max(0.0, float(shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds", 0)) - float(shared_state.AGENT_AVAILABILITY.get("total_internet_downtime_seconds", 0))),
+                    "pills": cached_pills,
+                    "rolling_uptime_pct": rolling_pct,
                 },
             }
 

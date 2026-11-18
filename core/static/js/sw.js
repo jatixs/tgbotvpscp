@@ -38,25 +38,33 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// --- FETCH (Network first for assets, bypass API/Stream/WS) ---
+// --- FETCH (Network first for public assets only) ---
 self.addEventListener('fetch', (event) => {
     const request = event.request;
     if (request.method !== 'GET') return;
 
     const url = new URL(request.url);
 
-    // Bypass API calls, streaming SSE, and WebSocket endpoints completely
+    // Authenticated pages (including /operations) and APIs belong to the network.
+    // Never serve a cached personal page after a session change or network failure.
     if (
-        url.pathname.startsWith('/api/') ||
-        url.pathname.startsWith('/stream/') ||
-        url.pathname.startsWith('/terminal/')
+        url.origin !== self.location.origin ||
+        (url.pathname !== '/site.webmanifest' && !url.pathname.startsWith('/static/'))
     ) {
         return;
     }
 
     event.respondWith(
-        fetch(request).catch(() => {
-            return caches.match(request);
+        fetch(request).catch(async () => {
+            try {
+                const cache = await caches.open(CACHE_NAME);
+                const cached = await cache.match(request);
+                if (cached) return cached;
+            } catch (err) {
+                console.debug('[SW] Cache unavailable:', err);
+            }
+            // Cache misses resolve to undefined, which is invalid for respondWith().
+            return Response.error();
         })
     );
 });

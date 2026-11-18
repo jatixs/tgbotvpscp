@@ -92,7 +92,7 @@ async def send_alert(
                 try:
                     text_map[lang_code] = message_or_func(lang_code)
                 except Exception:
-                    pass
+                    logging.debug("Unable to localize alert", exc_info=True)
             web_text_default = text_map.get(config.DEFAULT_LANGUAGE, "")
             if not web_text_default and text_map:
                 web_text_default = list(text_map.values())[0]
@@ -102,7 +102,7 @@ async def send_alert(
                 try:
                     web_text_default = web_text_default.format(**kwargs)
                 except Exception:
-                    pass
+                    logging.debug("Unable to format alert", exc_info=True)
 
         if web_text_default or text_map:
             source = "node" if node_token else "agent"

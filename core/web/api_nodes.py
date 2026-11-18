@@ -27,7 +27,7 @@ from modules.services import (
 )
 
 from .. import config as current_config
-from .. import node_updates, nodes_db, shared_state
+from .. import node_updates, nodes_db, operations, shared_state
 from ..config import (
     ADMIN_USER_ID,
     DEFAULT_LANGUAGE,
@@ -51,6 +51,7 @@ from ..utils import (
     get_server_timezone_label,
 )
 from .auth import COOKIE_NAME, SERVER_SESSIONS, _get_public_base_url, get_current_user
+from .sse import prepare_event_stream
 
 routes = web.RouteTableDef()
 
@@ -146,6 +147,7 @@ async def process_node_result_background(
     text: Any,
     token: str,
     node_name: str,
+    traffic_session: str | None = None,
 ) -> None:
     if not user_id:
         return
@@ -195,6 +197,8 @@ async def process_node_result_background(
             if user_id not in monitors:
                 return
             monitor = monitors[user_id]
+            if traffic_session is not None and monitor.get("session_id") != traffic_session:
+                return
             if monitor.get("token") == token:
                 msg_id = monitor.get("message_id")
                 stop_kb = InlineKeyboardMarkup(
@@ -407,9 +411,20 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
         await nodes_db.update_node_extra(token, "services", services)
 
     current_node = await nodes_db.get_node_by_token(token)
-    tasks_to_send = current_node.get("tasks", []) if current_node and not client_report.get("busy") else []
-    if tasks_to_send:
-        await nodes_db.clear_node_tasks(token)
+    reliable = data.get("operations_protocol") == 1
+    reports = data.get("operations", [])
+    if not isinstance(reports, list):
+        reports = []
+    tasks_to_send, operation_results, operations_ack = await operations.exchange(
+        node["id"], reports, reliable=reliable,
+        busy=bool(client_report.get("busy") or data.get("operations_paused")),
+    )
+    if bot:
+        for result in operation_results:
+            asyncio.create_task(process_node_result_background(
+                bot, result["user_id"], result["command"], result["result"], token, node.get("name", "Node"),
+                traffic_session=result.get("traffic_session"),
+            ))
 
     client_task = None
     if client_report and not shared_state.IS_RESTARTING:
@@ -433,6 +448,7 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
         {
             "status": "ok",
             "tasks": tasks_to_send,
+            "operations_ack": operations_ack,
             "client_update": client_task,
             "alert_lang": alert_lang,
             "agent_alert_reporter_hash": alert_reporter_hash,
@@ -460,11 +476,7 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
 
     lang = get_user_lang(int(user["id"]))
     
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     all_nodes = await nodes_db.get_all_nodes()
     nodes_data: list[dict[str, Any]] = []
@@ -618,7 +630,7 @@ async def handle_nodes_monitor_list(request: web.Request) -> web.StreamResponse:
                 try:
                     await response.write(b"event: shutdown\ndata: restarting\n\n")
                 except Exception:
-                    pass
+                    logging.debug("Unable to send shutdown event", exc_info=True)
                 break
 
             try:
@@ -631,7 +643,7 @@ async def handle_nodes_monitor_list(request: web.Request) -> web.StreamResponse:
                 try:
                     await response.write(b"event: session_status\ndata: expired\n\n")
                 except Exception:
-                    pass
+                    logging.debug("Unable to send session expiry event", exc_info=True)
                 break
 
             try:
@@ -645,7 +657,7 @@ async def handle_nodes_monitor_list(request: web.Request) -> web.StreamResponse:
                 try:
                     await _write_sse(response, "error", {"error": "Internal Server Error"})
                 except Exception:
-                    pass
+                    logging.debug("Unable to send stream error", exc_info=True)
 
             if shutdown_event:
                 try:
@@ -813,11 +825,7 @@ async def handle_services_list(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
 
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     try:
         services = await asyncio.to_thread(get_all_services_status)
@@ -839,11 +847,7 @@ async def handle_available_services(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
 
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     try:
         services = await asyncio.to_thread(get_all_available_services)
@@ -865,11 +869,7 @@ async def handle_service_info(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
 
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     try:
         name = request.match_info.get("name", "")
@@ -1002,5 +1002,84 @@ __all__ = [
     "handle_nodes_monitor_services",
     "handle_service_info",
     "handle_services_list",
+    "list_operations",
+    "stream_operations",
     "routes",
 ]
+
+
+@routes.get("/api/operations")
+async def list_operations(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user or not _is_admin(user):
+        return web.Response(status=403)
+    try:
+        filters = operations.parse_filters(request.query)
+    except ValueError:
+        return web.json_response({"error": "Invalid filter"}, status=400)
+    rows, pagination = await operations.history(**filters)
+    payload = {
+        "operations": [
+            {"id": row.id, "node_id": row.node_id, "command": row.command,
+             "requested_by": row.requested_by, "status": row.status,
+             "created_at": row.created_at, "updated_at": row.updated_at} for row in rows
+        ],
+        "next_before": pagination.get("next_before") if isinstance(pagination, dict) else pagination,
+    }
+    if isinstance(pagination, dict):
+        payload["pagination"] = pagination
+    response = encrypted_json_response(payload)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@routes.get("/api/operations/stream")
+async def stream_operations(request: web.Request) -> web.StreamResponse:
+    user = get_current_user(request)
+    if not user or not _is_admin(user):
+        return web.Response(status=403)
+    try:
+        ids = list(dict.fromkeys(int(value) for value in request.query.get("ids", "").split(",")))
+        if not 1 <= len(ids) <= 50 or any(not 0 < value < 2**63 for value in ids):
+            raise ValueError("Invalid operation IDs")
+    except ValueError:
+        return web.json_response({"error": "Invalid operation IDs"}, status=400)
+
+    from ..models import NodeOperation
+    from .operation_history import present
+
+    response = web.StreamResponse(headers={
+        "Content-Type": "text/event-stream", "Cache-Control": "no-store", "X-Accel-Buffering": "no",
+    })
+    await response.prepare(request)
+    previous = None
+    shutdown = request.app.get("shutdown_event")
+    try:
+        while not (shutdown and shutdown.is_set()):
+            user = get_current_user(request)
+            if not user or not _is_admin(user):
+                await response.write(b"event: session_expired\ndata: {}\n\n")
+                break
+            lang = get_user_lang(int(user["id"]))
+            rows = await NodeOperation.filter(id__in=ids).order_by("id")
+            updates = []
+            for row in rows:
+                display = present(row, {}, lang)
+                updates.append({key: display[key] for key in ("id", "status", "status_label", "result", "updated_at")})
+            payload = json.dumps(updates, ensure_ascii=False)
+            if payload != previous:
+                encrypted = json.dumps({"d": encrypt_for_web(payload)})
+                await response.write(f"event: operations\ndata: {encrypted}\n\n".encode("utf-8"))
+                previous = payload
+            else:
+                await response.write(b": keepalive\n\n")
+            if shutdown:
+                try:
+                    await asyncio.wait_for(shutdown.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(5)
+    except (ConnectionResetError, BrokenPipeError):
+        pass
+    return response

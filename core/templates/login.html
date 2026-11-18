@@ -21,10 +21,11 @@
         <script src="/static/vendor/crypto-js.min.js"></script>
         <script src="/static/js/theme_init.js?v={{ asset_ver }}"></script>
         <script>
-        const I18N = {{ i18n_json | safe }};
-        const BOT_USERNAME = "{{ bot_username }}";
-        const TG_CLIENT_ID = "{{ tg_client_id }}";
-        const CURRENT_LANG = "{{ current_lang }}";
+        const I18N = JSON.parse({{ i18n_json | tojson }});
+        const I18N_ALL = {{ all_locales | default({}) | tojson }};
+        const BOT_USERNAME = {{ bot_username | default('') | tojson }};
+        const TG_CLIENT_ID = {{ tg_client_id | default('') | tojson }};
+        const CURRENT_LANG = {{ current_lang | default('') | tojson }};
         const TELEGRAM_ONLY_MODE = {{ 'true' if telegram_only_mode else 'false' }};
         {{ web_key_js | safe }}
         </script>
@@ -420,6 +421,7 @@
         
         <script src="/static/vendor/twemoji.min.js"
                 crossorigin="anonymous"></script>
+        <script src="/static/js/browser_utils.js?v={{ asset_ver }}"></script>
         <script src="/static/js/common.js?v={{ asset_ver }}"></script>
         <script src="/static/js/login.js?v={{ asset_ver }}"></script>
         <script>

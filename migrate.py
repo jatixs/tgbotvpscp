@@ -24,10 +24,6 @@ FILES_TO_MIGRATE = [
     "services.json"
 ]
 
-def load_json(path: str):
-    with open(path, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
 def save_encrypted(path: str, data: dict):
     json_bytes = json.dumps(data, ensure_ascii=False).encode('utf-8')
     encrypted_data = CIPHER_SUITE.encrypt(json_bytes)

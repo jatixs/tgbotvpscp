@@ -42,6 +42,7 @@ from ..utils import (
     save_alerts_config_async,
 )
 from .auth import get_current_user
+from .sse import prepare_event_stream
 
 routes = web.RouteTableDef()
 
@@ -82,11 +83,7 @@ async def handle_get_logs(request: web.Request) -> web.StreamResponse:
     if not user or not _is_admin(user):
         return web.Response(status=403)
 
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     lang = get_user_lang(int(user["id"]))
     log_path = os.path.join(current_config.BASE_DIR, "logs", "bot", "bot.log")
@@ -115,11 +112,7 @@ async def handle_get_sys_logs(request: web.Request) -> web.StreamResponse:
     if not user or not _is_admin(user):
         return web.Response(status=403)
 
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     try:
         cmd = ["journalctl", "-n", "100", "--no-pager"]
@@ -152,11 +145,7 @@ async def handle_clear_logs(request: web.Request) -> web.StreamResponse:
         return encrypted_json_response({"error": "Admin required"}, status=403)
 
     try:
-        data: dict[str, Any] = {}
-        try:
-            data = await decrypt_request_payload(request)
-        except Exception:
-            data = {}
+        data = await decrypt_request_payload(request) if request.can_read_body else {}
 
         target = str(data.get("type", "all"))
         await asyncio.to_thread(_clear_logs_sync, target)
@@ -352,11 +341,7 @@ async def api_check_update(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
         
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     try:
         from modules import update as update_module
@@ -433,11 +418,7 @@ async def api_get_notifications(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
         
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     uid = int(user["id"])
     lang = get_user_lang(uid)

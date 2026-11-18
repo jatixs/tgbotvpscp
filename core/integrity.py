@@ -287,20 +287,22 @@ def discover_custom_modules(repo_root: Path | str = ".") -> Dict[str, Dict[str, 
     ]
 
     for dir_path, module_prefix in search_dirs:
-        if not dir_path.is_dir():
+        if dir_path.resolve() != dir_path or not dir_path.is_dir():
             continue
 
         # Ensure package markers (__init__.py) exist so Python can import them
         for p in (dir_path.parent, dir_path):
             init_file = p / "__init__.py"
-            if not init_file.exists():
+            if not init_file.exists() and not init_file.is_symlink():
                 try:
                     init_file.write_text("# Auto-generated package marker\n", encoding="utf-8")
                 except Exception as e:
                     logger.debug(f"Failed to create init marker in {p}: {e}")
 
         for py_file in dir_path.glob("*.py"):
-            if py_file.name.startswith("__"):
+            if py_file.is_symlink() or not py_file.is_file():
+                continue
+            if not py_file.stem.isidentifier() or py_file.name.startswith("__"):
                 continue
             mod_name = f"{module_prefix}.{py_file.stem}"
             tier = ModuleTier.ON_DEMAND
@@ -449,6 +451,8 @@ def backup_modified_files(
     root = Path(repo_root).resolve()
     if modified_entries is None:
         report = check_project_integrity(branch=branch, repo_root=root)
+        if report.status == "ERROR":
+            raise RuntimeError(f"Cannot back up modified files: {report.error_message}")
         modified_entries = report.modified_files
 
     if not modified_entries:
@@ -673,6 +677,9 @@ def main(argv=None):
 
     elif args.action == "backup":
         success, backup_dir, backed_up = backup_modified_files(repo_root=repo_root, branch=args.branch)
+        if not success:
+            print("Backup failed; modified files have not been secured.", file=sys.stderr)
+            return 1
         if backed_up:
             print(f"📦 Бэкап успешно создан ({len(backed_up)} файлов):")
             print(f"   Папка: {backup_dir}")

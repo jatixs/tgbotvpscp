@@ -69,7 +69,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 ### Pull Requests
 1. Fork the repo and create your branch from `main`.
 2. Name your branch logically: `feature/your-feature-name` or `bugfix/issue-number`.
-3. Run the relevant checks: `python -m unittest discover -s tests`; for installers, run `bash -n deploy.sh` and `bash -n deploy_en.sh` in Linux/macOS or Git Bash.
+3. Run the relevant checks: `python -m unittest discover -s tests`; for charts, run `node --test tests/test_chart_range.cjs` (Node.js 18+); for installers, run `bash -n deploy.sh` and `bash -n deploy_en.sh` in Linux/macOS or Git Bash. The Python Telegram lifecycle test uses the installed aiogram from `requirements.txt`, without contacting Telegram.
 4. Update `CHANGELOG.md`; for auth, node-protocol, or deployment changes, synchronize the Russian and English docs and security guidance.
 5. Open a Pull Request!
 

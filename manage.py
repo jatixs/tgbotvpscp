@@ -223,7 +223,7 @@ async def cmd_restart(args):
 
     try:
         if is_docker:
-            compose = _docker_compose_command()
+            compose = await _docker_compose_command()
             profile = _docker_compose_profile()
             container = f"tg-bot-{profile}"
             command = [*compose, "--profile", profile, "restart", container]
@@ -246,22 +246,46 @@ async def cmd_restart(args):
         raise RuntimeError(f"Restart failed: {e}") from e
 
 
-def _docker_compose_command() -> list[str]:
-    if shutil.which("docker") and subprocess.run(
-        ["docker", "compose", "version"], capture_output=True, timeout=10
-    ).returncode == 0:
-        return ["docker", "compose"]
-    if shutil.which("docker-compose") and subprocess.run(
-        ["docker-compose", "version"], capture_output=True, timeout=10
-    ).returncode == 0:
-        return ["docker-compose"]
+async def _docker_compose_command() -> list[str]:
+    # The management CLI can run as root. Ignore the caller's PATH on the VPS.
+    search_path = "/usr/local/bin:/usr/bin:/bin:/snap/bin" if os.name == "posix" else None
+    docker_bin = shutil.which("docker", path=search_path)
+    if docker_bin:
+        process = await asyncio.create_subprocess_exec(
+            "docker", "compose", "version",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            if await asyncio.wait_for(process.wait(), timeout=10) == 0:
+                return [docker_bin, "compose"]
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+
+    compose_bin = shutil.which("docker-compose", path=search_path)
+    if compose_bin:
+        process = await asyncio.create_subprocess_exec(
+            "docker-compose", "version",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            if await asyncio.wait_for(process.wait(), timeout=10) == 0:
+                return [compose_bin]
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+
     raise RuntimeError("Docker Compose is not installed")
 
 
 async def cmd_status(args):
     """Print service status and propagate operational failures to the shell."""
     if os.environ.get("DEPLOY_MODE") == "docker":
-        compose = _docker_compose_command()
+        compose = await _docker_compose_command()
         profile = _docker_compose_profile()
         result = subprocess.run(
             [*compose, "--profile", profile, "ps", "--format", "json"],

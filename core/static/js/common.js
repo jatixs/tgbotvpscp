@@ -119,10 +119,6 @@ document.addEventListener('keydown', e => {
     actionEl.dispatchEvent(event);
 });
 
-// Security: Safe HTML helpers
-window.getSecureRandom = function() {
-    return window.crypto.getRandomValues(new Uint32Array(1))[0] / 0xFFFFFFFF;
-}
 
 function escapeHtml(text) {
     const map = {
@@ -138,37 +134,6 @@ function escapeHtml(text) {
 function setSafeText(element, text) {
     if (!element) return;
     element.textContent = text;
-}
-
-function setSafeHTML(element, html) {
-    if (!element) return;
-    element.replaceChildren(DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true }));
-}
-
-// Crypto Utilities
-function decryptData(text) {
-    if (!text) return "";
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
-    try {
-        if (text.indexOf(":") === -1) return text;
-        const parts = text.split(":");
-        const ivHex = parts[0];
-        const ctB64 = parts.slice(1).join(":");
-        
-        const key = CryptoJS.enc.Hex.parse(WEB_KEY);
-        const iv = CryptoJS.enc.Hex.parse(ivHex);
-        
-        const decrypted = CryptoJS.AES.decrypt(ctB64, key, {
-            iv: iv,
-            mode: CryptoJS.mode.CBC,
-            padding: CryptoJS.pad.Pkcs7
-        });
-        
-        return decrypted.toString(CryptoJS.enc.Utf8);
-    } catch (e) {
-        console.error("Decryption error:", e);
-        return text;
-    }
 }
 
 window.startScrambleAnimation = function(element) {
@@ -251,47 +216,17 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
     }, frameTime);
 };
 
-function encryptData(text) {
-    if (!text) return "";
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return text;
-    try {
-        const textStr = String(text);
-        const key = CryptoJS.enc.Hex.parse(WEB_KEY);
-        const iv = CryptoJS.lib.WordArray.random(16);
-        
-        const encrypted = CryptoJS.AES.encrypt(textStr, key, {
-            iv: iv,
-            mode: CryptoJS.mode.CBC,
-            padding: CryptoJS.pad.Pkcs7
-        });
-        
-        return iv.toString(CryptoJS.enc.Hex) + ":" + encrypted.toString();
-    } catch (e) {
-        console.error("Encryption error:", e);
-        return text;
-    }
-}
-
 function encryptRequestPayload(dataObj) {
-    if (!dataObj) return {};
-    try {
-        const jsonStr = JSON.stringify(dataObj);
-        return { d: encryptData(jsonStr) };
-    } catch (e) {
-        console.error("Failed to encrypt request payload:", e);
-        return dataObj;
-    }
+    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return dataObj;
+    return { d: encryptData(JSON.stringify(dataObj)) };
 }
 
 function decryptApiResponse(dataObj) {
-    if (dataObj && dataObj.d) {
-        try {
-            const decryptedStr = decryptData(dataObj.d);
-            return JSON.parse(decryptedStr);
-        } catch (e) {
-            console.error("Failed to decrypt API response:", e);
-            return dataObj;
+    if (dataObj && Object.hasOwn(dataObj, 'd')) {
+        if (typeof dataObj.d !== 'string' || !dataObj.d.startsWith('fw1:')) {
+            throw new Error('Invalid encrypted API response');
         }
+        return JSON.parse(decryptData(dataObj.d));
     }
     return dataObj;
 }
@@ -303,17 +238,9 @@ async function secureFetch(url, options = {}) {
         parsedUrl.username || parsedUrl.password) {
         throw new TypeError('secureFetch only supports same-origin HTTP requests without URL credentials.');
     }
-    let reqOptions = { ...options };
-    if (reqOptions.method && reqOptions.method.toUpperCase() !== 'GET' && reqOptions.body) {
-        try {
-            const parsedBody = JSON.parse(reqOptions.body);
-            reqOptions.body = JSON.stringify(encryptRequestPayload(parsedBody));
-        } catch {
-            // body is not JSON or couldn't be parsed, leave as is
-        }
-    }
-    
-    const response = await fetch(parsedUrl.toString(), reqOptions);
+    const request = new Request(parsedUrl.href);
+    // Keep body/options visible to the panel's CSRF and encryption middleware.
+    const response = await window.fetch(request, { ...options, mode: 'same-origin', redirect: 'error' });
     if (response.status === 401 || response.status === 403) {
         if (typeof handleSessionExpired === 'function') {
             handleSessionExpired();
@@ -660,19 +587,6 @@ function attachChartInteractions(chart, canvasOrId) {
 }
 window.attachChartInteractions = attachChartInteractions;
 
-function getCookieValue(name) {
-    const prefix = `${name}=`;
-    const cookie = document.cookie
-        .split(';')
-        .map(part => part.trim())
-        .find(part => part.startsWith(prefix));
-    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : '';
-}
-
-function getCsrfToken() {
-    return getCookieValue('csrf_token');
-}
-
 (function patchFetchWithCsrf() {
     if (typeof window.fetch !== 'function' || window.__csrfFetchPatched) return;
 
@@ -700,14 +614,14 @@ function getCsrfToken() {
                 if (options.body && typeof options.body === 'string') {
                     try {
                         const parsedBody = JSON.parse(options.body);
-                        options.body = JSON.stringify(encryptRequestPayload(parsedBody));
+                        options = { ...options, body: JSON.stringify(encryptRequestPayload(parsedBody)) };
                         headers.set('Content-Type', 'application/json');
-                    } catch {
-                        // ignore non-JSON
+                    } catch (error) {
+                        if (!(error instanceof SyntaxError)) throw error;
                     }
                 }
                 
-                options = { ...options, headers };
+                options = { ...options, headers, redirect: 'error' };
                 if (!options.credentials) {
                     options.credentials = 'same-origin';
                 }
@@ -727,7 +641,7 @@ function getCsrfToken() {
         try {
             const data = await originalJson.call(this);
             return decryptApiResponse(data);
-        } catch {
+        } catch (e) {
             if (e instanceof SyntaxError && e.message.includes("Unexpected token")) {
                 const friendlyMessage = (typeof I18N !== 'undefined' && I18N.web_json_parse_error) ? I18N.web_json_parse_error : "Ошибка сервера: неверный формат ответа (возможно, сессия истекла или сервер недоступен).";
                 const err = new Error(friendlyMessage);
@@ -751,7 +665,7 @@ window.getResolvedTheme = getResolvedTheme;
 
 let currentTheme = getResolvedTheme();
 let latestNotificationTime = Math.floor(Date.now() / 1000);
-const pageCache = new Map();
+
 let sseSource = null;
 
 let connectionTimer = null;
@@ -833,7 +747,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    pageCache.set(window.location.href, document.documentElement.outerHTML);
+
 });
 
 function initHapticsFeedback() {
@@ -1061,10 +975,10 @@ function setNodeIconFlag(iconBox, code) {
 function renderNodeModalTitle(titleEl, rawName) {
     if (!titleEl) return;
     const { code, name } = splitNodeFlag(rawName);
-    const html = DOMPurify.sanitize(replaceEmojisWithFlagsHTML(escapeHtml(name)));
+    const html = replaceEmojisWithFlagsHTML(escapeHtml(name));
     const temp = titleEl.cloneNode(false);
-    temp.innerHTML = html;
-    if (!updateDOM(titleEl, temp)) titleEl.innerHTML = html;
+    setSafeHTML(temp, html);
+    if (!updateDOM(titleEl, temp)) setSafeHTML(titleEl, html);
     if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
     titleEl.dataset.rawName = String(rawName || '');
     titleEl.title = name;
@@ -1345,13 +1259,18 @@ function getToastContainer() {
     return toastContainer;
 }
 
+function formatNotificationText(text) {
+    return escapeHtml(text).replace(/&lt;b&gt;/gi, '<b>').replace(/&lt;\/b&gt;/gi, '</b>')
+        .replace(/\n/g, '<br>');
+}
+
 function showToast(message) {
     const container = getToastContainer();
     const toast = document.createElement('div');
     toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
     const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
     const closeBtn = `<button data-action="close-toast" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
-    toast.innerHTML = DOMPurify.sanitize(`${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${message}</p></div>${closeBtn}`);
+    setSafeHTML(toast, `${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${formatNotificationText(message)}</p></div>${closeBtn}`);
     container.appendChild(toast);
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -1530,7 +1449,7 @@ function toggleHint(e, id) {
     const c = document.getElementById('hintModalContent');
 
     if (m && c) {
-        c.innerHTML = DOMPurify.sanitize(el.innerHTML);
+        setSafeHTML(c, el.innerHTML);
 
         let titleEl = el.closest('.flex')?.querySelector('span, label, p, h3');
         if (!titleEl) {
@@ -1613,7 +1532,7 @@ async function addNodeDash() {
     if (btn) {
         btn.style.width = getComputedStyle(btn).width;
         btn.disabled = true;
-        btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+        setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
     }
 
     try {
@@ -1651,7 +1570,7 @@ async function addNodeDash() {
         window.showModalAlert(e, errTxt);
     } finally {
         if (btn) {
-            btn.innerHTML = DOMPurify.sanitize(originalHTML);
+            setSafeHTML(btn, originalHTML);
             btn.style.width = '';
             validateNodeInput();
         }
@@ -1962,7 +1881,7 @@ function handleClientOffline() {
     const toast = document.createElement('div');
     toast.id = 'offline-toast';
     toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md w-auto max-w-sm transition-all duration-300 transform translate-y-0 opacity-100 mb-2';
-    toast.innerHTML = DOMPurify.sanitize(`
+    setSafeHTML(toast, `
         <div class="offline-toast-icon p-2 rounded-xl flex-shrink-0 flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
@@ -2097,7 +2016,7 @@ function handleSessionExpired() {
     overlay.id = 'session-expired-overlay';
     overlay.className = 'fixed inset-0 z-[10001] bg-white/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300 opacity-0';
 
-    overlay.innerHTML = DOMPurify.sanitize(`
+    setSafeHTML(overlay, `
         <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 transform scale-95 transition-transform duration-300">
             <div class="mb-4 text-amber-500 mx-auto bg-amber-100 dark:bg-amber-900/30 w-16 h-16 flex items-center justify-center rounded-2xl shadow-inner">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2260,7 +2179,7 @@ function createBlurOverlay(id, content) {
     const overlay = document.createElement('div');
     overlay.id = id;
     overlay.className = 'fixed inset-0 z-[10000] bg-white/60 dark:bg-gray-900/80 backdrop-blur-lg flex items-center justify-center p-4 transition-opacity duration-500 opacity-0';
-    overlay.innerHTML = DOMPurify.sanitize(`<div class="text-center">${content}</div>`);
+    setSafeHTML(overlay, `<div class="text-center">${content}</div>`);
 
     document.body.appendChild(overlay);
     document.body.style.overflow = 'hidden';
@@ -2342,7 +2261,7 @@ function updateNotifUI(list, count) {
     if (list.length === 0) {
         setSafeHTML(listContainer, `<div class="p-4 text-center text-gray-500 text-sm">${escapeHtml((typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications"))}</div>`);
     } else {
-        listContainer.innerHTML = DOMPurify.sanitize("");
+        setSafeHTML(listContainer, "");
         list.forEach(n => {
             const div = document.createElement('div');
             div.className = "px-4 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition last:border-0 group";
@@ -2355,16 +2274,9 @@ function updateNotifUI(list, count) {
                 badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 mr-2 uppercase tracking-wider">${escapeHtml(I18N?.web_notif_source_agent || '')}</span>`;
             }
 
-            // Sanitize text: escape everything via DOM, then re-allow <b>, </b>, <br>
-            const tempSpan = document.createElement('span');
-            tempSpan.textContent = n.text;
-            let cleanText = tempSpan.innerHTML
-                .replace(/&lt;b&gt;/gi, "<b>")
-                .replace(/&lt;\/b&gt;/gi, "</b>")
-                .replace(/\n/g, "<br>");
-            cleanText = replaceEmojisWithFlagsHTML(cleanText);
+            const cleanText = replaceEmojisWithFlagsHTML(formatNotificationText(n.text));
 
-            div.innerHTML = DOMPurify.sanitize(`
+            setSafeHTML(div, `
                 <div class="flex justify-between items-start mb-1">
                     <div class="flex items-center">
                         ${badgeHtml}
@@ -2830,271 +2742,24 @@ window.showModalAlert = (m, t) => _showSystemModalBase(t || 'Alert', m, 'alert')
 window.showModalConfirm = (m, t) => _showSystemModalBase(t || 'Confirm', m, 'confirm');
 window.showModalPrompt = (m, t, p, it) => _showSystemModalBase(t || 'Prompt', m, 'prompt', p, it);
 
-function prefetchUrl(url) {
-    if (pageCache.has(url)) return;
-    fetch(url).then(res => {
-        if (res.ok) return res.text();
-        throw new Error('err');
-    }).then(text => {
-        pageCache.set(url, text);
-    }).catch(() => { });
-}
-
-document.addEventListener('mouseover', (e) => {
-    const link = e.target.closest('a');
-    if (shouldHandleLink(link)) prefetchUrl(link.href);
-});
-
-document.addEventListener('touchstart', (e) => {
-    const link = e.target.closest('a');
-    if (shouldHandleLink(link)) prefetchUrl(link.href);
-}, {
-    passive: true
-});
-
-function shouldHandleLink(link) {
-    return link &&
-        link.href.startsWith(window.location.origin) &&
-        link.target !== '_blank' &&
-        !link.hasAttribute('download') &&
-        link.getAttribute('href') !== '/logout' &&
-        link.href !== window.location.href;
-}
-
-document.addEventListener('click', async (e) => {
-    const link = e.target.closest('a');
-    if (!shouldHandleLink(link)) return;
-
-    e.preventDefault();
-    const url = link.href;
-
-    const progressBar = document.createElement('div');
-    progressBar.className = 'fixed top-0 left-0 h-1 bg-blue-500 z-[9999] transition-all duration-300 ease-out';
-    progressBar.style.width = '0%';
-    document.body.appendChild(progressBar);
-    requestAnimationFrame(() => progressBar.style.width = '40%');
-
-    try {
-        let htmlContent;
-        if (pageCache.has(url)) {
-            htmlContent = pageCache.get(url);
-            progressBar.style.width = '100%';
-        } else {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('Network error');
-            htmlContent = await response.text();
-            pageCache.set(url, htmlContent);
-        }
-
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlContent, 'text/html');
-
-        const newMain = doc.querySelector('main');
-        const newNav = doc.querySelector('nav');
-        const currentMain = document.querySelector('main');
-        const currentNav = document.querySelector('nav');
-
-        if (newMain && currentMain && newNav && currentNav) {
-            document.title = doc.title;
-
-            const elementsToFade = [currentNav, currentMain];
-            elementsToFade.forEach(el => {
-                el.style.transition = 'opacity 0.2s ease-out, transform 0.2s ease-out';
-                el.style.opacity = '0';
-                el.style.transform = 'translateY(10px)';
-            });
-
-            setTimeout(() => {
-                currentMain.innerHTML = DOMPurify.sanitize(newMain.innerHTML);
-                currentMain.className = newMain.className;
-                currentNav.innerHTML = DOMPurify.sanitize(newNav.innerHTML);
-                currentNav.className = newNav.className;
-
-                const scripts = doc.querySelectorAll('script');
-                scripts.forEach(s => {
-                    const content = s.innerText || s.textContent;
-                    if (content && (
-                        content.includes('const I18N') ||
-                        content.includes('const USERS_DATA') ||
-                        content.includes('const NODES_DATA') ||
-                        content.includes('const KEYBOARD_CONFIG') ||
-                        content.includes('const USER_ROLE')
-                    )) {
-                        try {
-                            const patched = content
-                                .replace(/const\s+I18N\s*=/g, 'window.I18N =')
-                                .replace(/const\s+USERS_DATA\s*=/g, 'window.USERS_DATA =')
-                                .replace(/const\s+NODES_DATA\s*=/g, 'window.NODES_DATA =')
-                                .replace(/const\s+KEYBOARD_CONFIG\s*=/g, 'window.KEYBOARD_CONFIG =')
-                                .replace(/const\s+USER_ROLE\s*=/g, 'window.USER_ROLE =');
-                            Function(patched)();
-                        } catch {
-                            console.error("Error evaluating injected script:", err);
-                        }
-                    }
-                });
-
-                window.scrollTo(0, 0);
-                window.history.pushState({}, '', url);
-
-                requestAnimationFrame(() => {
-                    elementsToFade.forEach(el => {
-                        el.style.opacity = '1';
-                        el.style.transform = 'translateY(0)';
-                    });
-                });
-
-                try {
-                    if (typeof parsePageEmojis === 'function') parsePageEmojis();
-                } catch (_e) { }
-                initHolidayMood();
-                initGlobalLazyLoad();
-                initNodeModalScaling();
-                initHapticsToggle();
-
-                try {
-                    if (url.includes('/settings')) {
-                        if (window.initSettings) window.initSettings();
-                        else window.location.reload();
-                    } else if (url.includes('/nodes')) {
-                        if (window.initNodesMonitor) window.initNodesMonitor();
-                        else window.location.reload();
-                    } else if (url.endsWith('/') || url.includes('/dashboard')) {
-                        if (window.initDashboard) window.initDashboard();
-                        else window.location.reload();
-                    }
-                    initNotifications();
-                } catch (_e) {
-                    window.location.reload();
-                }
-
-                setTimeout(() => progressBar.remove(), 200);
-            }, 200);
-        } else {
-            const safeUrl = new URL(url, window.location.origin);
-            if (safeUrl.origin === window.location.origin) {
-                window.location.assign(safeUrl.href);
-            } else {
-                window.location.assign('/');
-            }
-        }
-    } catch (error) {
-        console.error("SPA Error:", error);
-        const safeUrl = new URL(url, window.location.origin);
-        if (safeUrl.origin === window.location.origin) {
-            window.location.assign(safeUrl.href);
-        } else {
-            window.location.assign('/');
-        }
-    }
-});
-
-window.addEventListener('popstate', async () => {
-    window.location.reload();
-});
-
 window.animateModalOpen = animateModalOpen;
 window.animateModalClose = animateModalClose;
 
-window.clearLogs = async function() {
-    if (!await window.showModalConfirm(I18N.web_clear_logs_confirm, I18N.modal_title_confirm)) return;
+window.clearLogs = function() {
+    return runMaintenanceAction({
+        buttonId: 'clearLogsBtn', url: '/api/logs/clear', payload: { type: 'all' },
+        confirmText: I18N.web_clear_logs_confirm,
+        doneText: I18N.web_logs_cleared_alert || 'Cleared!', busyText: I18N.web_logs_clearing,
+    });
+};
 
-    const btn = document.getElementById('clearLogsBtn');
-    const originalHTML = btn.innerHTML;
-    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
-
-    // Classes that cause hover expansion
-    const hoverClasses = ['hover:pr-4', 'group'];
-
-    btn.disabled = true;
-    btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${I18N.web_logs_clearing}`);
-
-    try {
-        const res = await fetch('/api/logs/clear', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                type: 'all'
-            })
-        });
-        if (res.ok) {
-            btn.classList.remove(...redClasses);
-            btn.classList.remove(...hoverClasses);
-            btn.classList.add(...greenClasses);
-            const doneText = (typeof I18N !== 'undefined' && I18N.web_logs_cleared_alert) ? I18N.web_logs_cleared_alert : "Cleared!";
-            btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`);
-
-            setTimeout(() => {
-                btn.innerHTML = DOMPurify.sanitize(originalHTML);
-                btn.classList.remove(...greenClasses);
-                btn.classList.add(...redClasses);
-                btn.classList.add(...hoverClasses);
-                btn.disabled = false;
-            }, 2000);
-        } else {
-            const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
-            btn.disabled = false;
-            btn.innerHTML = DOMPurify.sanitize(originalHTML);
-        }
-    } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
-        btn.disabled = false;
-        btn.innerHTML = DOMPurify.sanitize(originalHTML);
-    }
-}
-
-window.resetTrafficSettings = async function() {
-    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
-
-    const btn = document.getElementById('resetTrafficBtn');
-    const originalHTML = btn.innerHTML;
-
-    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-transparent', 'hover:bg-green-500', 'px-3', 'py-2'];
-
-    const hoverClasses = ['hover:pr-4', 'group'];
-
-    btn.disabled = true;
-    btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
-
-    try {
-        const res = await fetch('/api/traffic/reset', {
-            method: 'POST'
-        });
-        if (res.ok) {
-            btn.classList.remove(...redClasses);
-            btn.classList.remove(...hoverClasses);
-            btn.classList.add(...greenClasses);
-            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
-            btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="font-bold text-xs uppercase ml-1">${doneText}</span>`);
-
-            setTimeout(() => {
-                btn.innerHTML = DOMPurify.sanitize(originalHTML);
-                btn.classList.remove(...greenClasses);
-                btn.classList.add(...redClasses);
-                btn.classList.add(...hoverClasses);
-                btn.disabled = false;
-            }, 2000);
-        } else {
-            const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
-            btn.disabled = false;
-            btn.innerHTML = DOMPurify.sanitize(originalHTML);
-        }
-    } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
-        btn.disabled = false;
-        btn.innerHTML = DOMPurify.sanitize(originalHTML);
-    }
-}
+window.resetTrafficSettings = function() {
+    return runMaintenanceAction({
+        buttonId: 'resetTrafficBtn', url: '/api/traffic/reset',
+        confirmText: I18N.web_traffic_reset_confirm || 'Are you sure? This will zero out the counters.',
+        doneText: I18N.web_traffic_reset_no_emoji || 'Done!',
+    });
+};
 
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

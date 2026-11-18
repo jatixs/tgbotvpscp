@@ -1,4 +1,5 @@
 import importlib.util
+import asyncio
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -138,6 +139,46 @@ class NodeConfirmationTests(unittest.IsolatedAsyncioTestCase):
                 await self.env["cq_node_service_action"](callback)
                 self.db.update_node_task.assert_awaited_once()
                 callback.message.edit_text.assert_not_awaited()
+
+    async def test_each_traffic_start_creates_its_own_session_and_card(self):
+        self.env["config"].TRAFFIC_INTERVAL = 5
+        self.env["NODE_TRAFFIC_MONITORS"] = {}
+        callback = self.callback(f"node_cmd_{TOKEN}_traffic")
+        callback.message.answer = AsyncMock(return_value=SimpleNamespace(message_id=10))
+        self.db.update_node_task.return_value = SimpleNamespace(id=8)
+        await self.env["cq_node_command"](callback)
+        first = self.env["NODE_TRAFFIC_MONITORS"][1].copy()
+        self.assertEqual(first["operation_id"], 8)
+        self.db.update_node_task.assert_awaited_once_with(TOKEN, {
+            "command": "traffic", "user_id": 1, "traffic_session": first["session_id"],
+        })
+        self.db.update_node_task.return_value = SimpleNamespace(id=9)
+        await self.env["cq_node_command"](callback)
+        second = self.env["NODE_TRAFFIC_MONITORS"][1]
+        self.assertEqual(second["operation_id"], 9)
+        self.assertNotEqual(second["session_id"], first["session_id"])
+
+    async def test_scheduler_refreshes_existing_traffic_card(self):
+        self.env["config"].TRAFFIC_INTERVAL = 5
+        self.env["NODE_TRAFFIC_MONITORS"] = {1: {
+            "token": TOKEN, "operation_id": 8, "session_id": "session", "message_id": 10,
+        }}
+        self.env["asyncio"].sleep.side_effect = [None, asyncio.CancelledError()]
+        with self.assertRaises(asyncio.CancelledError):
+            await self.env["node_traffic_scheduler"](Mock())
+        self.db.update_node_task.assert_awaited_once_with(TOKEN, {
+            "command": "traffic", "user_id": 1, "traffic_session": "session",
+        }, traffic_operation_id=8)
+
+    async def test_old_stop_button_does_not_stop_a_new_traffic_session(self):
+        monitor = {"token": TOKEN, "operation_id": 8, "session_id": "new", "message_id": 11}
+        self.env["NODE_TRAFFIC_MONITORS"] = {1: monitor}
+        callback = self.callback(f"node_stop_traffic_{TOKEN}")
+        callback.message.message_id = 10
+        callback.message.delete = AsyncMock()
+        await self.env["cq_node_stop_traffic"](callback)
+        self.assertIs(self.env["NODE_TRAFFIC_MONITORS"][1], monitor)
+        callback.message.delete.assert_not_awaited()
 
 
 if __name__ == "__main__":

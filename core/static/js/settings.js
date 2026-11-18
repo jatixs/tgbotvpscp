@@ -44,7 +44,7 @@ window.initSettings = function () {
             newBtn.disabled = true;
             const spinner = '<svg class="animate-spin h-4 w-4 text-gray-500 inline-block mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
             const checkingText = (typeof I18N !== 'undefined' && I18N.web_update_checking) ? I18N.web_update_checking : "Checking...";
-            updateStatusArea.innerHTML = DOMPurify.sanitize(`${spinner} <span class="text-gray-500">${checkingText}</span>`);
+            setSafeHTML(updateStatusArea, `${spinner} <span class="text-gray-500">${checkingText}</span>`);
             if (btnDoUpdate) btnDoUpdate.classList.add('d-none');
             targetBranch = null;
             nodeUpdatePlan = null;
@@ -56,13 +56,13 @@ window.initSettings = function () {
                 if (data.update_available) {
                     const infoText = (I18N.web_update_info || "Current: {local} -> New: {remote}").replace('{local}', data.local_version).replace('{remote}', data.remote_version);
                     const updateAvailTitle = (typeof I18N !== 'undefined' && I18N.web_update_available_title) ? I18N.web_update_available_title : "Update Available!";
-                    updateStatusArea.innerHTML = DOMPurify.sanitize(`<div><div class="font-bold text-green-600 dark:text-green-400">${updateAvailTitle}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${infoText}</div></div>`);
+                    setSafeHTML(updateStatusArea, `<div><div class="font-bold text-green-600 dark:text-green-400">${updateAvailTitle}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${escapeHtml(infoText)}</div></div>`);
                     targetBranch = data.target_branch;
                     nodeUpdatePlan = data.node_plan;
                     if (btnDoUpdate) btnDoUpdate.classList.remove('d-none');
                 } else {
                     const uptodateText = (I18N.web_update_uptodate || "Latest version installed ({version})").replace('{version}', data.local_version);
-                    updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-gray-500 dark:text-gray-400 text-sm"><i class="fas fa-check-circle text-green-500 mr-1"></i> ${uptodateText}</span>`);
+                    setSafeHTML(updateStatusArea, `<span class="text-gray-500 dark:text-gray-400 text-sm"><i class="fas fa-check-circle text-green-500 mr-1"></i> ${escapeHtml(uptodateText)}</span>`);
                 }
                 for (const node of data.node_updates || []) {
                     const row = document.createElement('div');
@@ -72,7 +72,7 @@ window.initSettings = function () {
                 }
             } catch (error) {
                 const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
-                updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-red-500 text-sm"><i class="fas fa-exclamation-triangle mr-1"></i> ${errorText}</span>`);
+                setSafeHTML(updateStatusArea, `<span class="text-red-500 text-sm"><i class="fas fa-exclamation-triangle mr-1"></i> ${escapeHtml(errorText)}</span>`);
             } finally {
                 newBtn.disabled = false;
             }
@@ -111,7 +111,7 @@ window.initSettings = function () {
             if (updateProgress) updateProgress.classList.remove('d-none');
 
             const updatingText = (typeof I18N !== 'undefined' && I18N.web_update_started) ? I18N.web_update_started : "Updating...";
-            updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${updatingText}</span>`);
+            setSafeHTML(updateStatusArea, `<span class="text-blue-600 dark:text-blue-400 font-medium animate-pulse">${updatingText}</span>`);
 
             try {
                 const response = await fetch('/api/update/run', {
@@ -135,7 +135,7 @@ window.initSettings = function () {
                 setTimeout(() => location.reload(), 15000);
             } catch (error) {
                 const errorText = (I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
-                updateStatusArea.innerHTML = DOMPurify.sanitize(`<span class="text-red-500 text-sm">${errorText}</span>`);
+                setSafeHTML(updateStatusArea, `<span class="text-red-500 text-sm">${escapeHtml(errorText)}</span>`);
                 if (updateProgress) updateProgress.classList.add('d-none');
                 if (currentCheckBtn) currentCheckBtn.disabled = false;
                 newBtnDo.disabled = false;
@@ -571,132 +571,17 @@ window.saveSystemConfig = async function(groupName) {
             }, 2000);
         } else {
             const json = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', json.error || 'Save failed'), errorShort);
+            await showRequestError(json.error || 'Save failed');
             btn.innerText = originalText;
             toggleSaveButton(config.btnId, true);
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        await showRequestError(e, true);
         btn.innerText = originalText;
         toggleSaveButton(config.btnId, true);
     }
 }
 
-window.clearLogs = async function() {
-    if (!await window.showModalConfirm(I18N.web_clear_logs_confirm, I18N.modal_title_confirm)) return;
-
-    const btn = document.getElementById('clearLogsBtn');
-    const originalHTML = btn.innerHTML;
-
-    btn.style.width = getComputedStyle(btn).width;
-    btn.style.height = getComputedStyle(btn).height;
-
-    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
-
-    btn.disabled = true;
-
-    btn.innerHTML = DOMPurify.sanitize(`<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`);
-
-    try {
-        const res = await fetch('/api/logs/clear', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'all' })
-        });
-        if (res.ok) {
-            btn.classList.remove(...redClasses);
-            btn.classList.add(...greenClasses);
-
-            btn.innerHTML = DOMPurify.sanitize(`<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${I18N.web_logs_cleared_alert}</span></div>`);
-
-            setTimeout(() => {
-                btn.innerHTML = DOMPurify.sanitize(originalHTML);
-                btn.classList.remove(...greenClasses);
-                btn.classList.add(...redClasses);
-
-                btn.style.width = '';
-                btn.style.height = '';
-                btn.disabled = false;
-            }, 2000);
-        } else {
-            const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
-
-            btn.disabled = false;
-            btn.innerHTML = DOMPurify.sanitize(originalHTML);
-            btn.style.width = '';
-            btn.style.height = '';
-        }
-    } catch (e) {
-        const connErrTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Connection Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), connErrTitle);
-
-        btn.disabled = false;
-        btn.innerHTML = DOMPurify.sanitize(originalHTML);
-        btn.style.width = '';
-        btn.style.height = '';
-    }
-}
-
-window.resetTrafficSettings = async function() {
-    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm || "Are you sure? This will zero out the counters.", I18N.modal_title_confirm)) return;
-
-    const btn = document.getElementById('resetTrafficBtn');
-    const originalHTML = btn.innerHTML;
-
-    btn.style.width = getComputedStyle(btn).width;
-    btn.style.height = getComputedStyle(btn).height;
-
-    const redClasses = ['bg-red-50', 'dark:bg-red-900/10', 'border-red-200', 'dark:border-red-800', 'text-red-600', 'dark:text-red-400', 'hover:bg-red-100', 'dark:hover:bg-red-900/30', 'active:bg-red-200'];
-    const greenClasses = ['bg-green-600', 'text-white', 'border-green-600', 'hover:bg-green-500'];
-
-    btn.disabled = true;
-
-    btn.innerHTML = DOMPurify.sanitize(`<div class="flex items-center justify-center w-full h-full"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>`);
-
-    try {
-        const res = await fetch('/api/traffic/reset', { method: 'POST' });
-        if (res.ok) {
-            btn.classList.remove(...redClasses);
-            btn.classList.add(...greenClasses);
-
-            const doneText = (typeof I18N !== 'undefined' && I18N.web_traffic_reset_no_emoji) ? I18N.web_traffic_reset_no_emoji : "Done!";
-
-            btn.innerHTML = DOMPurify.sanitize(`<div class="flex items-center justify-center gap-2 w-full h-full"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> <span class="whitespace-nowrap text-[10px] font-bold uppercase tracking-wider leading-4">${doneText}</span></div>`);
-
-            setTimeout(() => {
-                btn.innerHTML = DOMPurify.sanitize(originalHTML);
-                btn.classList.remove(...greenClasses);
-                btn.classList.add(...redClasses);
-
-                btn.style.width = '';
-                btn.style.height = '';
-                btn.disabled = false;
-            }, 2000);
-        } else {
-            const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Failed"), errorShort);
-
-            btn.disabled = false;
-            btn.innerHTML = DOMPurify.sanitize(originalHTML);
-            btn.style.width = '';
-            btn.style.height = '';
-        }
-    } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
-
-        btn.disabled = false;
-        btn.innerHTML = DOMPurify.sanitize(originalHTML);
-        btn.style.width = '';
-        btn.style.height = '';
-    }
-}
 function renderUsers() {
     const tbody = document.getElementById('usersTableBody');
     const section = document.getElementById('usersSection');
@@ -754,12 +639,10 @@ async function deleteUser(id, name) {
             if (idx > -1) USERS_DATA.splice(idx, 1);
             renderUsers();
         } else {
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', 'Delete failed'), errorShort);
+            await showRequestError('Delete failed');
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        await showRequestError(e, true);
     }
 }
 
@@ -791,12 +674,10 @@ window.openAddUserModal = async function() {
             });
             renderUsers();
         } else {
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || "Unknown"), errorShort);
+            await showRequestError(data.error || "Unknown");
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        await showRequestError(e, true);
     }
 }
 
@@ -839,11 +720,7 @@ function renderNodes() {
                 <div class="ip-copy-container inline-flex items-center gap-1.5 group/ip" data-copy-ip="${escapeHtml(decryptedIp || '')}">
                     <span class="ip-copy-text font-mono select-all" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">${escapeHtml(decryptedIp) || 'Unknown'}</span>
                     ${decryptedIp && decryptedIp !== 'Unknown' && decryptedIp !== '-' ? `
-                    <button type="button" class="ip-copy-btn p-0.5 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(decryptedIp)}" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">
-                        <svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                    </button>` : ''}
+                    ${renderCopyIpButton(decryptedIp)}` : ''}
                 </div>
             </td>
             <td class="px-2 sm:px-4 py-3 text-right">
@@ -958,12 +835,10 @@ async function deleteNode(token) {
             renderNodes();
         } else {
             const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error || 'Delete failed'), errorShort);
+            await showRequestError(data.error || 'Delete failed');
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        await showRequestError(e, true);
     }
 }
 
@@ -1021,12 +896,10 @@ async function changePassword() {
                 currentEl.dispatchEvent(dummyEvent);
             }
         } else {
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
-            await window.showModalAlert(I18N.web_error.replace('{error}', data.error), errorShort);
+            await showRequestError(data.error);
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        await window.showModalAlert(I18N.web_conn_error.replace('{error}', e), errorShort);
+        await showRequestError(e, true);
     }
     btn.disabled = false;
     btn.innerText = origText;
@@ -1404,11 +1277,11 @@ window.notifGoBack = function() {
 function renderNotifNodesList() {
     const container = document.getElementById('notifNodesListContainer');
     if (!container || !NODES_DATA || NODES_DATA.length === 0) {
-        container.innerHTML = DOMPurify.sanitize(`<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || ''}</div>`);
+        setSafeHTML(container, `<div class="text-center text-gray-500 py-4">${I18N.web_no_nodes || ''}</div>`);
         return;
     }
 
-    container.innerHTML = DOMPurify.sanitize(NODES_DATA.map(n => {
+    setSafeHTML(container, NODES_DATA.map(n => {
         return `
         <button data-action="switch-notif-view" data-token="${n.id}" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
@@ -1455,7 +1328,7 @@ function renderNotifNodeDetail() {
         return USER_ALERTS ? USER_ALERTS[type] || false : false;
     };
 
-    container.innerHTML = DOMPurify.sanitize(`
+    setSafeHTML(container, `
         <div class="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer" data-action="click-alert-toggle" data-target="n_alert_${t}_downtime">
             <div>
                 <div class="text-sm font-bold text-gray-900 dark:text-white">${I18N.notifications_alert_name_downtime || 'Downtime Alert'}</div>
@@ -1682,7 +1555,7 @@ function renderKeyboardPreview() {
         startVal = parseInt(prevEl.innerText) || 0;
     }
 
-    container.innerHTML = DOMPurify.sanitize(`<span class="px-3 py-1 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-xs font-bold border border-green-200 dark:border-green-500/20">${activeText} <span id="kbActiveCount">${startVal}</span> / ${totalAll}</span>`);
+    setSafeHTML(container, `<span class="px-3 py-1 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 text-xs font-bold border border-green-200 dark:border-green-500/20">${activeText} <span id="kbActiveCount">${startVal}</span> / ${totalAll}</span>`);
 
     const countEl = document.getElementById('kbActiveCount');
     if (countEl) {
@@ -1775,7 +1648,7 @@ function renderKeyboardModalContent() {
         });
         html += `</div></div><div class="h-px bg-gray-200 dark:bg-white/5 last:hidden"></div>`;
     }
-    container.innerHTML = DOMPurify.sanitize(html);
+    setSafeHTML(container, html);
 }
 
 window.openKeyboardModal = function () {
@@ -1812,11 +1685,11 @@ function updateDoneButtonState(state) {
     btn.classList.remove(...defaultClasses, ...savingClasses, ...savedClasses);
 
     if (state === 'saving') {
-        btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${savingText}`);
+        setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ${savingText}`);
         btn.classList.add(...savingClasses);
         btn.disabled = true;
     } else if (state === 'saved') {
-        btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${savedText}`);
+        setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${savedText}`);
         btn.classList.add(...savedClasses);
         btn.disabled = false;
     } else {
@@ -1945,10 +1818,10 @@ function animateBulkButton(btnId, state, originalText) {
     if (!btn) return;
 
     if (state === 'loading') {
-        btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+        setSafeHTML(btn, `<svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
         btn.disabled = true;
     } else if (state === 'success') {
-        btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`);
+        setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`);
         btn.disabled = true;
     } else {
         btn.textContent = originalText;
@@ -2040,7 +1913,7 @@ async function fetchSessions() {
         }
     } catch (e) {
         const errorLoading = (typeof I18N !== 'undefined' && I18N.web_error_loading_sessions) ? I18N.web_error_loading_sessions : "Error loading sessions";
-        container.innerHTML = DOMPurify.sanitize(`<div class="text-red-500 text-sm text-center">${errorLoading}</div>`);
+        setSafeHTML(container, `<div class="text-red-500 text-sm text-center">${errorLoading}</div>`);
     }
 }
 
@@ -2050,10 +1923,10 @@ function renderSessionsMainWidget(sessions) {
 
     const currentSession = sessions.find(s => s.current);
     if (currentSession) {
-        container.innerHTML = DOMPurify.sanitize(`${renderSessionItem(currentSession)}`);
+        setSafeHTML(container, `${renderSessionItem(currentSession)}`);
     } else {
         const noSessions = (typeof I18N !== 'undefined' && I18N.web_no_sessions) ? I18N.web_no_sessions : "No active sessions";
-        container.innerHTML = DOMPurify.sanitize(`<div class="text-gray-500 text-sm text-center">${noSessions}</div>`);
+        setSafeHTML(container, `<div class="text-gray-500 text-sm text-center">${noSessions}</div>`);
     }
 }
 
@@ -2102,7 +1975,7 @@ function renderSessionItem(s) {
 
     let userBadge = "";
     if (!isMine) {
-        userBadge = `<div class="text-[10px] font-bold text-blue-500 mb-0.5 uppercase tracking-wide flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>${s.user_name}</div>`;
+        userBadge = `<div class="text-[10px] font-bold text-blue-500 mb-0.5 uppercase tracking-wide flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>${escapeHtml(s.user_name)}</div>`;
     }
 
     let bgClass = 'bg-gray-50 dark:bg-black/20 border-gray-100 dark:border-white/5';
@@ -2126,7 +1999,7 @@ function renderSessionItem(s) {
             </div>
             <div class="min-w-0">
                 ${userBadge}
-                <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${s.ua}">${deviceText}</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${escapeHtml(s.ua)}">${escapeHtml(deviceText)}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
                     <span class="font-mono">${escapeHtml(decryptData(s.ip))}</span>
                     <span>•</span>
@@ -2137,7 +2010,7 @@ function renderSessionItem(s) {
         <div class="flex-shrink-0 ml-2">
             ${isCurrent ?
             `<span class="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase rounded-lg tracking-wider">${I18N.web_session_current || 'Current'}</span>` :
-            `<button data-action="revoke-session" data-id="${s.id}" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
+            `<button data-action="revoke-session" data-id="${escapeHtml(s.id)}" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" title="${I18N.web_session_revoke || 'Revoke'}">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
@@ -2154,9 +2027,9 @@ window.openSessionsModal = function () {
 
     if (modal && content) {
         if (ALL_SESSIONS.length > 0) {
-            content.innerHTML = DOMPurify.sanitize(ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
+            setSafeHTML(content, ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
         } else {
-            content.innerHTML = DOMPurify.sanitize(`<div class="text-center text-gray-500 py-4">No sessions</div>`);
+            setSafeHTML(content, `<div class="text-center text-gray-500 py-4">No sessions</div>`);
         }
 
         if (ALL_SESSIONS.length <= 1 && btnRevokeAll) {
@@ -2166,7 +2039,7 @@ window.openSessionsModal = function () {
             btnRevokeAll.disabled = false;
             btnRevokeAll.classList.remove('opacity-50', 'cursor-not-allowed');
             const originalText = I18N.web_sessions_revoke_all || "Revoke all other";
-            btnRevokeAll.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> ${originalText}`);
+            setSafeHTML(btnRevokeAll, `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> ${originalText}`);
             btnRevokeAll.className = "w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2";
         }
         animateModalOpen(modal);
@@ -2197,7 +2070,7 @@ async function revokeSession(token) {
             await fetchSessions();
             const content = document.getElementById('sessionsModalContent');
             if (content && !document.getElementById('sessionsModal').classList.contains('hidden')) {
-                content.innerHTML = DOMPurify.sanitize(ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
+                setSafeHTML(content, ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
                 const btnRevokeAll = document.getElementById('btnRevokeAllSessions');
                 if (ALL_SESSIONS.length <= 1 && btnRevokeAll) {
                     btnRevokeAll.disabled = true;
@@ -2223,7 +2096,7 @@ async function revokeAllSessions() {
 
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+        setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
     }
 
     try {
@@ -2236,12 +2109,12 @@ async function revokeAllSessions() {
         if (res.ok) {
             if (btn) {
                 btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";
-                btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${I18N.web_sessions_revoked_alert}`);
+                setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${I18N.web_sessions_revoked_alert}`);
             }
             await fetchSessions();
             const content = document.getElementById('sessionsModalContent');
             if (content) {
-                content.innerHTML = DOMPurify.sanitize(ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
+                setSafeHTML(content, ALL_SESSIONS.map(s => renderSessionItem(s)).join(''));
             }
             setTimeout(() => {
                 if (btn) {
@@ -2255,14 +2128,14 @@ async function revokeAllSessions() {
             await window.showModalAlert(data.error || "Failed", errorShort);
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = DOMPurify.sanitize(originalText);
+                setSafeHTML(btn, originalText);
             }
         }
     } catch (e) {
         console.error(e);
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = DOMPurify.sanitize(originalText);
+            setSafeHTML(btn, originalText);
         }
     }
 }
@@ -2323,7 +2196,7 @@ window.saveMetaData = async function () {
 
     const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = DOMPurify.sanitize(`<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+    setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
 
     const data = {
         favicon: document.getElementById('meta_favicon').value.trim(),
@@ -2366,19 +2239,19 @@ window.saveMetaData = async function () {
                 location.reload();
             } else {
                 closeMetaModal();
-                btn.innerHTML = DOMPurify.sanitize(originalText);
+                setSafeHTML(btn, originalText);
                 btn.disabled = false;
             }
         } else {
             const errorTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
             await window.showModalAlert(json.error || "Failed to save", errorTitle);
-            btn.innerHTML = DOMPurify.sanitize(originalText);
+            setSafeHTML(btn, originalText);
             btn.disabled = false;
         }
     } catch (e) {
         const errorTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(e.message || e.toString(), errorTitle);
-        btn.innerHTML = DOMPurify.sanitize(originalText);
+        setSafeHTML(btn, originalText);
         btn.disabled = false;
     }
 };
@@ -2575,3 +2448,10 @@ window.savePingTargetModal = function() {
     }
     window.closePingTargetModal();
 };
+
+window.destroySettings = function () {
+    if (typeof closeHintModal === 'function') closeHintModal();
+    if (typeof closeKeyboardModal === 'function') closeKeyboardModal();
+    if (typeof closePingTargetModal === 'function') closePingTargetModal();
+};
+

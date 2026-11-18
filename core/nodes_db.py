@@ -424,14 +424,9 @@ async def mark_node_offline(token: str, offline_at: float | None = None):
     return True
 
 
-async def update_node_task(token: str, task: dict):
-    t_hash = _get_token_hash(token)
-    node = await Node.get_or_none(token_hash=t_hash)
-    if node:
-        tasks = node.tasks or []
-        tasks.append(task)
-        node.tasks = tasks
-        await node.save(update_fields=["tasks"])
+async def update_node_task(token: str, task: dict, *, traffic_operation_id: int | None = None):
+    from .operations import enqueue
+    return await enqueue(_get_token_hash(token), task, traffic_operation_id=traffic_operation_id)
 
 
 async def clear_node_tasks(token: str):

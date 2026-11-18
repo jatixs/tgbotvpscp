@@ -871,7 +871,7 @@ setup_repo_and_dirs() {
     sudo mkdir -p "${staging_path}/logs/bot" "${staging_path}/logs/watchdog" "${staging_path}/logs/node" "${staging_path}/config"
     if [ -d "${BOT_INSTALL_PATH}" ]; then
         local state_dir
-        for state_dir in config logs scripts certbot-venv; do
+        for state_dir in config logs scripts certbot-venv .backups .backup; do
             if [ -d "${BOT_INSTALL_PATH}/${state_dir}" ]; then
                 sudo mkdir -p "${staging_path}/${state_dir}"
                 if ! sudo cp -a "${BOT_INSTALL_PATH}/${state_dir}/." "${staging_path}/${state_dir}/"; then
@@ -1243,8 +1243,6 @@ resolve_node_name_defaults() {
     printf '%s\n%s\n' "$resolved_name" "$resolved_mode"
 }
 cleanup_common_trash() {
-    if [ -d "$BOT_INSTALL_PATH/.backups" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.backups"; fi
-    if [ -d "$BOT_INSTALL_PATH/.backup" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.backup"; fi
     if [ -d "$BOT_INSTALL_PATH/.github" ]; then sudo rm -rf "$BOT_INSTALL_PATH/.github"; fi
     if [ -d "$BOT_INSTALL_PATH/docs" ]; then sudo rm -rf "$BOT_INSTALL_PATH/docs"; fi
     if [ -d "$BOT_INSTALL_PATH/tests" ]; then sudo rm -rf "$BOT_INSTALL_PATH/tests"; fi
@@ -1254,7 +1252,7 @@ cleanup_common_trash() {
     fi
     sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f \( -name "*.txt" ! -name "requirements.txt" -o -name "*.md" -o -name "*.sh" -o -name ".gitignore" -o -name "LICENSE" \) -delete
     sudo find "$BOT_INSTALL_PATH" -maxdepth 1 -type f -name "*.ini" ! -name "aerich.ini" -delete
-    sudo find "$BOT_INSTALL_PATH" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+    sudo find "$BOT_INSTALL_PATH" -type d \( -name ".backups" -o -name ".backup" \) -prune -o -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
 }
 cleanup_for_systemd() {
     local action_name=$1
@@ -1286,6 +1284,7 @@ cleanup_for_node() {
     if [ -d "${BOT_INSTALL_PATH}/config" ]; then
         sudo find "${BOT_INSTALL_PATH}/config" -mindepth 1 -maxdepth 1 \
             ! -name ".speedtest_mode" ! -name ".agent_alert_state.json" ! -name ".agent_alert_meta.json" \
+            ! -name "operations-*.db*" \
             -exec rm -rf {} +
     fi
 }
@@ -2094,14 +2093,20 @@ update_bot() {
                         msg_info "Обновление отменено."
                         return 0
                     fi
-                    run_integrity_cmd backup --branch "$GIT_BRANCH"
+                    if ! run_integrity_cmd backup --branch "$GIT_BRANCH"; then
+                        msg_error "Не удалось создать бэкап; обновление отменено."
+                        return 1
+                    fi
                     ;;
                 3)
                     msg_info "Обновление отменено пользователем."
                     return 0
                     ;;
                 *)
-                    run_integrity_cmd backup --branch "$GIT_BRANCH"
+                    if ! run_integrity_cmd backup --branch "$GIT_BRANCH"; then
+                        msg_error "Не удалось создать бэкап; обновление отменено."
+                        return 1
+                    fi
                     ;;
             esac
         fi
@@ -2214,7 +2219,6 @@ EOF
          run_db_migrations "$exec_cmd"
          cleanup_for_systemd "обновления"
     fi
-    sudo rm -rf "${BOT_INSTALL_PATH}/.backups" "${BOT_INSTALL_PATH}/.backup" 2>/dev/null || true
 
     msg_success "Агент обновлён."
     local node_update_runner=()

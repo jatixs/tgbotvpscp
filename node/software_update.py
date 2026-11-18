@@ -10,7 +10,7 @@ from pathlib import Path
 REPOSITORY = "https://github.com/jatixs/tgbotvpscp.git"
 SERVICE = "tg-node.service"
 COMMIT = re.compile(r"[0-9a-f]{40}")
-BRANCH = re.compile(r"[A-Za-z0-9._/-]{1,255}")
+BRANCH = re.compile(r"(?![-/])(?!.*(?:\.\.|//))(?!.*[./]$)[A-Za-z0-9._/-]{1,255}")
 
 
 class ClientUpdater:

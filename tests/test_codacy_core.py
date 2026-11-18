@@ -1,7 +1,8 @@
 import os
 import socket
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import manage
 from core.web.avatar import get_avatar_html
@@ -13,7 +14,7 @@ from network_validation import (
 )
 
 
-class CodacyCoreRegressionTests(unittest.TestCase):
+class CodacyCoreRegressionTests(unittest.IsolatedAsyncioTestCase):
     def test_compose_profile_is_limited_to_configured_profiles(self):
         with patch.dict(os.environ, {"COMPOSE_PROFILES": "secure"}, clear=False):
             self.assertEqual(manage._docker_compose_profile(), "secure")
@@ -56,6 +57,41 @@ class CodacyCoreRegressionTests(unittest.TestCase):
         self.assertEqual(str(parse_public_ip("8.8.8.8")), "8.8.8.8")
         self.assertIsNone(parse_public_ip("127.0.0.1"))
         self.assertIsNone(parse_public_ip("https://example.net"))
+
+    async def test_docker_compose_command_prefers_docker_and_uses_static_strings(self):
+        process = SimpleNamespace(wait=AsyncMock(return_value=0), returncode=0, kill=lambda: None)
+        spawn = AsyncMock(return_value=process)
+
+        def mock_which_docker(binary, **kw):
+            return f"/usr/bin/{binary}" if binary == "docker" else None
+
+        with (
+            patch("manage.shutil.which", side_effect=mock_which_docker),
+            patch("manage.asyncio.create_subprocess_exec", spawn),
+        ):
+            cmd = await manage._docker_compose_command()
+            self.assertEqual(cmd, ["/usr/bin/docker", "compose"])
+            self.assertEqual(spawn.call_args.args, ("docker", "compose", "version"))
+
+    async def test_docker_compose_command_falls_back_to_docker_compose(self):
+        process = SimpleNamespace(wait=AsyncMock(return_value=0), returncode=0, kill=lambda: None)
+        spawn = AsyncMock(return_value=process)
+
+        def mock_which_compose(binary, **kw):
+            return f"/usr/local/bin/{binary}" if binary == "docker-compose" else None
+
+        with (
+            patch("manage.shutil.which", side_effect=mock_which_compose),
+            patch("manage.asyncio.create_subprocess_exec", spawn),
+        ):
+            cmd = await manage._docker_compose_command()
+            self.assertEqual(cmd, ["/usr/local/bin/docker-compose"])
+            self.assertEqual(spawn.call_args.args, ("docker-compose", "version"))
+
+    async def test_docker_compose_command_raises_when_neither_available(self):
+        with patch("manage.shutil.which", return_value=None):
+            with self.assertRaises(RuntimeError):
+                await manage._docker_compose_command()
 
 
 if __name__ == "__main__":

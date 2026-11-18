@@ -25,13 +25,52 @@ from ..keyboards import BTN_CONFIG_MAP
 from ..rbac import ROLE_USER, build_user_role_js, get_role_level
 from ..rbac import is_admin as _is_admin
 from ..rbac import is_root as _is_root
-from ..utils import encrypt_for_web, generate_favicons, get_app_version
+from ..utils import encrypt_for_web, generate_favicons, get_app_version, get_web_key
 
 from . import auth as web_auth
 # Lazy import traffic_module when needed
 from .avatar import get_avatar_html as _get_avatar_html
 
 routes = web.RouteTableDef()
+
+
+@routes.get("/operations")
+async def handle_operations_page(request: web.Request) -> web.StreamResponse:
+    user = web_auth.get_current_user(request)
+    if not user:
+        raise web.HTTPFound("/login")
+    if not _is_admin(user):
+        raise web.HTTPForbidden()
+    from .. import operations
+    from ..models import Node
+    from .operation_history import LABELS, present
+    from ..utils import get_web_key
+
+    lang = get_user_lang(int(user["id"]))
+    try:
+        filters = operations.parse_filters(request.query)
+    except ValueError:
+        raise web.HTTPBadRequest(text="Invalid filter")
+    rows, pagination = await operations.history(**filters)
+    names = {node.id: node.name for node in await Node.all()}
+    labels = LABELS.get(lang, LABELS["en"])
+    pagination_dict = pagination if isinstance(pagination, dict) else {}
+    next_before = pagination.get("next_before") if isinstance(pagination, dict) else pagination
+    response = _render_html_response("operations.html", {
+        "lang": lang, "labels": labels, "filters": filters, "pagination": pagination_dict,
+        "statuses": ["queued", "dispatched", "running", "finished", "failed", "unknown", "legacy_sent"],
+        "rows": [_encrypt_operation_display(present(row, names, lang)) for row in rows], "next_before": next_before,
+        "nodes": {node_id: encrypt_for_web(name) for node_id, name in names.items()},
+        "panel_web_key": get_web_key(), "panel_role": user.get("role", ROLE_USER),
+        "panel_owner": "true" if _is_root(user) else "false", "user_role_level": get_role_level(int(user["id"])),
+    }, request)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _encrypt_operation_display(row):
+    return {key: encrypt_for_web(str(value)) if key in {"command", "node_name", "requested_by", "result"} else value
+            for key, value in row.items()}
 
 TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "core" / "templates"
 CUSTOM_TEMPLATE_DIR: Final[Path] = Path(BASE_DIR) / "custom" / "web" / "templates"
@@ -429,6 +468,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_toggle_a11y_mode": _("web_toggle_a11y_mode", lang),
         "web_toggle_holiday_mode": _("web_toggle_holiday_mode", lang),
         "web_edit_ui": _("web_edit_ui", lang),
+        "web_terminal_btn": _("web_terminal_btn", lang),
         "web_vnc_terminal_title": _("web_vnc_terminal_title", lang),
         "web_brand_name": TG_BOT_NAME,
         "web_version": display_version,
@@ -451,6 +491,8 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_no_additional_ips": _("web_no_additional_ips", lang),
         "web_failed_to_load": _("web_failed_to_load", lang),
         "web_uptime": _("web_uptime", lang),
+        "web_server_uptime": _("web_server_uptime", lang),
+        "web_availability": _("web_availability", lang),
         "web_cpu": _("web_cpu", lang),
         "web_ram": _("web_ram", lang),
         "web_services_title": _("web_services_title", lang),
@@ -521,7 +563,14 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_reset_traffic_btn": _("web_reset_traffic_btn", lang),
         "web_reset_uptime": _("web_reset_uptime", lang),
         "user_role_js": build_user_role_js(role, user_id),
+        "user_role": role,
+        "user_role_level": get_role_level(user_id),
         "is_main_admin": is_main_admin,
+        "panel_web_key": get_web_key(),
+        "panel_role": role,
+        "panel_owner": "true" if is_main_admin else "false",
+        "global_ping_mode": getattr(current_config, "PING_MODE", "http"),
+        "user_is_admin": _is_admin(user),
         "reset_allowed": can_reset,
         "web_search_placeholder": _("web_search_placeholder", lang),
         "config_json": json.dumps({
@@ -622,6 +671,11 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
             "web_avail_offline": _("web_avail_offline", lang),
             "web_agent_uptime_os": _("web_agent_uptime_os", lang),
             "web_agent_downtime": _("web_agent_downtime", lang),
+            "web_server_uptime": _("web_server_uptime", lang),
+            "web_availability": _("web_availability", lang),
+            "web_uptime_7d_ago": _("web_uptime_7d_ago", lang),
+            "web_uptime_today": _("web_uptime_today", lang),
+            "web_uptime_interval_6h": _("web_uptime_interval_6h", lang),
             "web_label_cpu": _("web_label_cpu", lang),
             "web_label_ram": _("web_label_ram", lang),
             "web_label_disk": _("web_label_disk", lang),
@@ -707,6 +761,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
 
 @routes.get("/nodes")
 async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
+    from ..utils import get_web_key
     user = web_auth.get_current_user(request)
     if not user:
         had_cookie = bool(request.cookies.get(web_auth.COOKIE_NAME))
@@ -763,9 +818,12 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "user_role_js": build_user_role_js(role, user_id),
         "user_role_level": get_role_level(user_id),
         "user_is_admin": is_admin,
+        "panel_web_key": get_web_key(), "panel_role": role,
+        "panel_owner": "true" if is_main_admin else "false",
         "role_badge": role_badge_html,
         "vnc_nodes": vnc_nodes,
         "web_vnc_select_server": _("web_vnc_select_server", lang),
+        "web_terminal_btn": _("web_terminal_btn", lang),
         "web_vnc_terminal_title": _("web_vnc_terminal_title", lang),
         "web_monitor_title": _("web_nodes_monitor_title", lang),
         "web_mass_actions": _("web_nodes_monitor_mass_actions", lang),
@@ -801,6 +859,8 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_loading": _("web_loading", lang),
         "web_stats_total": _("web_stats_total", lang),
         "web_uptime": _("web_nodes_monitor_uptime", lang),
+        "web_server_uptime": _("web_server_uptime", lang),
+        "web_availability": _("web_availability", lang),
         "web_notifications_title": _("web_notifications_title", lang),
         "web_clear_notifications": _("web_clear_notifications", lang),
         "web_resources_chart": _("web_nodes_monitor_resources_chart", lang),
@@ -1206,7 +1266,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
                 has_active_nodes = True
                 break
     except Exception:
-        pass
+        logging.debug("Unable to determine active nodes", exc_info=True)
 
     context = {
         "lang": lang,
@@ -1332,7 +1392,13 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
         "web_sessions_modal_title": _("web_sessions_modal_title", lang),
         "user_role_js": build_user_role_js(role, user_id),
+        "user_role": role,
+        "user_role_level": get_role_level(user_id),
         "is_main_admin": is_main_admin,
+        "panel_web_key": get_web_key(),
+        "panel_role": role,
+        "panel_owner": "true" if is_main_admin else "false",
+        "user_is_admin": is_admin,
         "reset_allowed": can_reset,
         "check_resources": "checked" if user_alerts.get("resources", False) else "",
         "check_logins": "checked" if user_alerts.get("logins", False) else "",
@@ -1448,7 +1514,6 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         i18n_all[locale] = localized
 
     current_data = i18n_all.get(lang, i18n_all["en"])
-    injection = f"{json.dumps(current_data)};\n        const I18N_ALL = {json.dumps(i18n_all)}"
     is_default_pass = web_auth.is_default_password_active(ADMIN_USER_ID)
 
     security_settings = await current_config.get_bot_config("security_settings", {})
@@ -1467,7 +1532,8 @@ async def handle_login_page(request: web.Request) -> web.StreamResponse:
         "telegram_only_mode": telegram_only_mode,
         "web_version": CACHE_VER,
         "current_lang": lang,
-        "i18n_json": injection,
+        "i18n_json": json.dumps(current_data),
+        "all_locales": i18n_all,
         "login_telegram_id_label": _("login_telegram_id_label", lang),
         "login_via_telegram_btn": _("login_via_telegram_btn", lang),
         "login_or_id_link": _("login_or_id_link", lang),

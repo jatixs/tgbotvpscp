@@ -11,7 +11,7 @@ from . import config
 from .models import Node, NodeClientUpdate
 
 COMMIT = re.compile(r"[0-9a-f]{40}")
-BRANCH = re.compile(r"[A-Za-z0-9._/-]{1,255}")
+BRANCH = re.compile(r"(?![-/])(?!.*(?:\.\.|//))(?!.*[./]$)[A-Za-z0-9._/-]{1,255}")
 PLAN_TTL = 600
 UPDATE_TTL = 1800
 agent_update_lock = asyncio.Lock()

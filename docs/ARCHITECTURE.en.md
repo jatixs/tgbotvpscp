@@ -1090,6 +1090,13 @@ Sliding window: raw samples are kept ~1 h, minute buckets 25 h, five-minute buck
 
 ---
 
+## Maintenance and shutdown
+
+- `core/log_maintenance.py` scans only direct files matching `logs/bot/bot.log.*`, `logs/watchdog/watchdog.log.*` and `logs/node/node.log.*`. Supported suffixes are `YYYY-MM-DD` and positive rotation numbers, optionally ending in `.gz`. Files must be strictly older than `LOG_RETENTION_DAYS` (7 days), measured by `mtime`. Active files, symlinks, nested directories, audit and backup directories are excluded. This prunes history; it does not limit active-file size.
+- `bot.py` starts `LogMaintenance` and tracks it with the other background tasks for shutdown. Scanning uses `asyncio.to_thread`; the normal interval is 6 hours, reduced to 5 minutes after an error. Orchestrator GC only unloads modules.
+- `core/telegram_runtime.py` clears the webhook and warms the `bot.me()` cache. Each operation gets up to 5 attempts with a 30-second timeout. Network errors, timeouts, 5xx responses and `RetryAfter` are retried; permanent errors and exhausted attempts fail startup. The dispatcher starts once; aiogram retries subsequent `getUpdates` calls. The shared SIGINT/SIGTERM handler cancels the main task, including preparation; polling cancellation stops the dispatcher first. The bot owner closes its session.
+- `.backups/pre_update_*` stores local-edit snapshots, not temporary installation files. Snapshots and legacy `.backup` are never deleted automatically; administrators remove old copies manually after reviewing the changes they need. Both survive reinstalls and are excluded from Git and the Docker build context. An ordinary restart flag does not confirm a successful update or authorize backup cleanup.
+
 ## 📚 Dependencies
 
 ### Python Packages (Core)

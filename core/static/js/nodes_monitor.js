@@ -3,6 +3,7 @@
  * Real-time monitoring dashboard for all nodes
  */
 
+(() => {
 let allNodesData = [];
 let currentFilter = 'all';
 let currentCpuFilter = 'all';
@@ -17,6 +18,7 @@ let modalNetRangeCtl = null;
 let nodesMonitorSSESource = null;
 let nodeDetailSSESource = null;
 let nodeServicesSSESource = null;
+let nodeTooltipController = null;
 let _lastServicesCache = null; // cached services for stable DOM updates
 
 
@@ -50,6 +52,11 @@ function initUptimeTooltip() {
     const popover = document.getElementById('availabilityPopover');
     if (!trigger || !popover || trigger.dataset.tooltipInit) return;
     trigger.dataset.tooltipInit = '1';
+    nodeTooltipController?.abort();
+    nodeTooltipController = new AbortController();
+    function listen(target, event, handler) {
+        target.addEventListener(event, handler, { signal: nodeTooltipController.signal });
+    }
 
     let leaveTimeout = null;
 
@@ -93,23 +100,23 @@ function initUptimeTooltip() {
         }, 150);
     }
 
-    trigger.addEventListener('mouseenter', () => { clearTimeout(leaveTimeout); positionAndShow(); });
-    trigger.addEventListener('mouseleave', () => { leaveTimeout = setTimeout(hidePopover, 100); });
-    popover.addEventListener('mouseenter', () => { clearTimeout(leaveTimeout); });
-    popover.addEventListener('mouseleave', () => { leaveTimeout = setTimeout(hidePopover, 100); });
+    listen(trigger, 'mouseenter', () => { clearTimeout(leaveTimeout); positionAndShow(); });
+    listen(trigger, 'mouseleave', () => { leaveTimeout = setTimeout(hidePopover, 100); });
+    listen(popover, 'mouseenter', () => { clearTimeout(leaveTimeout); });
+    listen(popover, 'mouseleave', () => { leaveTimeout = setTimeout(hidePopover, 100); });
 
-    trigger.addEventListener('click', (e) => {
+    listen(trigger, 'click', (e) => {
         if (isVisible()) hidePopover(); else positionAndShow();
         e.stopPropagation();
     });
-    trigger.addEventListener('keydown', (e) => {
+    listen(trigger, 'keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (isVisible()) hidePopover(); else positionAndShow(); }
         if (e.key === 'Escape') hidePopover();
     });
-    document.addEventListener('click', (e) => {
+    listen(document, 'click', (e) => {
         if (!trigger.contains(e.target) && !popover.contains(e.target)) { if (isVisible()) hidePopover(); }
     });
-    window.addEventListener('resize', () => { if (isVisible()) positionAndShow(); });
+    listen(window, 'resize', () => { if (isVisible()) positionAndShow(); });
 
     window.hideAvailabilityPopover = hidePopover;
 }
@@ -182,6 +189,7 @@ function connectNodesMonitorStream() {
 
 // Initialize function for SPA navigation
 function initNodesMonitor() {
+    if (!document.getElementById('nodesGrid')) return;
     stopNodesMonitorStream();
     
     // Reset state
@@ -225,6 +233,16 @@ function initNodesMonitor() {
 
 // Expose functions to window
 window.initNodesMonitor = initNodesMonitor;
+window.destroyNodesMonitor = () => {
+    nodeTooltipController?.abort();
+    stopNodesMonitorStream();
+    stopNodeModalStreams();
+    if (window.hideAvailabilityPopover) window.hideAvailabilityPopover();
+    if (modalResRangeCtl) { modalResRangeCtl.destroy?.(); modalResRangeCtl = null; }
+    if (modalNetRangeCtl) { modalNetRangeCtl.destroy?.(); modalNetRangeCtl = null; }
+    if (modalResChart) { modalResChart.destroy(); modalResChart = null; }
+    if (modalNetChart) { modalNetChart.destroy(); modalNetChart = null; }
+};
 window.toggleServicesDisplay = toggleServicesDisplay;
 
 // Wire service action buttons rendered inside the modal
@@ -328,8 +346,9 @@ function renderNodes() {
     });
     
     if (filtered.length === 0) {
-        container.innerHTML = DOMPurify.sanitize(`
-            <div class="col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
+        container.classList.add('nodes-grid-empty');
+        setSafeHTML(container, `
+            <div class="nodes-empty-state text-center text-gray-500 dark:text-gray-400">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -338,16 +357,17 @@ function renderNodes() {
         `);
         return;
     }
+    container.classList.remove('nodes-grid-empty');
     
     const newHtml = filtered.map(node => createNodeCard(node)).join('');
     
     // Try to update in-place to prevent flicker
     const tempContainer = container.cloneNode(false);
-    tempContainer.innerHTML = DOMPurify.sanitize(newHtml);
+    setSafeHTML(tempContainer, newHtml);
     
     if (!updateDOM(container, tempContainer)) {
         // Fallback if structural changes occurred
-        container.innerHTML = DOMPurify.sanitize(newHtml);
+        setSafeHTML(container, newHtml);
     }
     
     if (typeof parsePageEmojis === 'function') {
@@ -413,11 +433,7 @@ function createNodeCard(node) {
                             <div class="ip-copy-container inline-flex items-center gap-1 group/ip" data-copy-ip="${escapeHtml(node.ip || '')}">
                                 <span class="ip-copy-text text-xs text-gray-500 dark:text-gray-400 font-mono select-all" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">${escapeHtml(node.ip || '-')}</span>
                                 ${node.ip && node.ip !== '-' ? `
-                                <button type="button" class="ip-copy-btn p-0.5 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(node.ip)}" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">
-                                    <svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
-                                </button>` : ''}
+                                ${renderCopyIpButton(node.ip)}` : ''}
                             </div>
                             ${node.ping != null ? (node.ping === 'n/a' ? `<span onclick="window.showPingErrorModal(event)" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer hover:opacity-80 transition-opacity ${getPingBadgeClass(node.ping)}" title="Click for details">n/a</span>` : `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>`) : ''}
                         </div>
@@ -1132,7 +1148,7 @@ function connectNodeServicesStream(token) {
 
     const container = document.getElementById('modalServicesContainer');
     if (container) {
-        container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-4 text-gray-400">${I18N?.web_services_loading || I18N?.web_loading || 'Loading'}</div>`);
+        setSafeHTML(container, `<div class="text-center py-4 text-gray-400">${I18N?.web_services_loading || I18N?.web_loading || 'Loading'}</div>`);
         _lastServicesCache = null; // force full re-render on next data event
     }
 
@@ -1176,7 +1192,7 @@ function renderNodeServices(token, services) {
 
     if (services.length === 0) {
         _lastServicesCache = null;
-        container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`);
+        setSafeHTML(container, `<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`);
         if (btnContainer) btnContainer.classList.add('hidden');
         return;
     }
@@ -1234,7 +1250,7 @@ function renderNodeServices(token, services) {
     // Structure changed (new services, count changed, or showAll toggled) — full re-render
     _lastServicesCache = { structureKey, showAll, statuses: displayServices.map(s => s.status) };
 
-    container.innerHTML = DOMPurify.sanitize(displayServices.map(svc => `
+    setSafeHTML(container, displayServices.map(svc => `
             <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg" data-svc-name="${escapeHtml(svc.name)}">
                 <div class="flex items-center gap-2">
                     <span data-svc-dot="true" class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
@@ -1243,12 +1259,12 @@ function renderNodeServices(token, services) {
                 </div>
                 ${(window.USER_ROLE_LEVEL || 0) >= 1 ? `
                 <div class="flex gap-1">
-                    <button data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="restart" data-type="${svc.type || 'systemd'}" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
+                    <button data-action="node-service-action" data-token="${escapeHtml(token)}" data-name="${escapeHtml(svc.name)}" data-cmd="restart" data-type="${escapeHtml(svc.type || 'systemd')}" class="p-1 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 rounded" title="Restart">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
-                    <button data-svc-toggle="true" data-action="node-service-action" data-token="${token}" data-name="${svc.name}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${svc.type || 'systemd'}" 
+                    <button data-svc-toggle="true" data-action="node-service-action" data-token="${escapeHtml(token)}" data-name="${escapeHtml(svc.name)}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${escapeHtml(svc.type || 'systemd')}"
                             class="p-1 ${svc.status === 'running' ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
                             title="${svc.status === 'running' ? (I18N?.web_service_stop || 'Stop') : (I18N?.web_service_start || 'Start')}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1272,11 +1288,11 @@ function renderNodeServices(token, services) {
                 if (showAll) {
                     btn.classList.add('expanded');
                     if (blurOverlay) blurOverlay.style.display = 'none';
-                    btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_less || 'Show Less'}`);
+                    setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_less || 'Show Less'}`);
                 } else {
                     btn.classList.remove('expanded');
                     if (blurOverlay) blurOverlay.style.display = '';
-                    btn.innerHTML = DOMPurify.sanitize(`<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Show More'} (${services.length - INITIAL_SHOW})`);
+                    setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Show More'} (${services.length - INITIAL_SHOW})`);
                 }
             }
         } else {
@@ -1542,3 +1558,9 @@ window.showPingErrorModal = function(event) {
         alert(title + "\\n\\n" + desc);
     }
 };
+
+window.closeSystemModal = closeSystemModal;
+window.showAlert = showAlert;
+window.showConfirm = showConfirm;
+})();
+

@@ -69,7 +69,7 @@ def compose_command() -> list[str]:
 
 
 def run(command: list[str]) -> None:
-    result = subprocess.run(command, cwd=INSTALL_DIR, check=False)
+    result = subprocess.run(command, cwd=INSTALL_DIR, check=False, timeout=180)
     if result.returncode:
         raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(command)}")
 

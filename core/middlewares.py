@@ -115,7 +115,7 @@ class AutoDeleteMessageMiddleware(BaseMiddleware):
         try:
             await event.delete()
         except Exception:
-            pass
+            logging.debug("Unable to delete handled message", exc_info=True)
         return response
 
 class CallbackTTLMiddleware(BaseMiddleware):
@@ -146,10 +146,10 @@ class CallbackTTLMiddleware(BaseMiddleware):
                 try:
                     await event.answer(_("callback_stale", lang), show_alert=True)
                 except Exception:
-                    pass
+                    logging.debug("Unable to acknowledge stale callback", exc_info=True)
                 try:
                     await event.message.delete()
                 except Exception:
-                    pass
+                    logging.debug("Unable to delete stale keyboard", exc_info=True)
                 return
         return await handler(event, data)

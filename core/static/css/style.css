@@ -1,5 +1,16 @@
 /* /core/static/css/style.css */
 
+/* Keep empty node searches centered in the remaining monitoring area. */
+.nodes-monitor-page { min-height: calc(100dvh - 128px); display: flex; flex-direction: column; }
+@media (max-width: 639px) { .nodes-monitor-page { min-height: calc(100dvh - 104px); } }
+.nodes-monitor-page > :not(#nodesGrid) { flex-shrink: 0; }
+.nodes-grid-empty { flex: 1; min-height: 240px; grid-template-columns: minmax(0, 1fr) !important; }
+.nodes-empty-state { grid-column: 1 / -1; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 240px; padding: 2rem; }
+main[aria-busy="true"] { pointer-events: none; }
+.panel-page-enter { animation: panel-page-enter .16s cubic-bezier(0, 0, 0.2, 1); }
+@keyframes panel-page-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { main[aria-busy="true"] { transition: none; } .panel-page-enter { animation: none; } }
+
 img.emoji {
 	height: 1em;
 	width: 1em;
@@ -65,7 +76,7 @@ html.dark body {
 	color: #f3f4f6;
 }
 
-nav {
+body > nav {
 	position: relative;
 	padding-top: max(0px, env(safe-area-inset-top, 0px)) !important;
 }
@@ -603,7 +614,7 @@ button.force-expanded .btn-text {
 		padding-top: env(safe-area-inset-top, 0px);
 	}
 
-	nav {
+	body > nav {
 		padding-top: env(safe-area-inset-top, 0px) !important;
 	}
 
@@ -1829,6 +1840,135 @@ html.amoled #log-loader {
 .dashboard-block:not([data-current-size="small"]) .quick-stat-bar { display: none !important; }
 .dashboard-block:not([data-current-size="small"]) .quick-stat-chart { display: block !important; }
 
+/* --- 7-Day Uptime Status Capsules --- */
+.uptime-pills-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    width: 100%;
+    height: 30px;
+    padding: 2px 0;
+}
+
+.uptime-pill {
+    flex: 1 1 0;
+    min-width: 6px;
+    height: 26px;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), filter 0.15s ease, box-shadow 0.15s ease;
+    background: #10b981;
+    outline: none;
+}
+
+.uptime-pill:hover,
+.uptime-pill:focus-visible {
+    transform: scaleY(1.15) scaleX(1.08);
+    z-index: 30;
+    filter: brightness(1.2);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.35);
+}
+
+.uptime-pill-seg {
+    flex: 1 1 0;
+    width: 100%;
+    transition: background-color 0.2s ease;
+}
+
+.uptime-pill-seg.seg-green {
+    background-color: #10b981;
+}
+
+.uptime-pill-seg.seg-yellow {
+    background-color: #f59e0b;
+}
+
+.uptime-pill-seg.seg-red {
+    background-color: #ef4444;
+}
+
+.uptime-pill-seg.seg-grey {
+    background-color: rgba(156, 163, 175, 0.35);
+}
+
+.dark .uptime-pill-seg.seg-grey {
+    background-color: rgba(75, 85, 99, 0.45);
+}
+
+/* Floating tooltip for uptime capsules */
+.uptime-pill-tooltip {
+    position: fixed;
+    z-index: 99999;
+    transform: translate(-50%, -100%);
+    pointer-events: none;
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #f3f4f6;
+    font-size: 11px;
+    line-height: 1.45;
+    box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.6), 0 8px 12px -6px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.uptime-pill-tooltip.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.light .uptime-pill-tooltip {
+    background: rgba(255, 255, 255, 0.98);
+    border-color: rgba(0, 0, 0, 0.12);
+    color: #1f2937;
+    box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.15), 0 8px 12px -6px rgba(0, 0, 0, 0.1);
+}
+
+.uptime-tooltip-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+
+.uptime-tooltip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.uptime-tooltip-dot.dot-green { background-color: #10b981; }
+.uptime-tooltip-dot.dot-yellow { background-color: #f59e0b; }
+.uptime-tooltip-dot.dot-red { background-color: #ef4444; }
+.uptime-tooltip-dot.dot-grey { background-color: #9ca3af; }
+
+.uptime-tooltip-time {
+    color: #9ca3af;
+    font-size: 10px;
+    margin-bottom: 4px;
+}
+
+.light .uptime-tooltip-time {
+    color: #6b7280;
+}
+
+.uptime-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 10px;
+    margin-top: 2px;
+}
+
 /* --- Small Size Dashboard Block Adaptations (Desktop Only) --- */
 @media (min-width: 1024px) {
     .dashboard-block[data-current-size="small"] {
@@ -3018,7 +3158,7 @@ html.amoled #themeBtn:hover {
     }
 }
 
-/* --- Smooth View Transitions for Theme Switching (Crossfade) --- */
+/* --- View Transitions for Theme Switching & Panel SPA Navigation --- */
 nav.sticky,
 body > nav {
     view-transition-name: main-header;
@@ -3026,6 +3166,10 @@ body > nav {
 
 #mobileSettingsDropdown {
     view-transition-name: mobile-settings-dropdown;
+}
+
+main[data-panel-page] {
+    view-transition-name: panel-main;
 }
 
 ::view-transition-group(main-header) {
@@ -3036,6 +3180,11 @@ body > nav {
     z-index: 50;
 }
 
+::view-transition-group(panel-main) {
+    z-index: 20;
+}
+
+/* Default (Theme toggle): keep header static and crossfade root background */
 ::view-transition-old(mobile-settings-dropdown),
 ::view-transition-new(mobile-settings-dropdown),
 ::view-transition-old(main-header),
@@ -3056,6 +3205,71 @@ body > nav {
 
 ::view-transition-new(root) {
     animation-name: themeFadeIn;
+}
+
+/* Page Navigation Mode: Root background remains static; header and content smoothly crossfade */
+html[data-panel-navigating]::view-transition-old(root),
+html[data-panel-navigating]::view-transition-new(root) {
+    animation: none !important;
+    mix-blend-mode: normal !important;
+}
+
+html[data-panel-navigating]::view-transition-group(main-header) {
+    animation-duration: 0.14s;
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html[data-panel-navigating]::view-transition-old(main-header) {
+    animation: 0.08s cubic-bezier(0.4, 0, 1, 1) both panelFadeOut;
+}
+
+html[data-panel-navigating]::view-transition-new(main-header) {
+    animation: 0.14s cubic-bezier(0, 0, 0.2, 1) both panelFadeIn;
+}
+
+html[data-panel-navigating]::view-transition-group(panel-main) {
+    animation-duration: 0.18s;
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+html[data-panel-navigating]::view-transition-old(panel-main) {
+    animation: 0.09s cubic-bezier(0.4, 0, 1, 1) both panelMainOut;
+}
+
+html[data-panel-navigating]::view-transition-new(panel-main) {
+    animation: 0.16s cubic-bezier(0, 0, 0.2, 1) both panelMainIn;
+}
+
+@keyframes panelFadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes panelFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes panelMainOut {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+}
+
+@keyframes panelMainIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes themeFadeOut {

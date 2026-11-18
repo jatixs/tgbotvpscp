@@ -1,0 +1,182 @@
+{% macro chevron() -%}
+<svg aria-hidden="true" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7" /></svg>
+{%- endmacro %}
+{% set surface = 'bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl shadow-lg dark:shadow-none' %}
+{% set field = 'w-full px-3 py-2 bg-white/60 dark:bg-black/20 border border-white/40 dark:border-white/10 rounded-xl text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition' %}
+{% set page_link = 'bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10' %}
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{{ labels.title }}</title>
+    <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" href="/static/favicons/favicon-32x32.png">
+    <link rel="stylesheet" href="/static/css/main.css?v={{ asset_ver }}">
+    <script src="/static/js/theme_init.js?v={{ asset_ver }}"></script>
+    <link rel="stylesheet" href="/static/css/style.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/operations.css?v={{ asset_ver }}">
+    <script src="/static/vendor/crypto-js.min.js"></script>
+    <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
+    <script src="/static/vendor/dompurify.min.js"></script>
+    <script src="/static/vendor/chart.js"></script>
+    <script src="/static/vendor/chartjs-plugin-zoom.min.js"></script>
+    <script src="/static/vendor/sortable.min.js"></script>
+</head>
+<body class="operations-page bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 pb-10 overflow-x-hidden">
+    <div aria-hidden="true" class="fixed top-[-10%] left-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float pointer-events-none opacity-70 dark:opacity-100 bg-blue-300 dark:bg-blue-600/20"></div>
+    <div aria-hidden="true" class="fixed bottom-[-10%] right-[-10%] w-96 h-96 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl animate-float delay-2000 pointer-events-none opacity-70 dark:opacity-100 bg-purple-300 dark:bg-purple-600/20"></div>
+    <nav class="bg-white/70 dark:bg-black/40 backdrop-blur-xl border-b border-white/20 dark:border-white/5 sticky top-0 z-40 shadow-sm dark:shadow-none">
+        <div class="max-w-7xl mx-auto px-3 py-2 sm:px-4 sm:py-3 flex items-center gap-2">
+            <a href="/nodes" title="{{ labels.back }}" aria-label="{{ labels.back }}" class="text-gray-500 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10">
+                <svg aria-hidden="true" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            </a>
+            <h1 class="font-bold text-lg sm:text-xl bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">{{ labels.title }}</h1>
+        </div>
+    </nav>
+    <main data-panel-page="operations" data-panel-i18n="{}" data-panel-key="{{ panel_web_key }}"
+          data-panel-role="{{ panel_role }}" data-panel-role-level="{{ user_role_level }}" data-panel-owner="{{ panel_owner }}"
+          class="max-w-7xl mx-auto px-4 mt-4 sm:mt-8 relative z-10">
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">{{ labels.intro }}</p>
+        <p id="operationsLiveStatus" hidden role="status" class="text-xs text-gray-500 dark:text-gray-400 mb-4"
+           data-connecting="{{ labels.live_connecting }}" data-live="{{ labels.live }}"
+           data-reconnecting="{{ labels.live_reconnecting }}" data-expired="{{ labels.live_expired }}"></p>
+        <form method="get" action="/operations" class="operations-filters {{ surface }} p-4 mb-6">
+            <label class="block text-xs font-bold text-gray-600 dark:text-gray-400">
+                <span class="block mb-2">{{ labels.server }}</span>
+                <select name="node_id" class="{{ field }}">
+                    <option value="0">{{ labels.all_servers }}</option>
+                    {% if filters.node_id and filters.node_id not in nodes %}
+                    <option value="{{ filters.node_id }}" selected>{{ labels.deleted }} #{{ filters.node_id }}</option>
+                    {% endif %}
+                    {% for id, name in nodes.items() %}
+                    <option value="{{ id }}" data-operation-encrypted="{{ name }}" {% if filters.node_id == id %}selected{% endif %}></option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="block text-xs font-bold text-gray-600 dark:text-gray-400">
+                <span class="block mb-2">{{ labels.status }}</span>
+                <select name="status" class="{{ field }}">
+                    <option value="">{{ labels.all_statuses }}</option>
+                    {% for status in statuses %}
+                    <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ labels[status] }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="block text-xs font-bold text-gray-600 dark:text-gray-400">
+                <span class="block mb-2">{{ labels.per_page }}</span>
+                <select name="per_page" class="{{ field }}" onchange="this.form.submit()">
+                    {% for count in (pagination.allowed_per_page if pagination and pagination.allowed_per_page else [10, 20, 30, 50, 100]) %}
+                    <option value="{{ count }}" {% if filters and filters.per_page == count %}selected{% endif %}>{{ count }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <input type="hidden" name="page" value="1">
+            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl transition flex items-center gap-2">
+                <svg aria-hidden="true" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {{ labels.refresh }}
+            </button>
+        </form>
+        <details class="operation-result text-xs text-gray-500 dark:text-gray-400 mb-6">
+            <summary class="cursor-pointer font-medium hover:text-blue-500 transition">{{ chevron() }}{{ labels.status_help }}</summary>
+            <p class="mt-3 leading-relaxed">{{ labels.notice }}</p>
+        </details>
+        {% set status_styles = {
+            'queued': 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400',
+            'dispatched': 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400',
+            'running': 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400',
+            'finished': 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+            'failed': 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400',
+            'unknown': 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400',
+            'legacy_sent': 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400'
+        } %}
+        <section id="operationsList" class="operations-list" aria-label="{{ labels.title }}" data-status-styles="{{ status_styles | tojson | forceescape }}">
+            {% for row in rows %}
+            <article data-operation-id="{{ row.id }}" class="operation-card {{ surface }} p-4 sm:p-5">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <h2 data-operation-encrypted="{{ row.command }}" class="text-sm sm:text-lg font-bold text-gray-900 dark:text-white"></h2>
+                        <span class="text-xs font-mono text-gray-400 dark:text-gray-500">#{{ row.id }}</span>
+                    </div>
+                    <span data-operation-status class="operation-status px-2 py-1 rounded-lg text-xs font-medium {{ status_styles.get(row.status, status_styles.queued) }}">{{ row.status_label }}</span>
+                </div>
+                <a class="inline-flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline" href="/operations?node_id={{ row.node_id }}">
+                    <svg aria-hidden="true" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="2" /><rect x="3" y="14" width="18" height="7" rx="2" /><path d="M7 6.5h.01M7 17.5h.01" /></svg>
+                    <span data-operation-encrypted="{{ row.node_name }}"></span>
+                </a>
+                <dl class="operation-meta mt-4 text-xs">
+                    <div><dt class="text-gray-500 dark:text-gray-400">{{ labels.time }}</dt><dd class="text-gray-700 dark:text-gray-300">{{ row.created_at }}</dd></div>
+                    <div><dt class="text-gray-500 dark:text-gray-400">{{ labels.actor }}</dt><dd data-operation-encrypted="{{ row.requested_by }}" class="text-gray-700 dark:text-gray-300"></dd></div>
+                    <div><dt class="text-gray-500 dark:text-gray-400">{{ labels.updated }} (UTC)</dt><dd data-operation-updated class="text-gray-700 dark:text-gray-300">{{ row.updated_at }}</dd></div>
+                </dl>
+                <details data-operation-result {% if not row.result %}hidden{% endif %} class="operation-result mt-4 pt-3 border-t border-gray-200 dark:border-white/5">
+                    <summary class="cursor-pointer text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-blue-500 transition">{{ chevron() }}{{ labels.result }}</summary>
+                    <pre data-operation-output data-operation-encrypted="{{ row.result }}" class="mt-3 p-3 rounded-xl bg-gray-50 dark:bg-black/20 text-xs text-gray-700 dark:text-gray-300 overflow-auto custom-scrollbar"></pre>
+                </details>
+            </article>
+            {% else %}
+            <div class="{{ surface }} p-8 text-center">
+                <svg aria-hidden="true" class="h-8 w-8 mx-auto mb-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11a9 9 0 1 1 2.6 7.4M3 4v7h7M12 7v5l3 2" /></svg>
+                <h2 class="text-lg font-bold mb-2">{{ labels.empty }}</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ labels.empty_hint }}</p>
+            </div>
+            {% endfor %}
+        </section>
+        {% if pagination and pagination.total_count and pagination.total_count > 0 %}
+        <nav aria-label="{{ labels.page }}" class="operations-pagination flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 py-3 px-4 {{ surface }}">
+            <div class="operations-pagination-info text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                {{ labels.showing_records }}&nbsp;<span class="font-semibold text-gray-900 dark:text-white">{{ pagination.start_index }}–{{ pagination.end_index }}</span>&nbsp;{{ labels.page_of }}&nbsp;<span class="font-semibold text-gray-900 dark:text-white">{{ pagination.total_count }}</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+                {% if pagination.has_prev %}
+                <a class="operations-pagination-btn {{ page_link }} px-3 gap-1.5" href="/operations?node_id={{ filters.node_id }}&amp;status={{ filters.status }}&amp;per_page={{ filters.per_page }}&amp;page={{ pagination.prev_page }}" title="{{ labels.prev }}" aria-label="{{ labels.prev }}">
+                    <svg aria-hidden="true" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                    <span class="hidden sm:inline">{{ labels.prev }}</span>
+                </a>
+                {% else %}
+                <span class="operations-pagination-btn is-disabled px-3 gap-1.5 bg-gray-100/40 dark:bg-white/5 border border-transparent text-gray-400 dark:text-gray-600" aria-disabled="true">
+                    <svg aria-hidden="true" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                    <span class="hidden sm:inline">{{ labels.prev }}</span>
+                </span>
+                {% endif %}
+
+                {% for p in pagination.page_numbers %}
+                    {% if p is none %}
+                    <span class="operations-pagination-btn select-none pointer-events-none text-gray-400 dark:text-gray-500 font-bold border-none bg-transparent">…</span>
+                    {% elif p == pagination.page %}
+                    <span aria-current="page" class="operations-pagination-btn is-active">{{ p }}</span>
+                    {% else %}
+                    <a class="operations-pagination-btn {{ page_link }}" href="/operations?node_id={{ filters.node_id }}&amp;status={{ filters.status }}&amp;per_page={{ filters.per_page }}&amp;page={{ p }}">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+
+                {% if pagination.has_next %}
+                <a class="operations-pagination-btn {{ page_link }} px-3 gap-1.5" href="/operations?node_id={{ filters.node_id }}&amp;status={{ filters.status }}&amp;per_page={{ filters.per_page }}&amp;page={{ pagination.next_page }}" title="{{ labels.next }}" aria-label="{{ labels.next }}">
+                    <span class="hidden sm:inline">{{ labels.next }}</span>
+                    <svg aria-hidden="true" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </a>
+                {% else %}
+                <span class="operations-pagination-btn is-disabled px-3 gap-1.5 bg-gray-100/40 dark:bg-white/5 border border-transparent text-gray-400 dark:text-gray-600" aria-disabled="true">
+                    <span class="hidden sm:inline">{{ labels.next }}</span>
+                    <svg aria-hidden="true" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </span>
+                {% endif %}
+            </div>
+        </nav>
+        {% endif %}
+    </main>
+    <script src="/static/js/panel_bootstrap.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/browser_utils.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/common.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/chart_range.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/dashboard.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/nodes_monitor.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/node_vnc.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/panel_navigation.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/operations.js?v={{ asset_ver }}"></script>
+    <script src="/static/js/settings.js?v={{ asset_ver }}"></script>
+</body>
+</html>

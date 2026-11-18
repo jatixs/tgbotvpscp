@@ -27,6 +27,7 @@ from .middlewares import (
 )
 from .streaming import routes as streaming_routes
 from .views import routes as view_routes
+from .private_assets import protect_private_assets, register_private_assets
 
 STATIC_DIR: Final[Path] = Path(BASE_DIR) / "core" / "static"
 MAX_CLIENT_UPLOAD_SIZE: Final[int] = 5 * 1024 * 1024
@@ -47,7 +48,7 @@ async def on_shutdown(app: web.Application) -> None:
 def create_web_app(bot_instance: Bot) -> web.Application:
     """Create and configure the aiohttp application instance."""
     app = web.Application(
-        middlewares=[security_headers_middleware, https_enforcement_middleware, rate_limit_middleware, csrf_middleware, waf_middleware],
+        middlewares=[security_headers_middleware, https_enforcement_middleware, rate_limit_middleware, csrf_middleware, waf_middleware, protect_private_assets],
         client_max_size=MAX_CLIENT_UPLOAD_SIZE,
     )
     app["bot"] = bot_instance
@@ -57,6 +58,7 @@ def create_web_app(bot_instance: Bot) -> web.Application:
     app.on_cleanup.append(cleanup_server)
 
     if ENABLE_WEB_UI and STATIC_DIR.exists():
+        register_private_assets(app)
         app.router.add_static("/static", str(STATIC_DIR))
 
     custom_static_dir = Path(BASE_DIR) / "custom" / "web" / "static"

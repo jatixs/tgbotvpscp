@@ -1,9 +1,7 @@
 import base64
 import json
 import os
-import sys
 import time
-import types
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -11,27 +9,13 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa, utils as crypto_utils
 
+from tests.support import CORE_DEPENDENCIES, mock_optional_modules
+
 os.environ.setdefault("DATA_ENCRYPTION_KEY", Fernet.generate_key().decode())
 os.environ.setdefault("TG_BOT_TOKEN", "123456789:TEST_BOT_TOKEN")
 os.environ.setdefault("TG_ADMIN_ID", "12345")
 
-modules_to_mock = [
-    "aiohttp", "aiohttp.web",
-    "argon2", "argon2.exceptions",
-    "aiosqlite",
-    "requests",
-    "PIL", "PIL.Image",
-    "qrcode",
-    "aiogram", "aiogram.types", "aiogram.exceptions",
-    "netifaces", "psutil", "sentry_sdk", "yaml", "docker", "asyncssh", "tortoise",
-]
-
-for m in modules_to_mock:
-    if m not in sys.modules:
-        mod = MagicMock()
-        mod.__path__ = []
-        mod.__spec__ = types.SimpleNamespace(name=m, origin=None, submodule_search_locations=[])
-        sys.modules[m] = mod
+mock_optional_modules((*CORE_DEPENDENCIES, "psutil", "aiogram", "aiogram.types", "aiogram.exceptions"))
 
 from core.web.auth import verify_telegram_id_token
 

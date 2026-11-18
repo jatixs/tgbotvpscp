@@ -140,6 +140,21 @@ function cleanupDashboardSources() {
     if (window.agentPollInterval) clearInterval(window.agentPollInterval);
 }
 
+window.destroyDashboard = function () {
+    cleanupDashboardSources();
+    if (typeof closeHintModal === 'function') closeHintModal();
+    if (typeof closeNodeModal === 'function') closeNodeModal();
+    if (typeof closeVncModal === 'function') closeVncModal();
+    if (agentRangeCtl) {
+        agentRangeCtl.destroy?.();
+        agentRangeCtl = null;
+    }
+    if (agentChart) {
+        agentChart.destroy?.();
+        agentChart = null;
+    }
+};
+
 function initAgentChartRange() {
     const canvas = document.getElementById('agentChart');
     if (!canvas || typeof window.createChartRangeController !== 'function') return;
@@ -186,6 +201,9 @@ function startNodeChartRanges() {
         canvasId: 'nodeNetChart',
         getSource,
         network: true,
+        onInterfaceChange: () => {
+            renderNodeModalTraffic();
+        },
         getValues: point => [point.rx, point.tx, point.ping],
         render: renderNodeNetChart
     }).start();
@@ -960,22 +978,7 @@ function updateAgentStatsUI(data) {
             if (uptimeEl) uptimeEl.innerText = formatUptime(data.stats.boot_time);
 
             const avail = data.stats.agent_availability || {};
-
-            const uptimeOnlineBar = document.getElementById('uptimeBarOnline');
-            const uptimeDowntimeBar = document.getElementById('uptimeBarDowntime');
-            if (uptimeOnlineBar && uptimeDowntimeBar) {
-                const onlineSecs = avail.total_online_secs || 0;
-                const downSecs = avail.total_downtime_secs || 0;
-                const totalSecs = onlineSecs + downSecs;
-                const onlinePct = totalSecs > 0 ? (onlineSecs / totalSecs) * 100 : 100;
-                uptimeOnlineBar.style.width = onlinePct + '%';
-                uptimeDowntimeBar.style.width = (100 - onlinePct) + '%';
-
-                const onlineLabel = document.getElementById('uptime_online_label');
-                const downtimeLabel = document.getElementById('uptime_downtime_label');
-                if (onlineLabel) onlineLabel.innerText = (I18N?.web_nodes_monitor_total_uptime || 'Total uptime') + ': ' + formatDuration(onlineSecs);
-                if (downtimeLabel) downtimeLabel.innerText = (I18N?.web_agent_downtime || 'Downtime') + ': ' + formatDuration(downSecs);
-            }
+            renderAgentUptimePills(avail);
 
             const hintUptime = document.getElementById('hint-uptime');
             if (hintUptime) {
@@ -1047,6 +1050,179 @@ function updateAgentStatsUI(data) {
     }
 }
 
+function renderAgentUptimePills(avail) {
+    const onlineSecs = avail.total_online_secs || 0;
+    const downSecs = avail.total_downtime_secs || 0;
+    const onlineLabel = document.getElementById('uptime_online_label');
+    const downtimeLabel = document.getElementById('uptime_downtime_label');
+    const pctLabel = document.getElementById('uptime_percent_label');
+
+    if (onlineLabel) onlineLabel.innerText = (I18N?.web_nodes_monitor_total_uptime || 'Total uptime') + ': ' + formatDuration(onlineSecs);
+    if (downtimeLabel) downtimeLabel.innerText = (I18N?.web_agent_downtime || 'Downtime') + ': ' + formatDuration(downSecs);
+    if (pctLabel) {
+        const rollingPct = avail.rolling_uptime_pct !== undefined ? avail.rolling_uptime_pct : 100;
+        pctLabel.innerText = `${rollingPct}% ${I18N?.web_availability || I18N?.web_uptime || 'Доступность'}`;
+    }
+
+    const uptimeOnlineBar = document.getElementById('uptimeBarOnline');
+    const uptimeDowntimeBar = document.getElementById('uptimeBarDowntime');
+    if (uptimeOnlineBar && uptimeDowntimeBar) {
+        const totalSecs = onlineSecs + downSecs;
+        const onlinePct = totalSecs > 0 ? (onlineSecs / totalSecs) * 100 : 100;
+        uptimeOnlineBar.style.width = onlinePct + '%';
+        uptimeDowntimeBar.style.width = (100 - onlinePct) + '%';
+    }
+
+    const pillsContainer = document.getElementById('uptimePillsContainer');
+    if (!pillsContainer) return;
+    const pills = avail.pills;
+    if (!Array.isArray(pills) || pills.length === 0) return;
+
+    window._uptimePillsData = pills;
+
+    let tooltip = document.getElementById('uptimePillTooltip');
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'uptimePillTooltip';
+        tooltip.className = 'uptime-pill-tooltip';
+        document.body.appendChild(tooltip);
+
+        window.addEventListener('scroll', hidePillTooltip, { passive: true });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.uptime-pill')) {
+                hidePillTooltip();
+            }
+        });
+    }
+
+    const existingPills = pillsContainer.children;
+    if (existingPills.length !== pills.length) {
+        pillsContainer.innerHTML = '';
+        pills.forEach((p, idx) => {
+            const pill = document.createElement('div');
+            pill.className = 'uptime-pill';
+            pill.setAttribute('data-idx', String(idx));
+            pill.setAttribute('tabindex', '0');
+            pill.setAttribute('aria-label', `${p.title || ''} ${p.uptime_pct !== null ? p.uptime_pct + '%' : ''}`);
+            pill.style.background = getPillBackground(p.segments);
+
+            pill.addEventListener('mouseenter', () => showPillTooltip(pill, idx));
+            pill.addEventListener('mouseleave', () => hidePillTooltip());
+            pill.addEventListener('focus', () => showPillTooltip(pill, idx));
+            pill.addEventListener('blur', () => hidePillTooltip());
+            pill.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showPillTooltip(pill, idx);
+            });
+
+            pillsContainer.appendChild(pill);
+        });
+    } else {
+        pills.forEach((p, idx) => {
+            const pill = existingPills[idx];
+            const targetBg = getPillBackground(p.segments);
+            if (pill.style.background !== targetBg) {
+                pill.style.background = targetBg;
+            }
+        });
+    }
+}
+
+function getPillBackground(segments) {
+    const isDark = document.documentElement.classList.contains('dark');
+    const colorMap = {
+        green: '#10b981',
+        yellow: '#f59e0b',
+        red: '#ef4444',
+        grey: isDark ? 'rgba(75, 85, 99, 0.45)' : 'rgba(156, 163, 175, 0.35)'
+    };
+
+    const segs = Array.isArray(segments) && segments.length === 3
+        ? segments
+        : ['green', 'green', 'green'];
+
+    const c0 = colorMap[segs[0]] || colorMap.green;
+    const c1 = colorMap[segs[1]] || colorMap.green;
+    const c2 = colorMap[segs[2]] || colorMap.green;
+
+    // Solid color when all 3 match (eliminates any subpixel seam lines)
+    if (c0 === c1 && c1 === c2) {
+        return c0;
+    }
+    if (c0 === c1) {
+        return `linear-gradient(to bottom, ${c0} 0%, ${c0} 66.67%, ${c2} 66.67%, ${c2} 100%)`;
+    }
+    if (c1 === c2) {
+        return `linear-gradient(to bottom, ${c0} 0%, ${c0} 33.33%, ${c1} 33.33%, ${c1} 100%)`;
+    }
+    return `linear-gradient(to bottom, ${c0} 0%, ${c0} 33.33%, ${c1} 33.33%, ${c1} 66.67%, ${c2} 66.67%, ${c2} 100%)`;
+}
+
+function showPillTooltip(pill, idx) {
+    const tooltip = document.getElementById('uptimePillTooltip');
+    const pills = window._uptimePillsData;
+    if (!tooltip || !pills || !pills[idx]) return;
+
+    const p = pills[idx];
+    const rect = pill.getBoundingClientRect();
+
+    let dotClass = 'dot-green';
+    let titleText = I18N?.web_uptime_operational || 'Доступен';
+    if (p.status === 'nodata') {
+        dotClass = 'dot-grey';
+        titleText = I18N?.web_uptime_no_data || 'Нет информации';
+    } else if (p.status === 'physical') {
+        dotClass = 'dot-red';
+        titleText = I18N?.web_uptime_physical_outage || 'Физический простой';
+    } else if (p.status === 'internet') {
+        dotClass = 'dot-yellow';
+        titleText = I18N?.web_uptime_internet_outage || 'Сбой сети';
+    }
+
+    const pctStr = p.uptime_pct !== null && p.uptime_pct !== undefined ? ` (${p.uptime_pct}%)` : '';
+
+    const startDate = new Date(p.start * 1000);
+    const endDate = new Date(p.end * 1000);
+    const startDayStr = startDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    const startTimeStr = startDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const endTimeStr = endDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const timeRangeStr = `${startDayStr}, ${startTimeStr} – ${endTimeStr}`;
+
+    let detailsHtml = '';
+    if (p.status === 'nodata') {
+        detailsHtml = `<div class="text-[10px] text-gray-400 dark:text-gray-500">${I18N?.web_uptime_no_data_desc || 'Мониторинг еще не велся'}</div>`;
+    } else if (p.phys_seconds > 0 || p.net_seconds > 0) {
+        if (p.net_seconds > 0) {
+            detailsHtml += `<div class="uptime-tooltip-row"><span>${I18N?.web_uptime_net_downtime || 'Простой сети'}:</span><span class="font-mono text-amber-500 font-bold">${formatDuration(p.net_seconds)}</span></div>`;
+        }
+        if (p.phys_seconds > 0) {
+            detailsHtml += `<div class="uptime-tooltip-row"><span>${I18N?.web_uptime_phys_downtime || 'Физический простой'}:</span><span class="font-mono text-red-500 font-bold">${formatDuration(p.phys_seconds)}</span></div>`;
+        }
+    } else {
+        detailsHtml = `<div class="text-[10px] text-emerald-500 font-medium">${I18N?.web_uptime_no_outages || 'Без сбоев (100%)'}</div>`;
+    }
+
+    tooltip.innerHTML = DOMPurify.sanitize(`
+        <div class="uptime-tooltip-header">
+            <span class="uptime-tooltip-dot ${dotClass}"></span>
+            <span>${escapeHtml(titleText)}${escapeHtml(pctStr)}</span>
+        </div>
+        <div class="uptime-tooltip-time">${escapeHtml(timeRangeStr)}</div>
+        ${detailsHtml}
+    `);
+
+    tooltip.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
+    tooltip.style.top = `${Math.round(rect.top - 8)}px`;
+    tooltip.classList.add('active');
+}
+
+function hidePillTooltip() {
+    const tooltip = document.getElementById('uptimePillTooltip');
+    if (tooltip) {
+        tooltip.classList.remove('active');
+    }
+}
+
 function updateChartsColors() {
     const isDark = document.documentElement.classList.contains('dark');
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
@@ -1073,9 +1249,21 @@ function getGradient(ctx, colorBase) {
 function pushQuickStatHistory(key, value) {
     if (typeof value !== 'number' || Number.isNaN(value)) return;
     const hist = quickStatsHistory[key];
-    if (hist.length && Object.is(hist[hist.length - 1], value)) return;
     hist.push(value);
     if (hist.length > QUICK_STATS_HISTORY_MAX) hist.shift();
+}
+
+function getQuickStatColor(key, defaultRgb) {
+    const hist = quickStatsHistory[key];
+    const val = hist && hist.length ? hist[hist.length - 1] : 0;
+    if (typeof SYS_CONFIG !== 'undefined') {
+        const threshold = (key === 'cpu' ? SYS_CONFIG.cpu_threshold : key === 'ram' ? SYS_CONFIG.ram_threshold : SYS_CONFIG.disk_threshold) || 90;
+        const isPeak = val >= Math.max(threshold, 95) || val >= threshold + 5;
+        const isWarn = val >= threshold;
+        if (isPeak) return 'rgb(239, 68, 68)';
+        if (isWarn) return 'rgb(249, 115, 22)';
+    }
+    return defaultRgb;
 }
 
 function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
@@ -1084,12 +1272,22 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
     // picked up on the next data tick once the block is resized and becomes visible.
     if (!canvas || canvas.clientWidth === 0) return existingChart;
 
-    const data = quickStatsHistory[historyKey];
+    const rawData = quickStatsHistory[historyKey];
+    if (!rawData || !rawData.length) return existingChart;
+    const data = rawData.length === 1 ? [rawData[0], rawData[0]] : rawData;
+
     if (existingChart) {
         const nextData = data.slice();
         const previousData = existingChart.data.datasets[0].data || [];
-        if (previousData.length === nextData.length && previousData.every((value, index) => Object.is(value, nextData[index]))) {
+        const colorChanged = existingChart.data.datasets[0].borderColor !== colorRgb;
+        const dataChanged = previousData.length !== nextData.length || !previousData.every((value, index) => Object.is(value, nextData[index]));
+        if (!dataChanged && !colorChanged) {
             return existingChart;
+        }
+        const ctx = canvas.getContext('2d');
+        if (colorChanged) {
+            existingChart.data.datasets[0].borderColor = colorRgb;
+            existingChart.data.datasets[0].backgroundColor = getGradient(ctx, colorRgb);
         }
         existingChart.data.labels = nextData.map(() => '');
         existingChart.data.datasets[0].data = nextData;
@@ -1125,9 +1323,9 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
 }
 
 function updateQuickStatCharts() {
-    quickCpuChart = renderQuickStatChart('quickCpuChart', quickCpuChart, 'rgb(99, 102, 241)', 'cpu');
-    quickRamChart = renderQuickStatChart('quickRamChart', quickRamChart, 'rgb(168, 85, 247)', 'ram');
-    quickDiskChart = renderQuickStatChart('quickDiskChart', quickDiskChart, 'rgb(34, 197, 94)', 'disk');
+    quickCpuChart = renderQuickStatChart('quickCpuChart', quickCpuChart, getQuickStatColor('cpu', 'rgb(99, 102, 241)'), 'cpu');
+    quickRamChart = renderQuickStatChart('quickRamChart', quickRamChart, getQuickStatColor('ram', 'rgb(168, 85, 247)'), 'ram');
+    quickDiskChart = renderQuickStatChart('quickDiskChart', quickDiskChart, getQuickStatColor('disk', 'rgb(34, 197, 94)'), 'disk');
 }
 
 function renderAgentChart(series, animate = true) {
@@ -2141,6 +2339,7 @@ function removeModalLoading() {
 }
 
 async function openNodeDetails(nodeId, color) {
+    lastNodeDetailsData = null;
     const modal = document.getElementById('nodeModal');
     if (modal) {
         setModalLoading();
@@ -2261,11 +2460,8 @@ function updateNodeDetailsUI(data) {
         document.getElementById('modalNodeDisk').innerText = "-";
     }
 
-    if (stats.net_rx !== undefined) {
-        document.getElementById('modalNodeTraffic').innerText = `${formatBytes(stats.net_rx)} ${formatBytes(stats.net_tx)}`;
-    } else {
-        document.getElementById('modalNodeTraffic').innerText = "-";
-    }
+    lastNodeDetailsData = data;
+    renderNodeModalTraffic(data);
 
     document.getElementById('dashboardAvailabilityLabelCurrentUptime').innerText = I18N?.web_nodes_monitor_current_uptime || 'Current uptime';
     document.getElementById('dashboardAvailabilityLabelLastOutage').innerText = I18N?.web_nodes_monitor_last_outage || 'Last outage';
@@ -2306,6 +2502,53 @@ function updateNodeDetailsUI(data) {
     }
 }
 
+let lastNodeDetailsData = null;
+
+function renderNodeModalTraffic(data) {
+    data = data || lastNodeDetailsData;
+    if (!data?.stats) return;
+    const stats = data.stats;
+    const name = nodeNetRangeCtl?.getInterface() || '';
+
+    let rx = stats.net_rx;
+    let tx = stats.net_tx;
+
+    if (name) {
+        const counters = stats.interfaces?.[name] || stats.interface_counters?.[name];
+        if (Array.isArray(counters)) {
+            rx = counters[0];
+            tx = counters[1];
+        } else if (counters && typeof counters === 'object') {
+            rx = counters.bytes_recv ?? counters.rx;
+            tx = counters.bytes_sent ?? counters.tx;
+        } else {
+            rx = undefined;
+            tx = undefined;
+        }
+    }
+
+    const badgeEl = document.getElementById('modalNodeTrafficInterface');
+    if (badgeEl) {
+        if (name) {
+            badgeEl.textContent = name;
+            badgeEl.classList.remove('hidden');
+        } else {
+            badgeEl.classList.add('hidden');
+        }
+    }
+
+    const trafficEl = document.getElementById('modalNodeTraffic');
+    if (trafficEl) {
+        if (rx !== undefined && tx !== undefined && rx !== null && tx !== null) {
+            trafficEl.innerText = `↓ ${formatBytes(rx)}  ↑ ${formatBytes(tx)}`;
+        } else if (stats.net_rx !== undefined) {
+            trafficEl.innerText = `↓ ${formatBytes(stats.net_rx)}  ↑ ${formatBytes(stats.net_tx)}`;
+        } else {
+            trafficEl.innerText = "-";
+        }
+    }
+}
+
 function closeNodeModal() {
     if (typeof window.collapseChartModal === 'function') window.collapseChartModal();
     const modal = document.getElementById('nodeModal');
@@ -2314,6 +2557,9 @@ function closeNodeModal() {
     }
     removeModalLoading();
     stopNodeChartRanges();
+    lastNodeDetailsData = null;
+    const badgeEl = document.getElementById('modalNodeTrafficInterface');
+    if (badgeEl) badgeEl.classList.add('hidden');
     if (typeof window.hideDashboardAvailabilityPopover === 'function') window.hideDashboardAvailabilityPopover();
     if (nodeSSESource) {
         nodeSSESource.close();

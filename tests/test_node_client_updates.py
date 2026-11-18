@@ -161,6 +161,42 @@ class AgentUpdateTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         self.subject.self_terminate.assert_awaited_once()
 
+    async def test_update_preserves_local_edit_backups_on_success_and_failure(self):
+        for fail_install in (False, True):
+            with self.subTest(fail_install=fail_install):
+                self.shared.IS_RESTARTING = False
+                paths = [Path(self.directory.name) / name / "saved.txt" for name in (".backup", ".backups/pre_update_test")]
+                for path in paths:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("local changes", encoding="utf-8")
+                self.subject.run_command = AsyncMock(side_effect=[
+                    (0, "", ""), (0, NEW, ""), (0, "", ""),
+                    (1, "", "pip failed") if fail_install else (0, "", ""),
+                    (0, "", ""),
+                ])
+                with patch.dict(sys.modules, {"core.integrity": self.integrity}):
+                    if fail_install:
+                        with self.assertRaisesRegex(RuntimeError, "Dependency installation failed"):
+                            await self.subject.execute_bot_update("main")
+                    else:
+                        await self.subject.execute_bot_update("main")
+                        await asyncio.sleep(0)
+                for path in paths:
+                    self.assertEqual(path.read_text(encoding="utf-8"), "local changes")
+
+    async def test_backup_failure_prevents_git_reset_and_restart(self):
+        for failure in (False, OSError("disk full")):
+            with self.subTest(failure=failure):
+                self.integrity.backup_modified_files.side_effect = failure if isinstance(failure, Exception) else None
+                self.integrity.backup_modified_files.return_value = (False, "", [])
+                self.subject.run_command = AsyncMock(return_value=(0, "", ""))
+                with patch.dict(sys.modules, {"core.integrity": self.integrity}):
+                    with self.assertRaisesRegex(RuntimeError, "Pre-update backup failed"):
+                        await self.subject.execute_bot_update("main")
+                self.subject.run_command.assert_awaited_once_with("git", "fetch", "origin")
+                self.subject.self_terminate.assert_not_called()
+                self.assertFalse(self.shared.IS_RESTARTING)
+
     async def test_update_check_uses_checked_out_version_after_restart(self):
         self.subject.utils.get_app_version.return_value = "v1.0.0"
         self.subject.get_current_branch = AsyncMock(return_value="main")

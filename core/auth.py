@@ -336,7 +336,7 @@ async def send_access_denied_message(
 
         lang = get_user_lang(user_id)
     except Exception:
-        pass
+        logging.debug("Unable to determine user language", exc_info=True)
     text_to_send = f"my ID: {user_id}"
     admin_link = ""
     if ADMIN_USERNAME:

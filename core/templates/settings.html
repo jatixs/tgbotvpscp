@@ -21,18 +21,22 @@
         <script src="/static/vendor/crypto-js.min.js"></script>
         <script src="/static/js/theme_init.js?v={{ asset_ver }}"></script>
         <script>
-        const I18N = {{ i18n_json | safe }};
-        const master_billing_json = {{ master_billing_json | safe | default('null') }};
-        const USERS_DATA = {{ users_data_json | safe }};
-        const NODES_DATA = {{ nodes_data_json | safe }};
+        const I18N = JSON.parse({{ i18n_json | tojson }});
+        const master_billing_json = JSON.parse({{ master_billing_json | default('null', true) | tojson }});
+        const USERS_DATA = JSON.parse({{ users_data_json | tojson }});
+        const NODES_DATA = JSON.parse({{ nodes_data_json | tojson }});
         window.HAS_ACTIVE_NODES = {{ val_has_active_nodes }};
-        const KEYBOARD_CONFIG = {{ keyboard_config_json | safe }};
-        let USER_ALERTS = {{ user_alerts_json | safe }};
+        const KEYBOARD_CONFIG = JSON.parse({{ keyboard_config_json | tojson }});
+        let USER_ALERTS = JSON.parse({{ user_alerts_json | tojson }});
         {{ user_role_js | safe }}
         </script>
         <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
+        <script src="/static/vendor/chart.js"></script>
+        <script src="/static/vendor/chartjs-plugin-zoom.min.js"></script>
+        <script src="/static/vendor/sortable.min.js"></script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ asset_ver }}">
-    <link rel="stylesheet" href="/static/css/icons.css?v={{ asset_ver }}">
+        {% if user_is_admin %}<link rel="stylesheet" href="/static/css/operations.css?v={{ asset_ver }}">{% endif %}
+        <link rel="stylesheet" href="/static/css/icons.css?v={{ asset_ver }}">
         <script src="/static/vendor/dompurify.min.js"></script>
     </head>
     <body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30 pb-10 overflow-x-hidden">
@@ -213,7 +217,9 @@
                 </div>
             </div>
         </nav>
-        <main class="max-w-4xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
+        <main data-panel-page="settings" data-panel-i18n="{{ i18n_json | forceescape }}" data-panel-key="{{ panel_web_key }}"
+              data-panel-role="{{ panel_role }}" data-panel-role-level="{{ user_role_level }}" data-panel-owner="{{ panel_owner }}"
+              class="max-w-4xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col gap-6">
                     <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-6 shadow-lg dark:shadow-none">
@@ -496,7 +502,7 @@
                         
                         <div class="flex items-center gap-2 shrink-0 w-full md:w-auto">
                             <button onclick="handleSettingsBtnClick(this, clearLogs)"
-                                    id="clearLogsBtn"
+                                    id="clearLogsBtn" data-fixed-size="true"
                                     class="group relative flex items-center justify-center overflow-hidden select-none
                                            bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 
                                            rounded-xl transition-all duration-300
@@ -525,7 +531,7 @@
 
                             {% if reset_allowed %}
                             <button onclick="handleSettingsBtnClick(this, resetTrafficSettings)"
-                                    id="resetTrafficBtn"
+                                    id="resetTrafficBtn" data-fixed-size="true"
                                     class="group relative flex items-center justify-center overflow-hidden select-none
                                            bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 
                                            rounded-xl transition-all duration-300
@@ -996,6 +1002,7 @@
                 </div>
             </div>
         </main>
+        <div id="settingsPageModals">
         <div id="genericHintModal"
              class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4"
              onclick="if(event.target === this) closeHintModal()">
@@ -1334,49 +1341,6 @@
 </div>
         </div>
 
-        <script src="/static/js/common.js?v={{ asset_ver }}"></script>
-        <script src="/static/js/settings.js?v={{ asset_ver }}"></script>
-        <script>
-            document.addEventListener('DOMContentLoaded', () => {
-                if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
-                    const mainContent = document.querySelector('main');
-                    if (mainContent) {
-                        mainContent.style.filter = 'blur(8px)';
-                        mainContent.style.pointerEvents = 'none';
-                        mainContent.style.userSelect = 'none';
-                        
-                        const overlay = document.createElement('div');
-                        overlay.className = 'fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/20 dark:bg-black/20 backdrop-blur-sm';
-                        
-                        const title = (typeof I18N !== 'undefined' && I18N.web_access_denied) ? I18N.web_access_denied : "Access Denied";
-                        const desc = (typeof I18N !== 'undefined' && I18N.web_access_denied_desc) ? I18N.web_access_denied_desc : "You don't have permission to view settings";
-                        
-                        overlay.innerHTML = `
-                            <div class="flex flex-col items-center justify-center h-full text-center px-4 animate-fade-in-up select-none">
-                                <div class="bg-white/50 dark:bg-black/20 backdrop-blur-md p-8 rounded-3xl border border-white/40 dark:border-white/10 shadow-xl flex flex-col items-center max-w-sm w-full">
-                                    <div class="bg-red-50 dark:bg-red-500/10 p-5 rounded-full mb-5 text-red-500">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                        </svg>
-                                    </div>
-                                    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">${title}</h2>
-                                    <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-6">${desc}</p>
-                                    <a href="/" class="w-full px-4 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors">
-                                        ${(typeof I18N !== 'undefined' && I18N.web_back) ? I18N.web_back : 'Back'}
-                                    </a>
-                                </div>
-                            </div>
-                        `;
-                        document.body.appendChild(overlay);
-                        
-                        // Disable scrolling
-                        document.body.style.overflow = 'hidden';
-                    }
-                }
-            });
-        </script>
-        
-        <!-- Ping Target Modal -->
         <div id="pingTargetModal"
              onclick="if(event.target === this) closePingTargetModal()"
              class="fixed inset-0 z-[150] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4">
@@ -1424,5 +1388,18 @@
                 </div>
             </div>
         </div>
+        </div>
+        </div>
+
+        <script src="/static/js/panel_bootstrap.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/browser_utils.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/common.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/chart_range.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/dashboard.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/nodes_monitor.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/node_vnc.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/panel_navigation.js?v={{ asset_ver }}"></script>
+        {% if user_is_admin %}<script src="/static/js/operations.js?v={{ asset_ver }}"></script>{% endif %}
+        {% if user_is_admin %}<script src="/static/js/settings.js?v={{ asset_ver }}"></script>{% endif %}
     </body>
 </html>

@@ -7,6 +7,7 @@ import html
 import logging
 import shlex
 import time
+import uuid
 from datetime import datetime
 
 import aiohttp
@@ -623,12 +624,26 @@ async def _handle_node_command(callback: types.CallbackQuery, *, confirmed: bool
             reply_markup=stop_kb,
             parse_mode="HTML",
         )
-        NODE_TRAFFIC_MONITORS[user_id] = {
+        monitor = {
             "token": token,
             "message_id": sent_msg.message_id,
             "last_update": 0,
+            "session_id": uuid.uuid4().hex,
+            "operation_id": None,
         }
-        await nodes_db.update_node_task(token, {"command": cmd, "user_id": user_id})
+        NODE_TRAFFIC_MONITORS[user_id] = monitor
+        try:
+            operation = await nodes_db.update_node_task(token, {
+                "command": cmd, "user_id": user_id, "traffic_session": monitor["session_id"],
+            })
+            if operation:
+                monitor["operation_id"] = operation.id
+            elif NODE_TRAFFIC_MONITORS.get(user_id) is monitor:
+                del NODE_TRAFFIC_MONITORS[user_id]
+        except Exception:
+            if NODE_TRAFFIC_MONITORS.get(user_id) is monitor:
+                del NODE_TRAFFIC_MONITORS[user_id]
+            raise
         await callback.answer()
         return
 
@@ -677,7 +692,8 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
     token = callback.data.replace("node_stop_traffic_", "")
     node = await nodes_db.get_node_by_token(token)
     node_name = html.escape(node.get("name", "Unknown")) if node else "Unknown"
-    if user_id in NODE_TRAFFIC_MONITORS:
+    monitor = NODE_TRAFFIC_MONITORS.get(user_id)
+    if monitor and monitor.get("token") == token and monitor.get("message_id") == callback.message.message_id:
         del NODE_TRAFFIC_MONITORS[user_id]
         try:
             await callback.message.delete()
@@ -701,161 +717,6 @@ async def cq_node_stop_traffic(callback: types.CallbackQuery):
     await callback.answer(
         _("node_traffic_stopped_alert", lang, name=node_name), show_alert=False
     )
-
-
-async def _old_cq_node_services(callback: types.CallbackQuery):
-    """Show services list for a node"""
-    user_id = callback.from_user.id
-    lang = get_user_lang(user_id)
-    if not is_allowed(user_id, "nodes"):
-        await callback.answer(_("access_denied_generic", lang), show_alert=True)
-        return
-    token = callback.data.replace("node_services_", "")
-    
-    node = await nodes_db.get_node_by_token(token)
-    if not node:
-        await callback.answer("Node not found", show_alert=True)
-        return
-    
-    node_name = html.escape(node.get("name", "Unknown"))
-    
-    # Check if node is online
-    now = time.time()
-    last_seen = node.get("last_seen", 0)
-    if now - last_seen >= config.NODE_OFFLINE_TIMEOUT:
-        await callback.message.edit_text(
-            _("node_services_empty", lang, name=node_name),
-            reply_markup=get_back_keyboard(lang, f"node_select_{token}"),
-            parse_mode="HTML",
-        )
-        return
-    
-    services = node.get("services", [])
-    if not services:
-        await callback.message.edit_text(
-            _("node_services_empty", lang, name=node_name),
-            reply_markup=get_back_keyboard(lang, f"node_select_{token}"),
-            parse_mode="HTML",
-        )
-        return
-    
-    keyboard = get_node_services_keyboard(token, services, lang)
-    await callback.message.edit_text(
-        _("node_services_menu", lang, name=node_name),
-        reply_markup=keyboard,
-        parse_mode="HTML",
-    )
-    await callback.answer()
-
-
-async def _old_cq_node_service_detail(callback: types.CallbackQuery):
-    """Show service details with action buttons"""
-    user_id = callback.from_user.id
-    lang = get_user_lang(user_id)
-    if not is_allowed(user_id, "nodes"):
-        await callback.answer(_("access_denied_generic", lang), show_alert=True)
-        return
-    
-    # Parse: nsd_{token}_{service_name}
-    parts = callback.data.split("_", 2)
-    if len(parts) < 3:
-        await callback.answer("Invalid data", show_alert=True)
-        return
-    
-    token = parts[1]
-    service_name = parts[2]
-    
-    node = await nodes_db.get_node_by_token(token)
-    if not node:
-        await callback.answer("Node not found", show_alert=True)
-        return
-    
-    node_name = html.escape(node.get("name", "Unknown"))
-    services = node.get("services", [])
-    
-    # Find the service
-    service_info = None
-    for svc in services:
-        if svc.get("name") == service_name:
-            service_info = svc
-            break
-    
-    if not service_info:
-        await callback.answer("Service not found", show_alert=True)
-        return
-    
-    status = service_info.get("status", "unknown")
-    svc_type = service_info.get("type", "systemd")
-    status_text = "🟢 Running" if status == "running" else "🔴 Stopped"
-    type_icon = "🐳 Docker" if svc_type == "docker" else "⚙️ Systemd"
-    
-    keyboard = get_node_service_actions_keyboard(token, service_name, status, lang, svc_type)
-    await callback.message.edit_text(
-        _("node_service_detail", lang, 
-          service=service_name, 
-          status=status_text,
-          type=type_icon,
-          node=node_name),
-        reply_markup=keyboard,
-        parse_mode="HTML",
-    )
-    await callback.answer()
-
-
-async def _old_cq_node_service_action(callback: types.CallbackQuery):
-    """Execute service action (start/stop/restart)"""
-    user_id = callback.from_user.id
-    lang = get_user_lang(user_id)
-    
-    # Only admins can manage services
-    if user_id != config.ADMIN_USER_ID:
-        await callback.answer(_("access_denied_no_rights", lang), show_alert=True)
-        return
-    
-    # Parse: nsa_{token}_{service}_{t}_{action} (t: d=docker, s=systemd)
-    parts = callback.data.split("_")
-    if len(parts) < 5:
-        await callback.answer("Invalid data", show_alert=True)
-        return
-    
-    token = parts[1]
-    service_name = parts[2]
-    t = parts[3]  # d=docker, s=systemd
-    action = parts[4]
-    svc_type = "docker" if t == "d" else "systemd"
-    
-    if action not in ["start", "stop", "restart"]:
-        await callback.answer("Invalid action", show_alert=True)
-        return
-    
-    node = await nodes_db.get_node_by_token(token)
-    if not node:
-        await callback.answer("Node not found", show_alert=True)
-        return
-    
-    # Send task to node with service type
-    await nodes_db.update_node_task(token, {
-        "command": "service_action",
-        "service": service_name,
-        "action": action,
-        "type": svc_type,
-        "user_id": user_id
-    })
-    
-    action_text = {
-        "start": _("service_action_start", lang),
-        "stop": _("service_action_stop", lang),
-        "restart": _("service_action_restart", lang),
-    }.get(action, action)
-    
-    await callback.answer(
-        _("services_action_started", lang, action=action_text, name=service_name),
-        show_alert=False
-    )
-    
-    # Return to services list after short delay
-    await asyncio.sleep(1)
-    await cq_node_services(callback)
 
 
 async def node_speedtest_progress_task(bot: Bot):
@@ -914,14 +775,20 @@ async def node_traffic_scheduler(bot: Bot):
             if not NODE_TRAFFIC_MONITORS:
                 continue
             for user_id, monitor_data in list(NODE_TRAFFIC_MONITORS.items()):
+                if monitor_data.get("operation_id") is None:
+                    continue  # The initial request is still being created.
                 token = monitor_data.get("token")
                 node = await nodes_db.get_node_by_token(token)
+                if NODE_TRAFFIC_MONITORS.get(user_id) is not monitor_data:
+                    continue
                 if not node:
                     if user_id in NODE_TRAFFIC_MONITORS:
                         del NODE_TRAFFIC_MONITORS[user_id]
                     continue
                 await nodes_db.update_node_task(
-                    token, {"command": "traffic", "user_id": user_id}
+                    token, {"command": "traffic", "user_id": user_id,
+                            "traffic_session": monitor_data["session_id"]},
+                    traffic_operation_id=monitor_data["operation_id"],
                 )
         except Exception as e:
             logging.error(f"Error in node_traffic_scheduler: {e}")

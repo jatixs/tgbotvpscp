@@ -183,18 +183,23 @@ async def execute_bot_update(
             severity="CRITICAL"
         )
 
-        # Pre-update integrity check & automatic backup of modified files
-        try:
-            from core.integrity import backup_modified_files
-            success, backup_dir, backed_up = backup_modified_files(repo_root=config.BASE_DIR, branch=branch)
-            if backed_up:
-                logging.info(f"Created pre-update backup of {len(backed_up)} modified files in {backup_dir}")
-        except Exception as be:
-            logging.warning(f"Pre-update backup warning: {be}")
-
         code, _, err = await run_command("git", "fetch", "origin")
         if code != 0:
             raise RuntimeError(f"Git fetch failed: {err}")
+
+        # Back up local changes against the fetched target before any reset.
+        try:
+            from core.integrity import backup_modified_files
+            success, backup_dir, backed_up = await asyncio.to_thread(
+                backup_modified_files, repo_root=config.BASE_DIR, branch=branch,
+            )
+            if not success:
+                raise RuntimeError("Could not back up modified files")
+            if backed_up:
+                logging.info(f"Created pre-update backup of {len(backed_up)} modified files in {backup_dir}")
+        except Exception as be:
+            raise RuntimeError(f"Pre-update backup failed; update cancelled: {be}") from be
+
         code, commit, err = await run_command("git", "rev-parse", "--verify", f"refs/remotes/origin/{branch}^{{commit}}")
         if code != 0 or not node_updates.COMMIT.fullmatch(commit):
             raise RuntimeError(f"Could not resolve the update revision: {err}")
@@ -211,17 +216,6 @@ async def execute_bot_update(
                 if rollback != 0:
                     logging.error("Could not restore the agent revision: %s", rollback_error)
             raise RuntimeError(f"Dependency installation failed: {err}")
-        # Remove temporary pre-update backup folders after successful update
-        import shutil
-        for b_name in [".backups", ".backup"]:
-            b_path = os.path.join(config.BASE_DIR, b_name)
-            if os.path.isdir(b_path):
-                try:
-                    shutil.rmtree(b_path, ignore_errors=True)
-                    logging.info(f"Removed {b_name} directory after successful update.")
-                except Exception as exc:
-                    logging.warning(f"Could not remove {b_name}: {exc}")
-
         os.makedirs(os.path.dirname(RESTART_FLAG_FILE), exist_ok=True)
         with open(RESTART_FLAG_FILE, "w", encoding="utf-8") as f:
             f.write(restart_source)
@@ -351,19 +345,20 @@ async def run_system_update(callback: types.CallbackQuery):
         return
     await callback.message.edit_text(_("update_start", lang), parse_mode="HTML")
 
-    if DEPLOY_MODE == "docker":
-        base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
-        cmd_args = ["nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "bash", "-c", base_cmd]
+    script_path = "/opt/tg-bot/scripts/update_os.sh"
+    if DEPLOY_MODE != "docker" and os.path.isfile(script_path):
+        code, out, err = await run_command("sudo", script_path)
     else:
-        script_path = "/opt/tg-bot/scripts/update_os.sh"
-        if os.path.isfile(script_path):
-            base_cmd = f"sudo {script_path}"
-            cmd_args = ["bash", "-c", base_cmd]
+        if DEPLOY_MODE == "docker":
+            prefix = ["nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "env"]
+            steps = [("update",), ("upgrade", "-y"), ("autoremove", "-y")]
         else:
-            base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y && sudo apt clean"
-            cmd_args = ["bash", "-c", base_cmd]
-
-    code, out, err = await run_command(*cmd_args)
+            prefix = ["sudo"]
+            steps = [("update",), ("upgrade", "-y"), ("autoremove", "-y"), ("clean",)]
+        for step in steps:
+            code, out, err = await run_command(*prefix, "DEBIAN_FRONTEND=noninteractive", "apt", *step)
+            if code:
+                break
     if code == 0:
         text = _("update_success", lang, output=escape_html(out[-2000:]))
     else:

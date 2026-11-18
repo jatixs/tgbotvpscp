@@ -17,18 +17,12 @@
         <link rel="stylesheet" href="/static/css/main.css?v={{ asset_ver }}">
         <script src="/static/vendor/crypto-js.min.js"></script>
         <script src="/static/js/theme_init.js?v={{ asset_ver }}"></script>
-        <script>
-        window.i18n = window.i18n || {};
-        const I18N = {{ i18n_json | safe }};
-        const master_billing_json = {{ master_billing_json | safe | default('null') }};
-        {{ user_role_js | safe }}
-        window.USER_ROLE_LEVEL = {{ user_role_level }};
-        window.GLOBAL_PING_MODE = "{{ val_ping_mode }}";
-        </script>
         <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
         <script src="/static/vendor/chart.js"></script>
         <script src="/static/vendor/chartjs-plugin-zoom.min.js"></script>
+        <script src="/static/vendor/sortable.min.js"></script>
         <link rel="stylesheet" href="/static/css/style.css?v={{ asset_ver }}">
+        {% if user_is_admin %}<link rel="stylesheet" href="/static/css/operations.css?v={{ asset_ver }}">{% endif %}
     <link rel="stylesheet" href="/static/css/icons.css?v={{ asset_ver }}">
         <script src="/static/vendor/dompurify.min.js"></script>
     </head>
@@ -68,11 +62,11 @@
                     {% if user_is_admin %}
                     <button onclick="openVncModal()"
                         class="flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-xs sm:text-sm gap-1 whitespace-nowrap"
-                        title="VNC / Terminal">
+                        title="{{ web_vnc_terminal_title }}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        <span class="hidden sm:inline" data-i18n="web_terminal_btn">VNC</span>
+                        <span class="hidden sm:inline" data-i18n="web_terminal_btn">{{ web_terminal_btn }}</span>
                     </button>
                     {% endif %}
                     {{ settings_btn | safe }}
@@ -172,7 +166,10 @@
             </div>
         </nav>
 
-        <main class="max-w-7xl mx-auto px-4 mt-4 sm:mt-8 relative z-10">
+        <main data-panel-page="nodes" data-panel-i18n="{{ i18n_json | forceescape }}" data-panel-key="{{ panel_web_key }}"
+              data-panel-role="{{ panel_role }}" data-panel-role-level="{{ user_role_level }}" data-panel-owner="{{ panel_owner }}"
+              data-panel-billing="{{ master_billing_json | default('null') | forceescape }}" data-panel-ping-mode="{{ val_ping_mode }}"
+              class="nodes-monitor-page max-w-7xl mx-auto px-4 mt-4 sm:mt-8 relative z-10">
             {% if user_is_admin %}
             <!-- Mass Actions Bar -->
             <div class="bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-4 shadow-lg dark:shadow-none mb-6">
@@ -233,6 +230,16 @@
                         <span>{{ web_filter_btn }}</span>
                         <span id="filterBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">0</span>
                     </button>
+                    {% if user_is_admin %}
+                    <a href="/operations"
+                       class="flex items-center justify-center p-2 rounded-xl transition bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                       title="{{ 'История операций' if lang == 'ru' else 'Operation history' }}"
+                       aria-label="{{ 'История операций' if lang == 'ru' else 'Operation history' }}">
+                        <svg class="h-5 w-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 11a9 9 0 1 1 2.6 7.4M3 4v7h7M12 7v5l3 2" />
+                        </svg>
+                    </a>
+                    {% endif %}
                 </div>
             </div>
 
@@ -249,6 +256,7 @@
             </div>
         </main>
 
+        <div id="nodesPageModals">
         <!-- Node Details Modal -->
         <div id="nodeDetailModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target === this) closeNodeDetailModal()">
             <div class="bg-white/90 dark:bg-gray-900 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-4xl relative flex flex-col h-full sm:h-auto sm:max-h-[85vh] backdrop-blur-xl transition-all overflow-hidden">
@@ -309,7 +317,7 @@
                         <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/5 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500/60 hover:bg-blue-50/50 dark:hover:bg-blue-500/10 transition-colors select-none"
                              id="modalUptimeTrigger" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">
                             <div class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1 flex items-center justify-center gap-1">
-                                <span>{{ web_uptime }}</span>
+                                <span>{{ web_server_uptime }}</span>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-blue-400 dark:text-blue-500 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -429,7 +437,7 @@
              role="tooltip">
             <!-- Header: title -->
             <div class="mb-2 pb-2 border-b border-gray-200 dark:border-white/10 flex justify-between items-center">
-                <p class="text-sm font-bold text-gray-900 dark:text-white uppercase">{{ web_uptime }}</p>
+                <p class="text-sm font-bold text-gray-900 dark:text-white uppercase">{{ web_server_uptime }}</p>
                 <div class="flex items-center gap-2">
                     <button onclick="resetNodeUptime()" class="text-[10px] font-bold text-blue-600 hover:text-blue-500 bg-blue-100/50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 px-2 py-1 rounded transition-colors hidden" id="modalAvailabilityResetBtn">
                         {{ web_reset_uptime }}
@@ -589,7 +597,7 @@
                                     d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                         </div>
-                        <span>{{ web_vnc_select_server }}</span>
+                        <span class="whitespace-nowrap">{{ web_vnc_select_server }}</span>
                     </h3>
                     <button onclick="closeVncModal()"
                         class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
@@ -624,40 +632,15 @@
 
         </div>
 
+        <script src="/static/js/panel_bootstrap.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/browser_utils.js?v={{ asset_ver }}"></script>
         <script src="/static/js/common.js?v={{ asset_ver }}"></script>
         <script src="/static/js/chart_range.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/dashboard.js?v={{ asset_ver }}"></script>
         <script src="/static/js/nodes_monitor.js?v={{ asset_ver }}"></script>
-        <script>
-            function openVncModal() {
-                const m = document.getElementById('vncNodeSelectModal');
-                if (m) {
-                    if (window.animateModalOpen) {
-                        window.animateModalOpen(m);
-                    } else {
-                        m.classList.remove('hidden');
-                        m.classList.add('flex');
-                    }
-                }
-            }
-            function closeVncModal() {
-                const m = document.getElementById('vncNodeSelectModal');
-                if (m) {
-                    if (window.animateModalClose) {
-                        window.animateModalClose(m);
-                    } else {
-                        m.classList.add('hidden');
-                        m.classList.remove('flex');
-                    }
-                }
-            }
-            function openVncTerminal(ip) {
-                closeVncModal();
-                if (!ip || ip === 'Loading...' || ip === 'Unknown' || ip === '-') {
-                    window.open('/terminal', '_blank');
-                } else {
-                    window.open('/terminal?ip=' + encodeURIComponent(ip), '_blank');
-                }
-            }
-        </script>
+        <script src="/static/js/node_vnc.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/panel_navigation.js?v={{ asset_ver }}"></script>
+        {% if user_is_admin %}<script src="/static/js/operations.js?v={{ asset_ver }}"></script>{% endif %}
+        {% if user_is_admin %}<script src="/static/js/settings.js?v={{ asset_ver }}"></script>{% endif %}
     </body>
 </html>

@@ -1,4 +1,3 @@
-import glob
 import http.client
 import json
 import logging
@@ -29,15 +28,15 @@ def run_crash_alert_oneshot():
                         k, v = line.split("=", 1)
                         v = v.strip().strip("\"'")
                         env[k.strip()] = v
-        except Exception:
-            pass
+        except (OSError, UnicodeError):
+            logging.warning("Unable to read watchdog environment file")
 
     token = env.get("TG_BOT_TOKEN")
     admin_id = env.get("TG_ADMIN_ID")
     bot_name = env.get("TG_BOT_NAME", "VPS Bot")
     lang = env.get("DEFAULT_LANGUAGE", "ru").lower()
     raw_service = env.get("TG_BOT_SERVICE_NAME", "tg-bot.service").strip()
-    bot_service = raw_service if re.match(r"^[a-zA-Z0-9_\-\.]+$", raw_service) else "tg-bot.service"
+    bot_service = raw_service if re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", raw_service) else "tg-bot.service"
 
     if not token or not admin_id:
         sys.exit(0)
@@ -259,27 +258,6 @@ def format_time_watchdog(seconds: int, lang_id: int) -> str:
         parts.append(f"{secs}s")
         
     return " ".join(parts)
-
-
-def get_last_backup_info() -> str:
-    """Finds the last backup and returns a localized status string"""
-    load_user_settings()
-    try:
-        traffic_dir = getattr(config, 'TRAFFIC_BACKUP_DIR', None)
-        if not traffic_dir or not os.path.exists(traffic_dir):
-            return get_text("wd_backup_dir_not_found", ALERT_ADMIN_ID)
-        
-        files = glob.glob(os.path.join(traffic_dir, "traffic_backup_*.json"))
-        if not files:
-            return get_text("wd_backup_traffic_none", ALERT_ADMIN_ID)
-            
-        latest_file = max(files, key=os.path.getmtime)
-        mod_time = os.path.getmtime(latest_file)
-        dt = datetime.fromtimestamp(mod_time)
-        
-        return get_text("wd_backup_traffic_found", ALERT_ADMIN_ID, date=dt.strftime('%Y-%m-%d %H:%M'))
-    except Exception as e:
-        return get_text("wd_backup_error", ALERT_ADMIN_ID, error=str(e))
 
 
 def process_startup_flags():

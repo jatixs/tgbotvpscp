@@ -225,20 +225,6 @@ async def get_last_ssh_login(lang: str):
     return _("selftest_ssh_not_found", lang)
 
 
-async def _old_selftest_handler(message: types.Message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    lang = get_user_lang(user_id)
-    command = "selftest"
-
-    if not is_allowed(user_id, command):
-        await send_access_denied_message(message.bot, user_id, chat_id, command)
-        return
-
-    await delete_previous_message(user_id, command, chat_id, message.bot)
-
-    await message.answer(_("selftest_gathering_info", lang))
-
 async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]:
     p = psutil.Process()
     cpu_total_pct = psutil.cpu_percent(interval=0.5)

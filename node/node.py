@@ -7,10 +7,12 @@ import hashlib
 import hmac
 import html
 import json
+import ipaddress
 import logging
 import os
 import secrets
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -34,9 +36,11 @@ from network_validation import (
 try:
     from .endpoint_migration import validate_https_migration_url
     from .software_update import ClientUpdater
+    from .operation_journal import heartbeat_state, open_journal
 except ImportError:
     from endpoint_migration import validate_https_migration_url
     from software_update import ClientUpdater
+    from operation_journal import heartbeat_state, open_journal
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_FILE = os.path.join(BASE_DIR, '.env')
@@ -225,25 +229,21 @@ def get_speedtest_mode():
                 mode = f.read().strip().upper()
                 if mode in ('OOKLA', 'RU'):
                     return 'OOKLA' if mode == 'OOKLA' else 'IPERF3'
-        except Exception:
-            pass
-    
+        except (OSError, UnicodeError):
+            logging.debug("Cannot read speedtest mode", exc_info=True)
+
     # Check if Ookla speedtest is available
     try:
         result = subprocess.run(['speedtest', '--version'], capture_output=True, timeout=5)
         if result.returncode == 0 and b'Speedtest by Ookla' in result.stdout:
             return 'OOKLA'
-    except Exception:
-        pass
-    
+    except (OSError, subprocess.SubprocessError):
+        logging.debug("Ookla speedtest unavailable", exc_info=True)
+
     # Check if iperf3 is available
-    try:
-        result = subprocess.run(['which', 'iperf3'], capture_output=True, timeout=5)
-        if result.returncode == 0:
-            return 'IPERF3'
-    except Exception:
-        pass
-    
+    if shutil.which('iperf3'):
+        return 'IPERF3'
+
     return 'AUTO'
 
 
@@ -437,6 +437,8 @@ elif not BOT_TOKEN and CRITICAL_ALERT_CHAT_IDS:
     logging.warning("CRITICAL_ALERT_CHAT_IDS configured, but BOT_TOKEN is empty")
 
 PENDING_RESULTS = collections.deque(maxlen=50)
+OPERATION_JOURNAL_PATH = os.path.join(CONFIG_DIR, f"operations-{OWN_NODE_TOKEN_HASH}.db")
+OPERATION_JOURNAL = open_journal(OPERATION_JOURNAL_PATH)
 LAST_TRAFFIC_STATS = {}
 _HEARTBEAT_NET_STATS = {}
 SSH_EVENTS = collections.deque(maxlen=100)
@@ -569,9 +571,9 @@ def get_external_ip():
                     EXTERNAL_IP_CACHE = ip
                     logging.info(f"External IP updated: {ip}")
                     return ip
-        except Exception:
-            continue
-    
+        except requests.RequestException:
+            logging.debug("External IP provider unavailable", exc_info=True)
+
     try:
         # Security: Use exec instead of shell to prevent injection
         proc = subprocess.Popen(
@@ -601,16 +603,6 @@ def format_uptime_simple(seconds):
     if h > 0: parts.append(f"{h}h")
     parts.append(f"{m}m")
     return " ".join(parts)
-
-def format_bytes_simple(bytes_value):
-    units = ['B', 'KB', 'MB', 'GB', 'TB']
-    value = float(bytes_value)
-    unit_index = 0
-    while value >= 1024 and unit_index < len(units) - 1:
-        value /= 1024
-        unit_index += 1
-    return f"{value:.2f} {units[unit_index]}"
-
 
 def get_services_status():
     """Get status of common services on the node - only installed ones"""
@@ -650,7 +642,7 @@ def get_services_status():
                     "status": "running" if status == "active" else "stopped"
                 })
         except Exception:
-            pass
+            logging.debug("System service status unavailable", exc_info=True)
     
     # Also check for docker containers
     try:
@@ -670,7 +662,7 @@ def get_services_status():
                             "status": "running" if "Up" in status else "stopped"
                         })
     except Exception:
-        pass
+        logging.debug("Docker status unavailable", exc_info=True)
     
     return services
 
@@ -789,6 +781,7 @@ def get_top_processes(metric):
 def _do_icmp_ping(target_ip="8.8.8.8"):
     import platform
     try:
+        target_ip = str(ipaddress.ip_address(target_ip))
         if platform.system().lower() == "windows":
             pattern = r"[=<](\d+)\s*ms"
             proc = subprocess.run(["ping", "-n", "1", "-w", "2000", str(target_ip)], capture_output=True, timeout=5)
@@ -800,7 +793,7 @@ def _do_icmp_ping(target_ip="8.8.8.8"):
         if ping_match:
             return float(ping_match.group(1))
     except Exception:
-        pass
+        logging.debug("ICMP probe unavailable", exc_info=True)
     return None
 
 def get_system_stats():
@@ -1063,10 +1056,26 @@ def measure_ping(host: str) -> float:
         logging.debug(f"Ping to {host} failed: {e}")
     return None
 
+def record_command_result(task, result):
+    if task.get("operation_id"):
+        failed = isinstance(result, dict) and result.get("key") in {"error_with_details", "update_fail"}
+        OPERATION_JOURNAL.finish(task["operation_id"], result, status="failed" if failed else "finished")
+    else:
+        PENDING_RESULTS.append({"command": task.get("command", ""), "user_id": task.get("user_id"), "result": result})
+
+
 def execute_command(task):
+    if OPERATION_JOURNAL is None:
+        if task.get("operation_id"):
+            logging.error("Command deferred: operation journal is unavailable")
+            return
+        return _execute_command(task)
+    OPERATION_JOURNAL.execute(task, _execute_command)
+
+
+def _execute_command(task):
     global LAST_TRAFFIC_STATS
     cmd = task.get("command")
-    user_id = task.get("user_id")
     logging.info(f"Executing command: {cmd}")
 
     result_payload = None
@@ -1404,18 +1413,24 @@ def execute_command(task):
                     }
 
         elif cmd == "update":
-            if os.geteuid() == 0:
-                base_cmd = "DEBIAN_FRONTEND=noninteractive apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y && apt autoremove -y"
-            else:
-                base_cmd = "sudo DEBIAN_FRONTEND=noninteractive apt update && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y && sudo apt autoremove -y"
-
+            is_root = os.geteuid() == 0
+            apt_env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+            deadline = time.monotonic() + 1800
             try:
-                result = subprocess.run(
-                    ["bash", "-lc", base_cmd],
-                    capture_output=True,
-                    text=True,
-                    timeout=1800,
-                )
+                for step in (("update",), ("upgrade", "-y"), ("autoremove", "-y")):
+                    options = {
+                        "capture_output": True, "text": True, "env": apt_env,
+                        "timeout": max(0, deadline - time.monotonic()),
+                    }
+                    # Both executables are fixed and step comes only from the literals above.
+                    if is_root:
+                        result = subprocess.run(["/usr/bin/apt", *step], **options)  # nosec B603
+                    else:
+                        result = subprocess.run(  # nosec B603
+                            ["/usr/bin/sudo", "DEBIAN_FRONTEND=noninteractive", "/usr/bin/apt", *step], **options,
+                        )
+                    if result.returncode:
+                        break
                 if result.returncode == 0:
                     result_payload = {
                         "type": "i18n",
@@ -1450,8 +1465,7 @@ def execute_command(task):
                 "key": "reboot_confirmed",
                 "params": {}
             }
-            PENDING_RESULTS.append(
-                {"command": cmd, "user_id": user_id, "result": result_payload})
+            record_command_result(task, result_payload)
             send_heartbeat()
             try:
                 subprocess.Popen(["reboot"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1513,11 +1527,7 @@ def execute_command(task):
         }
 
     if result_payload:
-        PENDING_RESULTS.append({
-            "command": cmd,
-            "user_id": user_id,
-            "result": result_payload
-        })
+        record_command_result(task, result_payload)
 
 def check_agent_health():
     """
@@ -1963,7 +1973,7 @@ def build_agent_recovery_alert(node_name, downtime):
 
 
 def send_heartbeat():
-    global AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT, AGENT_STABLE_SINCE, LAST_AGENT_LANG
+    global AGENT_DOWN_SINCE, AGENT_DOWN_ALERT_SENT, AGENT_STABLE_SINCE, LAST_AGENT_LANG, OPERATION_JOURNAL
     url = f"{AGENT_BASE_URL}/api/heartbeat"
     current_results = list(PENDING_RESULTS)
     current_ssh_events = list(SSH_EVENTS)
@@ -1978,10 +1988,17 @@ def send_heartbeat():
     # Check agent health status before sending heartbeat
     agent_is_healthy = check_agent_health()
     agent_status = "online" if agent_is_healthy else "unreachable"
+
+    if OPERATION_JOURNAL is None:
+        OPERATION_JOURNAL = open_journal(OPERATION_JOURNAL_PATH)
+    operation_reports, operations_paused = heartbeat_state(OPERATION_JOURNAL)
     
     payload_dict = {
         "stats": get_system_stats(),
         "results": current_results,
+        "operations_protocol": 1,
+        "operations": operation_reports,
+        "operations_paused": operations_paused,
         "ssh_logins": current_ssh_events,
         "services": services,
         "agent_status": agent_status,
@@ -2026,6 +2043,8 @@ def send_heartbeat():
             flush_suppressed_http_error_logs()
             data = json.loads(response.content)
 
+            if OPERATION_JOURNAL is not None and not operations_paused:
+                OPERATION_JOURNAL.acknowledge(data.get("operations_ack", []))
             sync_node_name_from_agent(data.get("node_name", ""))
 
             response_lang = data.get("alert_lang")

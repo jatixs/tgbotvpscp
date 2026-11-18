@@ -5,6 +5,7 @@ Provides periodic background execution (e.g., billing notifications, system moni
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import platform
 import re
@@ -35,6 +36,7 @@ BACKGROUND_TASKS_KEY = "background_tasks"
 
 async def _do_icmp_ping(target_ip: str = "8.8.8.8") -> str | None:
     try:
+        target_ip = str(ipaddress.ip_address(target_ip))
         if platform.system().lower() == "windows":
             cmd = ["ping", "-n", "1", "-w", "2000", target_ip]
             pattern = r"[=<](\d+)\s*ms"
@@ -205,21 +207,37 @@ async def agent_monitor() -> None:
                 if ping_result is None:
                     if _internet_down_since == 0.0:
                         _internet_down_since = time.time()
+                        shared_state.AGENT_AVAILABILITY["active_internet_down_since"] = _internet_down_since
                 elif _internet_down_since > 0.0:
                     duration = time.time() - _internet_down_since
                     shared_state.AGENT_AVAILABILITY["total_internet_downtime_seconds"] = (
                         float(shared_state.AGENT_AVAILABILITY.get("total_internet_downtime_seconds", 0)) + duration
                     )
+                    events = shared_state.AGENT_AVAILABILITY.setdefault("events", [])
+                    events.append({
+                        "start": _internet_down_since,
+                        "end": time.time(),
+                        "type": "internet",
+                        "duration": duration,
+                    })
+                    try:
+                        from core.utils import prune_agent_availability_events
+                        prune_agent_availability_events()
+                    except Exception:
+                        logging.debug("Unable to prune availability events", exc_info=True)
                     _internet_down_since = 0.0
+                    shared_state.AGENT_AVAILABILITY["active_internet_down_since"] = 0.0
 
             # Periodic DB save
             if time.time() - _last_db_save > _db_save_interval:
                 try:
+                    from core.utils import prune_agent_availability_events
+                    prune_agent_availability_events()
                     shared_state.AGENT_AVAILABILITY["session_end_time"] = time.time()
                     await current_config.set_bot_config("agent_availability", dict(shared_state.AGENT_AVAILABILITY))
                     _last_db_save = time.time()
                 except Exception:
-                    pass
+                    logging.debug("Unable to persist availability state", exc_info=True)
         except asyncio.CancelledError:
             raise
         except Exception:

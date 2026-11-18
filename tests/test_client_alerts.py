@@ -6,28 +6,12 @@ keyboard generation, pinning, broadcast deletion, and service message filtering.
 
 import os
 import sys
-import types
 import unittest
 from base64 import b64encode
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("DATA_ENCRYPTION_KEY", b64encode(b"0" * 32).decode())
-os.environ.setdefault("TG_BOT_TOKEN", "123456789:TEST_BOT_TOKEN")
-os.environ.setdefault("TG_ADMIN_ID", "12345")
-os.environ.setdefault("ALERT_BOT_TOKEN", "987654321:TEST_ALERT_TOKEN")
-
-modules_to_mock = [
-    "aiohttp", "aiohttp.web", "argon2", "argon2.exceptions", "aiosqlite",
-    "requests", "PIL", "PIL.Image", "qrcode",
-    "netifaces", "psutil", "sentry_sdk", "yaml", "docker", "asyncssh", "tortoise",
-]
-
-for m in modules_to_mock:
-    if m not in sys.modules:
-        mod = MagicMock()
-        mod.__path__ = []
-        mod.__spec__ = types.SimpleNamespace(name=m, origin=None, submodule_search_locations=[])
-        sys.modules[m] = mod
+from tests.support import CORE_DEPENDENCIES, mock_optional_modules
 
 
 class MockInlineKeyboardButton:
@@ -56,88 +40,75 @@ class MockStatesGroup:
     pass
 
 
-mock_aiogram = MagicMock()
-mock_types = MagicMock()
-mock_types.InlineKeyboardButton = MockInlineKeyboardButton
-mock_types.InlineKeyboardMarkup = MockInlineKeyboardMarkup
-mock_types.KeyboardButton = MockKeyboardButton
-mock_types.ReplyKeyboardMarkup = MockReplyKeyboardMarkup
-mock_aiogram.types = mock_types
-
-mock_dp = MagicMock()
-mock_dp.message.return_value = lambda f: f
-mock_dp.callback_query.return_value = lambda f: f
-mock_dp.message_reaction.return_value = lambda f: f
-mock_dp.poll_answer.return_value = lambda f: f
-mock_aiogram.Dispatcher.return_value = mock_dp
-mock_aiogram.fsm.state.StatesGroup = MockStatesGroup
-mock_aiogram.fsm.state.State = MagicMock
-
-sys.modules["aiogram"] = mock_aiogram
-sys.modules["aiogram.types"] = mock_types
-sys.modules["aiogram.filters"] = mock_aiogram.filters
-sys.modules["aiogram.fsm"] = mock_aiogram.fsm
-sys.modules["aiogram.fsm.context"] = mock_aiogram.fsm.context
-sys.modules["aiogram.fsm.state"] = mock_aiogram.fsm.state
-sys.modules["aiogram.fsm.storage"] = mock_aiogram.fsm.storage
-sys.modules["aiogram.fsm.storage.memory"] = mock_aiogram.fsm.storage.memory
-
-import core  # noqa: E402
-from core import config  # noqa: E402
-core.nodes_db = MagicMock()
-sys.modules["core.nodes_db"] = core.nodes_db
-
-from modules.client_alerts import (  # noqa: E402
-    _broadcast_confirm,
-    _broadcast_message_received,
-    _cq_client_cancel_mute_all,
-    _cq_client_confirm_mute_all,
-    _cq_client_settings_toggle_all,
-    _cq_client_settings_toggle_broadcasts,
-    _cq_view_broadcast,
-    _delete_broadcast_for_all,
-    _get_alert_panel_keyboard,
-    _get_broadcast_confirm_keyboard,
-    _get_client_main_keyboard,
-    _get_client_settings_keyboard,
-    _load_broadcast_history,
-    _record_broadcast,
-    _render_broadcast_confirm_text,
-    _save_broadcast_history,
-    _save_polls_registry,
-    _send_payload_via_alert_bot,
-    alert_message_handler,
-    alert_poll_answer_handler,
-    alert_reaction_handler,
-    broadcast_system_alert,
-    is_node_muted_for_user,
-    BROADCASTS_FILE,
-    POLLS_FILE,
-    SUBSCRIBERS_FILE,
-)
-
-
 class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("DATA_ENCRYPTION_KEY", b64encode(b"0" * 32).decode())
+        os.environ.setdefault("TG_BOT_TOKEN", "123456789:TEST_BOT_TOKEN")
+        os.environ.setdefault("TG_ADMIN_ID", "12345")
+        os.environ.setdefault("ALERT_BOT_TOKEN", "987654321:TEST_ALERT_TOKEN")
+
+        mock_optional_modules((*CORE_DEPENDENCIES, "psutil"))
+
+        mock_aiogram = MagicMock()
+        mock_types = MagicMock()
+        mock_types.InlineKeyboardButton = MockInlineKeyboardButton
+        mock_types.InlineKeyboardMarkup = MockInlineKeyboardMarkup
+        mock_types.KeyboardButton = MockKeyboardButton
+        mock_types.ReplyKeyboardMarkup = MockReplyKeyboardMarkup
+        mock_aiogram.types = mock_types
+
+        mock_dp = MagicMock()
+        mock_dp.message.return_value = lambda f: f
+        mock_dp.callback_query.return_value = lambda f: f
+        mock_dp.message_reaction.return_value = lambda f: f
+        mock_dp.poll_answer.return_value = lambda f: f
+        mock_aiogram.Dispatcher.return_value = mock_dp
+        mock_aiogram.fsm.state.StatesGroup = MockStatesGroup
+        mock_aiogram.fsm.state.State = MagicMock
+
+        sys.modules["aiogram"] = mock_aiogram
+        sys.modules["aiogram.types"] = mock_types
+        sys.modules["aiogram.filters"] = mock_aiogram.filters
+        sys.modules["aiogram.exceptions"] = mock_aiogram.exceptions
+        sys.modules["aiogram.fsm"] = mock_aiogram.fsm
+        sys.modules["aiogram.fsm.context"] = mock_aiogram.fsm.context
+        sys.modules["aiogram.fsm.state"] = mock_aiogram.fsm.state
+        sys.modules["aiogram.fsm.storage"] = mock_aiogram.fsm.storage
+        sys.modules["aiogram.fsm.storage.memory"] = mock_aiogram.fsm.storage.memory
+
+        import core
+        from core import config
+
+        core.nodes_db = MagicMock()
+        sys.modules["core.nodes_db"] = core.nodes_db
+
+        from modules import client_alerts
+
+        cls.config = config
+        cls.alerts = client_alerts
+
     @classmethod
     def tearDownClass(cls):
         import contextlib
         import shutil
-        for f in [BROADCASTS_FILE, POLLS_FILE, SUBSCRIBERS_FILE]:
+        for f in [cls.alerts.BROADCASTS_FILE, cls.alerts.POLLS_FILE, cls.alerts.SUBSCRIBERS_FILE]:
             with contextlib.suppress(OSError):
                 if os.path.exists(f):
                     os.remove(f)
-        config_dir = os.path.dirname(BROADCASTS_FILE)
+        config_dir = os.path.dirname(cls.alerts.BROADCASTS_FILE)
         with contextlib.suppress(OSError):
             if os.path.exists(config_dir) and not os.listdir(config_dir):
                 shutil.rmtree(config_dir, ignore_errors=True)
+
     def test_render_broadcast_confirm_text(self):
-        text_default = _render_broadcast_confirm_text(10, pin=False, silent=False)
+        text_default = self.alerts._render_broadcast_confirm_text(10, pin=False, silent=False)
         self.assertIn("Получателей: <b>10</b>", text_default)
         self.assertIn("Закрепить у всех: <b>Нет</b>", text_default)
         self.assertIn("Доставка: <b>со звуком</b>", text_default)
         self.assertIn("Кнопка: <i>не задана</i>", text_default)
 
-        text_custom = _render_broadcast_confirm_text(
+        text_custom = self.alerts._render_broadcast_confirm_text(
             5, pin=True, silent=True, btn_title="Новости", btn_url="https://t.me/news"
         )
         self.assertIn("Закрепить у всех: <b>Да</b>", text_custom)
@@ -146,14 +117,14 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("https://t.me/news", text_custom)
 
     def test_get_broadcast_confirm_keyboard(self):
-        kb_default = _get_broadcast_confirm_keyboard(pin=False, silent=False, btn_info=None)
+        kb_default = self.alerts._get_broadcast_confirm_keyboard(pin=False, silent=False, btn_info=None)
         button_texts = [btn.text for row in kb_default.inline_keyboard for btn in row]
         self.assertIn("📌 Закрепить: НЕТ", button_texts)
         self.assertIn("🔔 Со звуком", button_texts)
         self.assertIn("🔘 Добавить кнопку", button_texts)
         self.assertIn("✅ Отправить всем", button_texts)
 
-        kb_active = _get_broadcast_confirm_keyboard(pin=True, silent=True, btn_info="Ссылка на чат")
+        kb_active = self.alerts._get_broadcast_confirm_keyboard(pin=True, silent=True, btn_info="Ссылка на чат")
         btn_active_texts = [btn.text for row in kb_active.inline_keyboard for btn in row]
         self.assertIn("📌 Закрепить: ДА", btn_active_texts)
         self.assertIn("🔕 Без звука", btn_active_texts)
@@ -165,7 +136,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers), \
              patch("core.nodes_db.get_all_nodes", AsyncMock(return_value={"tok1": {"name": "Node Alpha"}})):
-            kb = await _get_client_settings_keyboard(1001)
+            kb = await self.alerts._get_client_settings_keyboard(1001)
             btn_texts = [btn.text for row in kb.inline_keyboard for btn in row]
             callback_datas = [btn.callback_data for row in kb.inline_keyboard for btn in row]
 
@@ -186,7 +157,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers), \
              patch("core.nodes_db.get_all_nodes", AsyncMock(return_value=all_nodes)):
-            kb = await _get_client_settings_keyboard(1002)
+            kb = await self.alerts._get_client_settings_keyboard(1002)
             btn_texts = [btn.text for row in kb.inline_keyboard for btn in row]
             callback_datas = [btn.callback_data for row in kb.inline_keyboard for btn in row]
 
@@ -209,15 +180,15 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers):
             # User with mute_all=True has all nodes muted
-            self.assertTrue(is_node_muted_for_user(2001, "tok_down"))
-            self.assertTrue(is_node_muted_for_user(2001, "tok_random"))
+            self.assertTrue(self.alerts.is_node_muted_for_user(2001, "tok_down"))
+            self.assertTrue(self.alerts.is_node_muted_for_user(2001, "tok_random"))
 
             # User with specific node muted
-            self.assertTrue(is_node_muted_for_user(2002, "tok_down"))
-            self.assertFalse(is_node_muted_for_user(2002, "tok_other"))
+            self.assertTrue(self.alerts.is_node_muted_for_user(2002, "tok_down"))
+            self.assertFalse(self.alerts.is_node_muted_for_user(2002, "tok_other"))
 
             # User with nothing muted
-            self.assertFalse(is_node_muted_for_user(2003, "tok_down"))
+            self.assertFalse(self.alerts.is_node_muted_for_user(2003, "tok_down"))
 
     async def test_broadcast_system_alert_skips_muted_all(self):
         fake_subscribers = {
@@ -229,7 +200,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers), \
              patch("modules.client_alerts.alert_bot", mock_bot):
-            await broadcast_system_alert("Внимание: сервер перезагружается")
+            await self.alerts.broadcast_system_alert("Внимание: сервер перезагружается")
             # Only user 3001 should receive message
             self.assertEqual(mock_bot.send_message.call_count, 1)
             args, _ = mock_bot.send_message.call_args
@@ -256,28 +227,34 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers), \
              patch("modules.client_alerts._send_payload_via_alert_bot", mock_send), \
              patch("modules.client_alerts.alert_bot", AsyncMock()):
-            await _broadcast_confirm(mock_callback, mock_state)
+            await self.alerts._broadcast_confirm(mock_callback, mock_state)
             # Only user 4001 should receive the broadcast (4002 has mute_all, 4003 has mute_broadcasts)
             self.assertEqual(mock_send.call_count, 1)
             args, _ = mock_send.call_args
             self.assertEqual(args[0], 4001)
 
-    async def test_toggle_all_shows_warning_dialog(self):
-        subscribers = {5001: {"name": "User", "mute_all": False}}
+    @contextmanager
+    def subscriber_settings(self, user_id=5001, **settings):
+        subscribers = {user_id: {"name": "User", **settings}}
         saved = {}
 
-        def mock_save(data):
+        def save(data):
             saved.clear()
             saved.update(data)
 
-        mock_callback = AsyncMock()
-        mock_callback.from_user.id = 5001
-        mock_callback.message = AsyncMock()
+        callback = AsyncMock()
+        callback.from_user.id = user_id
+        callback.message = AsyncMock()
+        with (
+            patch("modules.client_alerts._load_subscribers", return_value=subscribers),
+            patch("modules.client_alerts._save_subscribers", side_effect=save),
+            patch("modules.client_alerts._get_client_settings_keyboard", AsyncMock(return_value=MagicMock())),
+        ):
+            yield saved, callback
 
-        with patch("modules.client_alerts._load_subscribers", return_value=subscribers), \
-             patch("modules.client_alerts._save_subscribers", side_effect=mock_save), \
-             patch("modules.client_alerts._get_client_settings_keyboard", AsyncMock(return_value=MagicMock())):
-            await _cq_client_settings_toggle_all(mock_callback)
+    async def test_toggle_all_shows_warning_dialog(self):
+        with self.subscriber_settings(mute_all=False) as (saved, mock_callback):
+            await self.alerts._cq_client_settings_toggle_all(mock_callback)
             # Should NOT mutate mute_all yet
             self.assertFalse(saved.get(5001, {}).get("mute_all", False))
             # Should edit message to display warning with OK and Cancel buttons
@@ -290,63 +267,24 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
             mock_callback.answer.assert_called_once()
 
     async def test_confirm_mute_all_callback(self):
-        subscribers = {5001: {"name": "User", "mute_all": False}}
-        saved = {}
-
-        def mock_save(data):
-            saved.clear()
-            saved.update(data)
-
-        mock_callback = AsyncMock()
-        mock_callback.from_user.id = 5001
-        mock_callback.message = AsyncMock()
-
-        with patch("modules.client_alerts._load_subscribers", return_value=subscribers), \
-             patch("modules.client_alerts._save_subscribers", side_effect=mock_save), \
-             patch("modules.client_alerts._get_client_settings_keyboard", AsyncMock(return_value=MagicMock())):
-            await _cq_client_confirm_mute_all(mock_callback)
+        with self.subscriber_settings(mute_all=False) as (saved, mock_callback):
+            await self.alerts._cq_client_confirm_mute_all(mock_callback)
             # Should set mute_all to True
             self.assertTrue(saved[5001]["mute_all"])
             mock_callback.message.edit_text.assert_called_once()
             mock_callback.answer.assert_called_once()
 
     async def test_cancel_mute_all_callback(self):
-        subscribers = {5001: {"name": "User", "mute_all": False}}
-        saved = {}
-
-        def mock_save(data):
-            saved.clear()
-            saved.update(data)
-
-        mock_callback = AsyncMock()
-        mock_callback.from_user.id = 5001
-        mock_callback.message = AsyncMock()
-
-        with patch("modules.client_alerts._load_subscribers", return_value=subscribers), \
-             patch("modules.client_alerts._save_subscribers", side_effect=mock_save), \
-             patch("modules.client_alerts._get_client_settings_keyboard", AsyncMock(return_value=MagicMock())):
-            await _cq_client_cancel_mute_all(mock_callback)
+        with self.subscriber_settings(mute_all=False) as (saved, mock_callback):
+            await self.alerts._cq_client_cancel_mute_all(mock_callback)
             # Should NOT save mute_all as True
             self.assertFalse(saved.get(5001, {}).get("mute_all", False))
             mock_callback.message.edit_text.assert_called_once()
             mock_callback.answer.assert_called_once()
 
     async def test_toggle_all_unmutes_directly_when_already_muted(self):
-        subscribers = {5001: {"name": "User", "mute_all": True}}
-        saved = {}
-
-        def mock_save(data):
-            saved.clear()
-            saved.update(data)
-
-        mock_callback = AsyncMock()
-        mock_callback.from_user.id = 5001
-        mock_callback.message = AsyncMock()
-
-        with patch("modules.client_alerts._load_subscribers", return_value=subscribers), \
-             patch("modules.client_alerts._save_subscribers", side_effect=mock_save), \
-             patch("modules.client_alerts._get_client_settings_keyboard", AsyncMock(return_value=MagicMock())):
-            await _cq_client_settings_toggle_all(mock_callback)
+        with self.subscriber_settings(mute_all=True) as (saved, mock_callback):
+            await self.alerts._cq_client_settings_toggle_all(mock_callback)
             # Should toggle back to False directly without warning
             self.assertFalse(saved[5001]["mute_all"])
             mock_callback.message.edit_reply_markup.assert_called_once()
@@ -357,31 +295,18 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         with patch("modules.client_alerts.get_user_lang", return_value="en"), \
              patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers), \
              patch("core.nodes_db.get_all_nodes", AsyncMock(return_value={})):
-            kb = await _get_client_settings_keyboard(7001)
+            kb = await self.alerts._get_client_settings_keyboard(7001)
             btn_texts = [btn.text for row in kb.inline_keyboard for btn in row]
             self.assertTrue(any("All messages: Active" in t for t in btn_texts))
 
-            main_kb = _get_client_main_keyboard()
+            main_kb = self.alerts._get_client_main_keyboard()
             # In English, settings button is Settings
             main_btn = main_kb.keyboard[0][0].text
             self.assertIn("Settings", main_btn)
 
     async def test_toggle_broadcasts_callback(self):
-        subscribers = {6001: {"name": "User", "mute_broadcasts": False}}
-        saved = {}
-
-        def mock_save(data):
-            saved.clear()
-            saved.update(data)
-
-        mock_callback = AsyncMock()
-        mock_callback.from_user.id = 6001
-        mock_callback.message = AsyncMock()
-
-        with patch("modules.client_alerts._load_subscribers", return_value=subscribers), \
-             patch("modules.client_alerts._save_subscribers", side_effect=mock_save), \
-             patch("modules.client_alerts._get_client_settings_keyboard", AsyncMock(return_value=MagicMock())):
-            await _cq_client_settings_toggle_broadcasts(mock_callback)
+        with self.subscriber_settings(user_id=6001, mute_broadcasts=False) as (saved, mock_callback):
+            await self.alerts._cq_client_settings_toggle_broadcasts(mock_callback)
             self.assertTrue(saved[6001]["mute_broadcasts"])
             mock_callback.answer.assert_called_once()
 
@@ -403,11 +328,11 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("modules.client_alerts.alert_bot", mock_bot):
             # First send: sends media bytes and caches file_id
-            await _send_payload_via_alert_bot(12345, payload)
+            await self.alerts._send_payload_via_alert_bot(12345, payload)
             self.assertEqual(payload.get("cached_file_id"), "alert_bot_cached_file_id")
 
             # Second send: should use cached_file_id directly
-            await _send_payload_via_alert_bot(67890, payload)
+            await self.alerts._send_payload_via_alert_bot(67890, payload)
             call_args = mock_bot.send_photo.call_args_list
             self.assertEqual(len(call_args), 2)
             self.assertEqual(call_args[1].args[1], "alert_bot_cached_file_id")
@@ -427,10 +352,10 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         with patch("modules.client_alerts.alert_bot", mock_bot), \
              patch("modules.client_alerts._load_broadcast_history", side_effect=lambda: list(history_store)), \
              patch("modules.client_alerts._save_broadcast_history", side_effect=save_h):
-            bc_id = _record_broadcast("Проверочная рассылка", {111: 501, 222: 502}, is_pinned=True)
+            bc_id = self.alerts._record_broadcast("Проверочная рассылка", {111: 501, 222: 502}, is_pinned=True)
             self.assertTrue(bc_id.startswith("bc_"))
 
-            del_ok, del_fail = await _delete_broadcast_for_all(bc_id)
+            del_ok, del_fail = await self.alerts._delete_broadcast_for_all(bc_id)
             self.assertEqual(del_ok, 2)
             self.assertEqual(del_fail, 0)
             self.assertEqual(mock_bot.unpin_chat_message.call_count, 2)
@@ -451,9 +376,9 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         with patch("modules.client_alerts.alert_bot", mock_bot), \
              patch("modules.client_alerts._load_broadcast_history", side_effect=lambda: list(history_store)), \
              patch("modules.client_alerts._save_broadcast_history", side_effect=save_h):
-            bc_id = _record_broadcast("Обычная рассылка", {111: 601, 222: 602}, is_pinned=False)
+            bc_id = self.alerts._record_broadcast("Обычная рассылка", {111: 601, 222: 602}, is_pinned=False)
 
-            del_ok, del_fail = await _delete_broadcast_for_all(bc_id)
+            del_ok, del_fail = await self.alerts._delete_broadcast_for_all(bc_id)
             self.assertEqual(del_ok, 2)
             self.assertEqual(del_fail, 0)
             # When unpinned, NO unpin calls and only 2 delete calls (no mid+1 bubble calls)
@@ -468,7 +393,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         mock_msg.delete = AsyncMock()
 
         with patch("modules.client_alerts.alert_bot", MagicMock()):
-            await alert_message_handler(mock_msg)
+            await self.alerts.alert_message_handler(mock_msg)
             mock_msg.answer.assert_not_called()
             mock_msg.delete.assert_called_once()
 
@@ -494,7 +419,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         mock_msg.answer = AsyncMock()
         mock_state = AsyncMock()
 
-        await _broadcast_message_received(mock_msg, mock_state)
+        await self.alerts._broadcast_message_received(mock_msg, mock_state)
         # Should NOT save to state
         mock_state.update_data.assert_not_called()
         # Should reply with unsupported type error
@@ -512,7 +437,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
             "is_anonymous": True,
         }
         with patch("modules.client_alerts.alert_bot", mock_bot):
-            res = await _send_payload_via_alert_bot(12345, poll_payload)
+            res = await self.alerts._send_payload_via_alert_bot(12345, poll_payload)
             self.assertEqual(res.message_id, 777)
             mock_bot.send_poll.assert_called_once()
 
@@ -530,10 +455,10 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.dict(sys.modules, {"bot": mock_main_module}):
-            await alert_reaction_handler(mock_event_new)
+            await self.alerts.alert_reaction_handler(mock_event_new)
             mock_main_bot.send_message.assert_called_once()
             call_args = mock_main_bot.send_message.call_args[0]
-            self.assertEqual(call_args[0], config.ADMIN_USER_ID)
+            self.assertEqual(call_args[0], self.config.ADMIN_USER_ID)
             self.assertIn("Реакция на сообщение", call_args[1])
             self.assertIn("🔥", call_args[1])
             self.assertIn("Alice User", call_args[1])
@@ -547,7 +472,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.dict(sys.modules, {"bot": mock_main_module}):
-            await alert_reaction_handler(mock_event_removed)
+            await self.alerts.alert_reaction_handler(mock_event_removed)
             mock_main_bot.send_message.assert_called_once()
             call_args = mock_main_bot.send_message.call_args[0]
             self.assertIn("Реакция снята", call_args[1])
@@ -555,7 +480,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_poll_answer_handler_and_aggregated_results(self):
         bc_id = "bc_test_poll"
-        _save_broadcast_history([{
+        self.alerts._save_broadcast_history([{
             "id": bc_id,
             "timestamp": 1234567.0,
             "date_str": "26.10 21:00",
@@ -569,7 +494,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
                 "votes": {},
             }
         }])
-        _save_polls_registry({
+        self.alerts._save_polls_registry({
             "poll_id_999": {
                 "bc_id": bc_id,
                 "user_id": 444111,
@@ -591,24 +516,24 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.dict(sys.modules, {"bot": mock_main_module}):
-            await alert_poll_answer_handler(mock_answer_vote)
+            await self.alerts.alert_poll_answer_handler(mock_answer_vote)
             mock_main_bot.send_message.assert_called_once()
             call_args = mock_main_bot.send_message.call_args[0]
             self.assertIn("Ответ в опросе", call_args[1])
             self.assertIn("Да", call_args[1])
             self.assertIn("Bob Voter", call_args[1])
 
-        history = _load_broadcast_history()
+        history = self.alerts._load_broadcast_history()
         bc = next(b for b in history if b["id"] == bc_id)
         self.assertEqual(bc["poll"]["votes"].get("444111"), [0])
 
         # 2. Check _cq_view_broadcast displays aggregated stats
         mock_cq = AsyncMock()
-        mock_cq.from_user.id = config.ADMIN_USER_ID
+        mock_cq.from_user.id = self.config.ADMIN_USER_ID
         mock_cq.data = f"alert_view_bc_{bc_id}"
         mock_cq.message.edit_text = AsyncMock()
 
-        await _cq_view_broadcast(mock_cq)
+        await self.alerts._cq_view_broadcast(mock_cq)
         mock_cq.message.edit_text.assert_called_once()
         text_shown = mock_cq.message.edit_text.call_args[0][0]
         self.assertIn("Результаты опроса:", text_shown)
@@ -624,23 +549,23 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.dict(sys.modules, {"bot": mock_main_module}):
-            await alert_poll_answer_handler(mock_answer_retract)
+            await self.alerts.alert_poll_answer_handler(mock_answer_retract)
             mock_main_bot.send_message.assert_called_once()
             call_args = mock_main_bot.send_message.call_args[0]
             self.assertIn("Отзыв голоса в опросе", call_args[1])
 
-        history = _load_broadcast_history()
+        history = self.alerts._load_broadcast_history()
         bc = next(b for b in history if b["id"] == bc_id)
         self.assertNotIn("444111", bc["poll"]["votes"])
 
     def test_alert_panel_keyboard_localization(self):
         """Test Alert Module control panel keyboards in ru and en."""
-        kb_ru = _get_alert_panel_keyboard("ru")
+        kb_ru = self.alerts._get_alert_panel_keyboard("ru")
         ru_texts = [btn.text for row in kb_ru.inline_keyboard for btn in row]
         self.assertIn("📣 Рассылка", ru_texts)
         self.assertIn("🔙 Назад в меню", ru_texts)
 
-        kb_en = _get_alert_panel_keyboard("en")
+        kb_en = self.alerts._get_alert_panel_keyboard("en")
         en_texts = [btn.text for row in kb_en.inline_keyboard for btn in row]
         self.assertIn("📣 Broadcast", en_texts)
         self.assertIn("🔙 Back to menu", en_texts)
@@ -652,7 +577,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers), \
              patch("core.nodes_db.get_all_nodes", AsyncMock(return_value={})):
-            kb = await _get_client_settings_keyboard(777)
+            kb = await self.alerts._get_client_settings_keyboard(777)
             texts = [btn.text for row in kb.inline_keyboard for btn in row]
             self.assertIn("🌐 Язык: 🇷🇺 русский", texts)
 
@@ -661,7 +586,7 @@ class ClientAlertsFeatureTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch("modules.client_alerts._load_subscribers", return_value=fake_subscribers_en), \
              patch("core.nodes_db.get_all_nodes", AsyncMock(return_value={})):
-            kb_en = await _get_client_settings_keyboard(777)
+            kb_en = await self.alerts._get_client_settings_keyboard(777)
             texts_en = [btn.text for row in kb_en.inline_keyboard for btn in row]
             self.assertIn("🌐 Language: 🇬🇧 English", texts_en)
 

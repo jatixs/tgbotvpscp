@@ -11,6 +11,7 @@ rather than duplicating role check logic locally.
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .config import ADMIN_USER_ID
@@ -63,9 +64,10 @@ def get_role_level(user_id: int) -> int:
 
 def build_user_role_js(role: str, user_id: int) -> str:
     """Generates inline JS with USER_ROLE, IS_MAIN_ADMIN, WEB_KEY strings."""
+    role_js = json.dumps(role).replace("<", r"\u003c")
     is_main = str(user_id == ADMIN_USER_ID).lower()
     return (
-        f"const USER_ROLE = '{role}'; "
+        f"const USER_ROLE = {role_js}; "
         f"const IS_MAIN_ADMIN = {is_main}; "
         f"const WEB_KEY = '{get_web_key()}';"
     )

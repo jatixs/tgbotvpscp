@@ -25,6 +25,12 @@ jobs:
         pip install flake8 bandit safety
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+    - name: Run Python regression tests
+      run: python -m unittest discover -s tests -v
+
+    - name: Run JavaScript regression tests
+      run: node --test tests/*.cjs
+
     - name: 🔍 Lint with Flake8
       run: |
         # Stop build if there are Python syntax errors or undefined names (Critical)

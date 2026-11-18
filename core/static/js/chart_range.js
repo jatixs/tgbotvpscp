@@ -104,10 +104,14 @@
     function readStoredInterface(key) {
         try {
             const value = localStorage.getItem(`chartInterface:${key}`);
-            return typeof value === 'string' ? value : '';
+            return normalizeInterface(value);
         } catch {
             return '';
         }
+    }
+
+    function normalizeInterface(value) {
+        return typeof value === 'string' ? value : '';
     }
 
     function writeStoredInterface(key, value) {
@@ -150,7 +154,7 @@
             return storageKey;
         }
         const initialInterface = opts.initialInterface !== undefined
-            ? opts.initialInterface
+            ? normalizeInterface(opts.initialInterface)
             : (opts.network ? readStoredInterface(getInterfaceStorageKey()) : '');
         const ctl = {
             range: findRange(opts.initialRange || readStored(storageKey) || DEFAULT_RANGE),
@@ -755,7 +759,7 @@
         };
 
         ctl.setInterface = function (name) {
-            const safeName = typeof name === 'string' ? name : '';
+            const safeName = normalizeInterface(name);
             if (ctl.interfaceName === safeName) return ctl;
             ctl.interfaceName = safeName;
             writeStoredInterface(getInterfaceStorageKey(), safeName);

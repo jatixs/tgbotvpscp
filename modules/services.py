@@ -40,8 +40,8 @@ def _validate_name(name: str) -> str:
     """Validate a service or container name to prevent command injection."""
     if not name:
         raise ValueError("Name cannot be empty")
-    match = _VALID_NAME_RE.match(name)
-    if not match:
+    match = _VALID_NAME_RE.fullmatch(name)
+    if not match or name.startswith("-"):
         raise ValueError(f"Invalid service/container name: {name!r}")
     return match.group(0)
 
@@ -131,15 +131,6 @@ def get_docker_status(container_name):
     except Exception:
         # Docker not available or connection error - treat as not found
         return "not_found"
-
-def discover_all_systemd_services():
-    """Discover all running/available systemd services"""
-    return list(_bulk_systemd_statuses().keys())
-
-def discover_all_docker_containers():
-    """Discover all docker containers (running and stopped)"""
-    return list(_bulk_docker_statuses().keys())
-
 
 def _bulk_systemd_statuses() -> dict[str, str]:
     """Status of every systemd service in a single `systemctl` round-trip.
@@ -405,22 +396,6 @@ async def perform_service_action(name, sType, action):
     except Exception as e:
         return False, str(e)
 
-def get_systemd_service_description(service_name):
-    """Get description of a systemd service"""
-    try:
-        service_name = _validate_managed_target(service_name, "systemd")
-        cmd = ["systemctl", "show", "-p", "Description", "--", service_name]
-        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                if line.startswith("Description="):
-                    return line.split("=", 1)[1].strip()
-        return None
-    except Exception as e:
-        logging.debug(f"Error getting systemd description for {service_name}: {e}")
-        return None
-
 def get_systemd_service_info(service_name):
     """Get detailed information about a systemd service"""
     info = {
@@ -489,19 +464,6 @@ def get_systemd_service_info(service_name):
         logging.debug(f"Error getting systemd info for {service_name}: {e}")
     
     return info
-
-async def get_docker_image_from_container(container_name):
-    """Get Docker image name from a running container"""
-    try:
-        container_name = _validate_managed_target(container_name, "docker")
-        cmd = ["docker", "inspect", "-f", "{{.Config.Image}}", "--", container_name]
-        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        logging.debug("Unable to inspect managed Docker image: %s", exc)
-    return None
 
 async def get_docker_hub_description(image_name):
     """Get description from Docker Hub API"""

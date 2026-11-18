@@ -46,6 +46,7 @@ from ..utils import (
     encrypt_for_web,
     encrypted_json_response,
 )
+from .sse import prepare_event_stream
 
 routes = web.RouteTableDef()
 
@@ -710,10 +711,10 @@ async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
         if "id_token" in data and isinstance(data["id_token"], str):
             claims = await verify_telegram_id_token(data["id_token"])
             if not claims:
-                return encrypted_json_response({"error": "Invalid ID token or expired"}, status=403)
+                return web.json_response({"error": "Invalid ID token or expired"}, status=403)
             raw_id = claims.get("id") or claims.get("sub")
             if not raw_id:
-                return encrypted_json_response({"error": "Missing user ID in token"}, status=403)
+                return web.json_response({"error": "Missing user ID in token"}, status=403)
             user_id = int(raw_id)
             photo_url = claims.get("picture") or (data.get("user") or {}).get("picture")
             uname = claims.get("name") or claims.get("preferred_username")
@@ -723,10 +724,10 @@ async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
             user_id = int(data.get("id"))
             photo_url = data.get("photo_url")
         else:
-            return encrypted_json_response({"error": "Invalid hash or expired"}, status=403)
+            return web.json_response({"error": "Invalid hash or expired"}, status=403)
 
         if user_id not in ALLOWED_USERS:
-            return encrypted_json_response({"error": "User not allowed"}, status=403)
+            return web.json_response({"error": "User not allowed"}, status=403)
 
         session_token = _create_session(
             request=request,
@@ -735,7 +736,7 @@ async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
             photo_url=photo_url,
         )
         csrf_token = generate_csrf_token()
-        response = encrypted_json_response({"status": "ok", "csrf_token": csrf_token})
+        response = web.json_response({"status": "ok", "csrf_token": csrf_token})
         _set_session_cookie(
             response,
             request=request,
@@ -746,7 +747,7 @@ async def handle_telegram_auth(request: web.Request) -> web.StreamResponse:
         return response
     except Exception:
         logging.exception("Telegram auth failed")
-        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.post("/api/auth/webapp")
@@ -756,15 +757,15 @@ async def handle_webapp_auth(request: web.Request) -> web.StreamResponse:
         data = await decrypt_request_payload(request)
         init_data = data.get("initData")
         if not init_data:
-            return encrypted_json_response({"error": "Missing initData"}, status=400)
+            return web.json_response({"error": "Missing initData"}, status=400)
 
         user_data = check_webapp_auth(init_data, TOKEN)
         if not user_data:
-            return encrypted_json_response({"error": "Invalid signature or expired"}, status=403)
+            return web.json_response({"error": "Invalid signature or expired"}, status=403)
 
         user_id = int(user_data.get("id"))
         if user_id not in ALLOWED_USERS:
-            return encrypted_json_response({"error": "User not allowed"}, status=403)
+            return web.json_response({"error": "User not allowed"}, status=403)
 
         session_token = _create_session(
             request=request,
@@ -773,7 +774,7 @@ async def handle_webapp_auth(request: web.Request) -> web.StreamResponse:
             photo_url=user_data.get("photo_url"),
         )
         csrf_token = generate_csrf_token()
-        response = encrypted_json_response({"status": "ok", "csrf_token": csrf_token})
+        response = web.json_response({"status": "ok", "csrf_token": csrf_token})
         _set_session_cookie(
             response,
             request=request,
@@ -784,7 +785,7 @@ async def handle_webapp_auth(request: web.Request) -> web.StreamResponse:
         return response
     except Exception:
         logging.exception("Web App auth failed")
-        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.post("/logout")
@@ -818,11 +819,11 @@ async def handle_reset_request(request: web.Request) -> web.StreamResponse:
                 if ADMIN_USERNAME
                 else f"tg://user?id={ADMIN_USER_ID}"
             )
-            return encrypted_json_response({"error": "not_found", "admin_url": admin_url}, status=404)
+            return web.json_response({"error": "not_found", "admin_url": admin_url}, status=404)
 
         public_base_url = _get_public_base_url()
         if not public_base_url:
-            return encrypted_json_response({"error": "WEB_PUBLIC_URL must be configured"}, status=503)
+            return web.json_response({"error": "WEB_PUBLIC_URL must be configured"}, status=503)
 
         reset_token = secrets.token_urlsafe(32)
         _trim_expiring_store(
@@ -836,7 +837,7 @@ async def handle_reset_request(request: web.Request) -> web.StreamResponse:
 
         bot = request.app.get("bot")
         if bot is None:
-            return encrypted_json_response({"error": "bot_not_ready"}, status=500)
+            return web.json_response({"error": "bot_not_ready"}, status=500)
 
         lang = get_user_lang(user_id)
         keyboard = InlineKeyboardMarkup(
@@ -848,10 +849,10 @@ async def handle_reset_request(request: web.Request) -> web.StreamResponse:
             reply_markup=keyboard,
             parse_mode="HTML",
         )
-        return encrypted_json_response({"status": "ok"})
+        return web.json_response({"status": "ok"})
     except Exception:
         logging.exception("Password reset request failed")
-        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.post("/api/reset/confirm")
@@ -863,20 +864,20 @@ async def handle_reset_confirm(request: web.Request) -> web.StreamResponse:
         new_password = data.get("password")
 
         if not token or token not in RESET_TOKENS:
-            return encrypted_json_response({"error": "Expired"}, status=403)
+            return web.json_response({"error": "Expired"}, status=403)
 
         token_data = RESET_TOKENS[token]
         if time.time() - float(token_data.get("ts", 0)) > RESET_TOKEN_TTL:
             RESET_TOKENS.pop(token, None)
-            return encrypted_json_response({"error": "Expired"}, status=403)
+            return web.json_response({"error": "Expired"}, status=403)
 
         user_id = int(token_data.get("user_id", 0))
         if user_id != ADMIN_USER_ID:
             RESET_TOKENS.pop(token, None)
-            return encrypted_json_response({"error": "Denied"}, status=403)
+            return web.json_response({"error": "Denied"}, status=403)
 
         if not isinstance(new_password, str) or len(new_password) < 8:
-            return encrypted_json_response(
+            return web.json_response(
                 {"error": "Password must be at least 8 characters"},
                 status=400,
             )
@@ -891,20 +892,16 @@ async def handle_reset_confirm(request: web.Request) -> web.StreamResponse:
 
         await save_users_async()
         RESET_TOKENS.pop(token, None)
-        return encrypted_json_response({"status": "ok"})
+        return web.json_response({"status": "ok"})
     except Exception:
         logging.exception("Password reset confirmation failed")
-        return encrypted_json_response({"error": "Internal Server Error"}, status=500)
+        return web.json_response({"error": "Internal Server Error"}, status=500)
 
 
 @routes.get("/api/security/telegram_only_mode")
 async def handle_get_telegram_only_mode(request: web.Request) -> web.StreamResponse:
     """Return whether Telegram-only login mode is enabled."""
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     try:
         settings = await current_config.get_bot_config("security_settings", {})
@@ -950,11 +947,7 @@ async def api_get_sessions(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
         
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    await response.prepare(request)
+    response = await prepare_event_stream(request)
 
     current_token = request.cookies.get(COOKIE_NAME)
     user_sessions: list[dict[str, Any]] = []

@@ -156,7 +156,7 @@ function setLoginLanguage(lang) {
                 const key = el.getAttribute('data-i18n');
                 if (dict[key]) {
                     if (el.tagName === 'INPUT') el.placeholder = dict[key];
-                    else el.innerHTML = DOMPurify.sanitize(dict[key]);
+                    else setSafeHTML(el, dict[key]);
                 }
                 el.style.opacity = '1';
             });
@@ -277,7 +277,7 @@ async function requestPasswordReset() {
             const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
             const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
-            container.innerHTML = DOMPurify.sanitize(`
+            setSafeHTML(container, `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
                         <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">
@@ -360,7 +360,7 @@ async function submitNewPassword() {
             const desc = (I18N && I18N.reset_success_desc) || "Password changed successfully.";
             const btnText = (I18N && I18N.web_login_btn) || "Login";
 
-            container.innerHTML = DOMPurify.sanitize(`
+            setSafeHTML(container, `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-500/30">
                         <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
@@ -392,7 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const initData = window.Telegram.WebApp.initData;
         const mainCard = document.getElementById('main-card');
         if (mainCard) {
-            mainCard.innerHTML = DOMPurify.sanitize(`
+            setSafeHTML(mainCard, `
                 <div class="flex flex-col items-center justify-center py-12">
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
                     <p class="text-gray-500 dark:text-gray-400 font-medium">${(typeof I18N !== 'undefined' && I18N.web_logging_in) ? I18N.web_logging_in : "Authenticating via Telegram..."}</p>
@@ -476,7 +476,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const key = el.getAttribute('data-i18n');
             if (I18N[key]) {
                 if (el.tagName === 'INPUT') el.placeholder = I18N[key];
-                else el.innerHTML = DOMPurify.sanitize(I18N[key]);
+                else setSafeHTML(el, I18N[key]);
             }
             if (el.title && I18N[key]) el.title = I18N[key];
         });
@@ -500,7 +500,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
         const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
 
-        formsContainer.innerHTML = DOMPurify.sanitize(`
+        setSafeHTML(formsContainer, `
             <div class="text-center py-8 animate-fade-in-up">
                 <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
                     <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">

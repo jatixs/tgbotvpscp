@@ -69,7 +69,7 @@
 ### Pull Requests
 1. Сделайте Fork репозитория и создайте свою ветку от `main`.
 2. Называйте ветку логично: `feature/ваша-функция` или `bugfix/номер-issue`.
-3. Проверьте изменения: `python -m unittest discover -s tests`; для установщиков выполните `bash -n deploy.sh` и `bash -n deploy_en.sh` в Linux/macOS или Git Bash.
+3. Проверьте изменения: `python -m unittest discover -s tests`; для графиков — `node --test tests/test_chart_range.cjs` (Node.js 18+); для установщиков выполните `bash -n deploy.sh` и `bash -n deploy_en.sh` в Linux/macOS или Git Bash. Python-тест жизненного цикла Telegram использует установленный aiogram из `requirements.txt`, без запросов к Telegram.
 4. Обновите `docs/CHANGELOG.md`; для изменений auth, node protocol или деплоя синхронизируйте RU/EN документацию и security guidance.
 5. Откройте Pull Request!
 

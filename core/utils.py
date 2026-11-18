@@ -4,13 +4,11 @@ Contains functions for networking, logging, encryption, and data formatting.
 """
 import asyncio
 import base64
-import binascii
 import hashlib
 import json
 import logging
 import os
 import re
-import shutil
 import time
 import urllib.parse
 from datetime import datetime
@@ -19,9 +17,9 @@ from pathlib import Path
 from typing import Any
 
 import aiohttp
+from cryptography.fernet import Fernet
 import requests
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup
 
 try:
@@ -73,56 +71,31 @@ def decrypt_data(data: str) -> str:
         return data
 
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
-
 def get_web_key() -> str:
     """Return a 64-character hex string (32 bytes) for AES-256."""
     return hashlib.sha256(DATA_ENCRYPTION_KEY).hexdigest()
 
 
+# Web envelopes are transient. The browser receives this derived key, never the
+# key used to encrypt persistent bot data.
+_WEB_CIPHER = Fernet(base64.urlsafe_b64encode(bytes.fromhex(get_web_key())))
+_WEB_PREFIX = "fw1:"
+
+
 def encrypt_for_web(text: str) -> str:
     if not text:
         return ""
-    try:
-        key_bytes = bytes.fromhex(get_web_key())
-        iv = os.urandom(16)
-        # nosec B105
-        # nosemgrep: python.lang.security.audit.insecure-crypto-mode.insecure-crypto-mode
-        cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
-        encryptor = cipher.encryptor()
-        padder = padding.PKCS7(128).padder()
-        padded_data = padder.update(str(text).encode("utf-8")) + padder.finalize()
-        ct = encryptor.update(padded_data) + encryptor.finalize()
-        return f"{iv.hex()}:{base64.b64encode(ct).decode('utf-8')}"
-    except Exception as e:
-        logging.error(f"Web encrypt error: {e}")
-        return str(text)
+    return _WEB_PREFIX + _WEB_CIPHER.encrypt(str(text).encode()).decode("ascii")
 
 
 def decrypt_for_web(text: str) -> str:
     if not text:
         return ""
-    try:
-        if ":" not in text:
-            return text
-        iv_hex, ct_b64 = text.split(":", 1)
-        iv = bytes.fromhex(iv_hex)
-        ct = base64.b64decode(ct_b64)
-        key_bytes = bytes.fromhex(get_web_key())
-        cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv), backend=default_backend())
-        decryptor = cipher.decryptor()
-        padded_data = decryptor.update(ct) + decryptor.finalize()
-        unpadder = padding.PKCS7(128).unpadder()
-        data = unpadder.update(padded_data) + unpadder.finalize()
-        return data.decode("utf-8")
-    except (binascii.Error, ValueError):
-        return text
-    except Exception as e:
-        logging.error(f"Web decrypt error: {e}")
-        return text
+    if text.startswith(_WEB_PREFIX):
+        return _WEB_CIPHER.decrypt(text[len(_WEB_PREFIX):].encode("ascii")).decode()
+    if re.fullmatch(r"[0-9a-fA-F]{32}:[A-Za-z0-9+/]+=*", text):
+        raise ValueError("Obsolete encrypted value; reload the panel")
+    return text
 
 
 async def decrypt_request_payload(request) -> dict:
@@ -130,15 +103,21 @@ async def decrypt_request_payload(request) -> dict:
     Decrypts the payload from a client POST request.
     Expects body format: {"d": "<encrypted>"} or unencrypted json.
     """
+    from aiohttp import web
+    from cryptography.fernet import InvalidToken
+
     try:
         data = await request.json()
-        if "d" in data:
-            decrypted_str = decrypt_for_web(data["d"])
-            return json.loads(decrypted_str)
+        if isinstance(data, dict) and "d" in data:
+            envelope = data["d"]
+            if not isinstance(envelope, str) or not envelope.startswith(_WEB_PREFIX):
+                raise ValueError("Invalid web envelope")
+            data = json.loads(decrypt_for_web(envelope))
+        if not isinstance(data, dict):
+            raise ValueError("Expected a JSON object")
         return data
-    except Exception as e:
-        logging.error(f"Failed to decrypt request payload: {e}")
-        return {}
+    except (InvalidToken, ValueError, TypeError) as exc:
+        raise web.HTTPBadRequest(text="Invalid request payload") from exc
 
 
 def encrypted_json_response(data: dict, status: int = 200):
@@ -152,7 +131,7 @@ def encrypted_json_response(data: dict, status: int = 200):
         return web.json_response({"d": encrypted_str}, status=status)
     except Exception as e:
         logging.error(f"Failed to encrypt response payload: {e}")
-        return web.json_response(data, status=status)
+        return web.json_response({"error": "Response encryption failed"}, status=500)
 
 
 def get_host_path(path: str) -> str:
@@ -175,17 +154,21 @@ def get_host_path(path: str) -> str:
     return path
 
 
+def _apply_alerts_config(loaded_data):
+    if loaded_data:
+        loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
+        shared_state.ALERTS_CONFIG.clear()
+        shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
+        logging.info(log_text("alerts_config_loaded"))
+    else:
+        shared_state.ALERTS_CONFIG.clear()
+        logging.info("Alerts config empty or not found.")
+
+
 def load_alerts_config():
     try:
         loaded_data = get_bot_config_sync("alerts_config", {})
-        if loaded_data:
-            loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
-            shared_state.ALERTS_CONFIG.clear()
-            shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
-            logging.info(log_text("alerts_config_loaded"))
-        else:
-            shared_state.ALERTS_CONFIG.clear()
-            logging.info("Alerts config empty or not found.")
+        _apply_alerts_config(loaded_data)
     except Exception as e:
         logging.error(f"Error loading alerts config: {e}")
         shared_state.ALERTS_CONFIG.clear()
@@ -202,17 +185,77 @@ def save_alerts_config():
 async def load_alerts_config_async():
     try:
         loaded_data = await config.get_bot_config("alerts_config", {})
-        if loaded_data:
-            loaded_data_int_keys = {int(k): v for k, v in loaded_data.items()}
-            shared_state.ALERTS_CONFIG.clear()
-            shared_state.ALERTS_CONFIG.update(loaded_data_int_keys)
-            logging.info(log_text("alerts_config_loaded"))
-        else:
-            shared_state.ALERTS_CONFIG.clear()
-            logging.info("Alerts config empty or not found.")
+        _apply_alerts_config(loaded_data)
     except Exception as e:
         logging.error(f"Error loading alerts config: {e}")
         shared_state.ALERTS_CONFIG.clear()
+
+
+def prune_agent_availability_events(now: float | None = None) -> None:
+    """Keep only downtime events within the rolling 7-day window."""
+    if now is None:
+        now = time.time()
+    cutoff = now - 7 * 86400.0
+    events = shared_state.AGENT_AVAILABILITY.get("events")
+    if isinstance(events, list):
+        shared_state.AGENT_AVAILABILITY["events"] = [
+            e for e in events
+            if isinstance(e, dict) and _coerce_float(e.get("end", e.get("start")), 0.0) >= cutoff
+        ]
+
+
+def get_agent_first_seen(now: float | None = None) -> float:
+    """Return the earliest known start timestamp of server/agent monitoring."""
+    if now is None:
+        now = time.time()
+
+    total_online = _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_online_seconds"), 0.0)
+    total_down = _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds"), 0.0)
+
+    # If the system has accumulated online/downtime hours, it has been running at least that long
+    earliest = now
+    if total_online > 0:
+        earliest = min(earliest, now - (total_online + total_down))
+
+    last_reboot = _coerce_float(shared_state.AGENT_AVAILABILITY.get("last_reboot_at"), 0.0)
+    if last_reboot > 0:
+        earliest = min(earliest, last_reboot)
+
+    try:
+        import psutil as _psutil
+        bt = _psutil.boot_time()
+        if bt > 0:
+            earliest = min(earliest, bt)
+    except Exception:
+        logging.debug("Unable to determine system boot time", exc_info=True)
+
+    saved = _coerce_float(shared_state.AGENT_AVAILABILITY.get("first_seen_at"), 0.0)
+    if 0 < saved < earliest:
+        return saved
+    return earliest
+
+
+def ensure_agent_availability_events() -> list[dict]:
+    """Ensure events list exists and backfills historical downtime if needed."""
+    events = shared_state.AGENT_AVAILABILITY.setdefault("events", [])
+    total_down = _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds"), 0.0)
+    if not events and total_down > 0:
+        now = time.time()
+        first_seen = get_agent_first_seen(now)
+        last_down = _coerce_float(shared_state.AGENT_AVAILABILITY.get("last_downtime_at"), 0.0)
+        if last_down <= 0:
+            last_down = _coerce_float(shared_state.AGENT_AVAILABILITY.get("last_reboot_at"), 0.0)
+        if last_down <= 0:
+            last_down = max(first_seen, now - total_down)
+
+        is_phys = _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_physical_downtime_seconds"), 0.0) > 0
+        events.append({
+            "start": last_down,
+            "end": last_down + total_down,
+            "type": "physical" if is_phys else "internet",
+            "duration": total_down,
+        })
+    return events
 
 
 async def load_agent_availability_async() -> None:
@@ -223,10 +266,15 @@ async def load_agent_availability_async() -> None:
         if saved and isinstance(saved, dict):
             shared_state.AGENT_AVAILABILITY.update(saved)
 
-        # Detect gap between last graceful shutdown and current startup
-        session_end = _coerce_float(shared_state.AGENT_AVAILABILITY.get("session_end_time"), 0.0)
         bot_start = shared_state.AGENT_BOT_START_TIME
         current_boot_time = _psutil.boot_time()
+
+        # Initialize first_seen_at based on real historical uptime
+        first_seen = get_agent_first_seen(bot_start)
+        shared_state.AGENT_AVAILABILITY["first_seen_at"] = first_seen
+
+        # Detect gap between last graceful shutdown and current startup
+        session_end = _coerce_float(shared_state.AGENT_AVAILABILITY.get("session_end_time"), 0.0)
         last_reboot_at = _coerce_float(shared_state.AGENT_AVAILABILITY.get("last_reboot_at"), 0.0)
         reboot_detected = last_reboot_at > 0 and abs(current_boot_time - last_reboot_at) > 10.0
 
@@ -238,10 +286,26 @@ async def load_agent_availability_async() -> None:
                     _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_downtime_seconds"), 0.0) + gap
                 )
                 shared_state.AGENT_AVAILABILITY["last_downtime_at"] = session_end
+                event_type = "physical" if reboot_detected else "internet"
                 if reboot_detected:
                     shared_state.AGENT_AVAILABILITY["total_physical_downtime_seconds"] = (
                         _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_physical_downtime_seconds"), 0.0) + gap
                     )
+                else:
+                    shared_state.AGENT_AVAILABILITY["total_internet_downtime_seconds"] = (
+                        _coerce_float(shared_state.AGENT_AVAILABILITY.get("total_internet_downtime_seconds"), 0.0) + gap
+                    )
+                events = shared_state.AGENT_AVAILABILITY.setdefault("events", [])
+                events.append({
+                    "start": session_end,
+                    "end": bot_start,
+                    "type": event_type,
+                    "duration": gap,
+                })
+
+        # Backfill initial event if upgrading and downtime was recorded previously
+        ensure_agent_availability_events()
+        prune_agent_availability_events(bot_start)
 
         shared_state.AGENT_AVAILABILITY["last_reboot_at"] = current_boot_time
         shared_state.AGENT_AVAILABILITY["status_since"] = bot_start
@@ -257,6 +321,7 @@ async def save_agent_availability_async() -> None:
     """Save agent availability state before shutdown."""
     try:
         shared_state.AGENT_AVAILABILITY["session_end_time"] = time.time()
+        prune_agent_availability_events()
         await config.set_bot_config("agent_availability", dict(shared_state.AGENT_AVAILABILITY))
         logging.info("Agent availability saved to bot.db.")
     except Exception as e:
@@ -272,6 +337,7 @@ async def reset_agent_availability_async() -> None:
         now = time.time()
         shared_state.AGENT_AVAILABILITY["last_reboot_at"] = _psutil.boot_time()
         shared_state.AGENT_AVAILABILITY["status_since"] = shared_state.AGENT_BOT_START_TIME
+        shared_state.AGENT_AVAILABILITY["first_seen_at"] = now
         shared_state.AGENT_AVAILABILITY["session_end_time"] = 0.0
         shared_state.AGENT_AVAILABILITY["total_online_seconds"] = max(0.0, now - shared_state.AGENT_BOT_START_TIME)
         shared_state.AGENT_AVAILABILITY["total_downtime_seconds"] = 0.0
@@ -282,11 +348,165 @@ async def reset_agent_availability_async() -> None:
         shared_state.AGENT_AVAILABILITY["last_internet_downtime_at"] = 0.0
         shared_state.AGENT_AVAILABILITY["last_physical_downtime_at"] = 0.0
         shared_state.AGENT_AVAILABILITY["current_downtime_started_at"] = 0.0
+        shared_state.AGENT_AVAILABILITY["events"] = []
         
         await config.set_bot_config("agent_availability", dict(shared_state.AGENT_AVAILABILITY))
         logging.info("Agent availability reset to default system values.")
     except Exception as e:
         logging.error(f"Error resetting agent availability: {e}")
+
+
+def get_agent_availability_pills(span_days: int = 7, slots_count: int = 28) -> list[dict]:
+    """Calculate status capsules (pills) for the rolling window (default: 7 days, 28 slots of 6h)."""
+    now = time.time()
+    total_span = span_days * 86400.0
+    window_start = now - total_span
+    slot_dur = total_span / float(slots_count)  # 21600s = 6 hours per pill
+
+    first_seen = get_agent_first_seen(now)
+    events = ensure_agent_availability_events()
+    active_net_down = _coerce_float(shared_state.AGENT_AVAILABILITY.get("active_internet_down_since"), 0.0)
+
+    slots = []
+    for i in range(slots_count):
+        slot_start = window_start + i * slot_dur
+        slot_end = slot_start + slot_dur
+
+        # 3 sub-slices of 2 hours each (fills 1/3 of the capsule)
+        sub_dur = slot_dur / 3.0
+        sub_statuses = []
+        slot_phys_sec = 0.0
+        slot_net_sec = 0.0
+
+        for s in range(3):
+            sub_start = slot_start + s * sub_dur
+            sub_end = sub_start + sub_dur
+
+            # Check if before monitoring started
+            if sub_end <= first_seen:
+                sub_statuses.append("grey")
+                continue
+            elif sub_start < first_seen and (first_seen - sub_start) > (sub_dur * 0.5):
+                sub_statuses.append("grey")
+                continue
+
+            phys_dur = 0.0
+            net_dur = 0.0
+            for e in events:
+                if not isinstance(e, dict):
+                    continue
+                e_start = _coerce_float(e.get("start"), 0.0)
+                e_end = _coerce_float(e.get("end"), 0.0)
+                if e_end <= e_start:
+                    continue
+                overlap = max(0.0, min(sub_end, e_end) - max(sub_start, e_start))
+                if overlap > 0:
+                    if e.get("type") == "physical":
+                        phys_dur += overlap
+                    else:
+                        net_dur += overlap
+
+            if active_net_down > 0:
+                overlap = max(0.0, min(sub_end, now) - max(sub_start, active_net_down))
+                net_dur += overlap
+
+            slot_phys_sec += phys_dur
+            slot_net_sec += net_dur
+
+            if phys_dur >= 30.0:
+                sub_statuses.append("red")
+            elif net_dur >= 30.0:
+                sub_statuses.append("yellow")
+            else:
+                sub_statuses.append("green")
+
+        # Count statuses and stack from top to bottom: green -> yellow -> red -> grey
+        cg = sub_statuses.count("green")
+        cy = sub_statuses.count("yellow")
+        cr = sub_statuses.count("red")
+        cgr = sub_statuses.count("grey")
+
+        segments = (["green"] * cg) + (["yellow"] * cy) + (["red"] * cr) + (["grey"] * cgr)
+
+        # Overall slot status
+        if cgr == 3:
+            status = "nodata"
+            title = "Нет данных"
+        elif cr > 0:
+            status = "physical"
+            title = "Физический простой"
+        elif cy > 0:
+            status = "internet"
+            title = "Сбой сети"
+        else:
+            status = "operational"
+            title = "Доступен"
+
+        monitored_dur = max(0.0, min(slot_end, now) - max(slot_start, first_seen))
+        total_downtime = slot_phys_sec + slot_net_sec
+        uptime_pct = None
+        if monitored_dur > 60.0:
+            uptime_pct = round(max(0.0, min(100.0, 100.0 * (1.0 - min(total_downtime, monitored_dur) / monitored_dur))), 1)
+
+        slots.append({
+            "index": i,
+            "start": round(slot_start, 1),
+            "end": round(slot_end, 1),
+            "segments": segments,
+            "status": status,
+            "title": title,
+            "uptime_pct": uptime_pct,
+            "phys_seconds": round(slot_phys_sec),
+            "net_seconds": round(slot_net_sec),
+            "monitored_seconds": round(monitored_dur),
+        })
+
+    return slots
+
+
+def calculate_rolling_uptime_pct(span_days: int = 7) -> float:
+    """Calculate overall uptime percentage for the rolling 7-day period."""
+    now = time.time()
+    cutoff = now - span_days * 86400.0
+    first_seen = get_agent_first_seen(now)
+    monitored = max(0.0, now - max(cutoff, first_seen))
+    if monitored < 60.0:
+        return 100.0
+
+    events = ensure_agent_availability_events()
+    down_total = 0.0
+    for e in events:
+        if not isinstance(e, dict):
+            continue
+        e_start = _coerce_float(e.get("start"), 0.0)
+        e_end = _coerce_float(e.get("end"), 0.0)
+        overlap = max(0.0, min(now, e_end) - max(cutoff, e_start))
+        if overlap > 0:
+            down_total += overlap
+
+    active_net_down = _coerce_float(shared_state.AGENT_AVAILABILITY.get("active_internet_down_since"), 0.0)
+    if active_net_down > 0:
+        down_total += max(0.0, now - max(cutoff, active_net_down))
+
+    down_clamped = min(down_total, monitored)
+    pct = max(0.0, min(100.0, 100.0 * (1.0 - down_clamped / monitored)))
+    return round(pct, 1)
+
+
+_UPTIME_CACHE: dict[str, Any] = {"ts": 0.0, "pills": [], "rolling_pct": 100.0}
+
+
+def get_cached_agent_availability_pills() -> tuple[list[dict], float]:
+    """Return cached 7-day pills and rolling percentage with 10s TTL."""
+    now = time.time()
+    if now - _UPTIME_CACHE["ts"] < 10.0 and _UPTIME_CACHE["pills"]:
+        return _UPTIME_CACHE["pills"], _UPTIME_CACHE["rolling_pct"]
+    pills = get_agent_availability_pills()
+    pct = calculate_rolling_uptime_pct()
+    _UPTIME_CACHE["ts"] = now
+    _UPTIME_CACHE["pills"] = pills
+    _UPTIME_CACHE["rolling_pct"] = pct
+    return pills, pct
 
 
 async def save_alerts_config_async():
@@ -779,7 +999,7 @@ async def detect_xray_client():
         if proc.returncode == 0 and stdout.decode().strip():
             return ("3x-ui", None, "native")
     except Exception:
-        pass
+        logging.debug("Native panel probe unavailable", exc_info=True)
 
     # Fallback: check Docker containers
     try:
@@ -812,41 +1032,17 @@ async def detect_xray_client():
                     if "3x-ui" in name.lower() or "3x-ui" in image.lower() or "x-ui" in image.lower():
                         return ("3x-ui", name, "standard")
     except Exception:
-        pass
+        logging.debug("Container panel probe unavailable", exc_info=True)
 
     return (None, None, None)
 
 
 async def initial_restart_check(bot: Bot):
-    if os.path.exists(RESTART_FLAG_FILE):
-        try:
-            # Clean up pre-update backup directories if present after successful update
-            for b_name in [".backups", ".backup"]:
-                b_path = os.path.join(config.BASE_DIR, b_name)
-                if os.path.isdir(b_path):
-                    try:
-                        shutil.rmtree(b_path, ignore_errors=True)
-                        logging.info("Removed leftover update backup directory: %s", b_path)
-                    except Exception as exc:
-                        logging.warning("Failed to remove %s: %s", b_path, exc)
+    from .restart_notification import notify_and_clear_restart_flag
 
-            with open(RESTART_FLAG_FILE, "r") as f:
-                content = f.read().strip()
-            if ":" in content and content != "web:admin":
-                cid, mid = content.split(":", 1)
-                lang = get_user_lang(int(cid))
-                await bot.edit_message_text(
-                    chat_id=int(cid),
-                    message_id=int(mid),
-                    text=f"✅ {get_text('utils_bot_restarted', lang)}",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[]),
-                )
-        except Exception as e:
-            logging.error(f"Restart check error: {e}")
-        finally:
-            if os.path.exists(RESTART_FLAG_FILE):
-                os.remove(RESTART_FLAG_FILE)
-
+    await notify_and_clear_restart_flag(
+        bot, RESTART_FLAG_FILE, get_user_lang, get_text, InlineKeyboardMarkup,
+    )
 
 async def initial_reboot_check(bot: Bot):
     if os.path.exists(REBOOT_FLAG_FILE):
@@ -866,96 +1062,6 @@ async def initial_reboot_check(bot: Bot):
                 os.remove(REBOOT_FLAG_FILE)
 
 
-async def safe_delete_webhook(
-    bot: Bot,
-    drop_pending_updates: bool = True,
-    max_retries: int = 5,
-    request_timeout: int = 30,
-    initial_delay: float = 2.0,
-) -> bool:
-    """Safely attempt to delete Telegram webhook with retries.
-
-    Protects against transient network timeouts, rate-limits, or temporary
-    Telegram API outages during bot startup so the application doesn't crash.
-    """
-    for attempt in range(1, max_retries + 1):
-        try:
-            logging.info("Checking/clearing Telegram webhook (attempt %d/%d)...", attempt, max_retries)
-            await bot.delete_webhook(
-                drop_pending_updates=drop_pending_updates,
-                request_timeout=request_timeout,
-            )
-            logging.info("Telegram webhook successfully cleared.")
-            return True
-        except TelegramRetryAfter as e:
-            delay = max(float(e.retry_after), initial_delay)
-            logging.warning(
-                "Telegram rate limit on delete_webhook (attempt %d/%d). Waiting %.1fs...",
-                attempt, max_retries, delay,
-            )
-            await asyncio.sleep(delay)
-        except (TelegramNetworkError, asyncio.TimeoutError) as e:
-            delay = initial_delay * attempt
-            logging.warning(
-                "Network timeout/error clearing Telegram webhook (attempt %d/%d): %s. Retrying in %.1fs...",
-                attempt, max_retries, e, delay,
-            )
-            if attempt < max_retries:
-                await asyncio.sleep(delay)
-        except TelegramBadRequest as e:
-            logging.warning("TelegramBadRequest on delete_webhook: %s", e)
-            return False
-        except Exception as e:
-            logging.warning("Unexpected error during delete_webhook (attempt %d/%d): %s", attempt, max_retries, e)
-            if attempt < max_retries:
-                await asyncio.sleep(initial_delay * attempt)
-    logging.warning("Proceeding with polling despite webhook clearance issues after %d attempts.", max_retries)
-    return False
-
-
-def cleanup_old_logs(log_root: str | None = None, max_days: int | None = None) -> int:
-    """Removes rotated log files older than `max_days` from the log directory.
-
-    Active log files (*.log) are preserved; only rotated history files (*.log.*, *.log_*)
-    exceeding the retention threshold are safely pruned to reclaim disk space.
-    Returns the count of deleted files.
-    """
-    if max_days is None:
-        max_days = getattr(config, "LOG_RETENTION_DAYS", 7)
-    if not log_root:
-        log_root = config.LOG_DIR
-    if not os.path.isdir(log_root):
-        return 0
-
-    cutoff = time.time() - (max_days * 86400)
-    deleted_count = 0
-
-    for root, _, files in os.walk(log_root):
-        for name in files:
-            # Match rotated files like bot.log.2026-10-14, or temporary/archived logs
-            is_rotated = (
-                bool(re.search(r"\.log\.\d{4}-\d{2}-\d{2}", name))
-                or bool(re.search(r"\.log\.\d+$", name))
-                or (".log." in name)
-            )
-            if not is_rotated:
-                continue
-
-            filepath = os.path.join(root, name)
-            try:
-                mtime = os.path.getmtime(filepath)
-                if mtime < cutoff:
-                    os.remove(filepath)
-                    deleted_count += 1
-                    logging.info("Cleaned up old log file (>%d days): %s", max_days, filepath)
-            except OSError as exc:
-                logging.debug("Could not remove old log %s: %s", filepath, exc)
-
-    if deleted_count > 0:
-        logging.info("Log cleanup completed: removed %d files older than %d days.", deleted_count, max_days)
-    return deleted_count
-
-
 def get_app_version() -> str:
     if config.INSTALLED_VERSION:
         ver = config.INSTALLED_VERSION.strip()
@@ -971,7 +1077,7 @@ def get_app_version() -> str:
                 if match:
                     return f"v{match.group(1)}"
     except Exception:
-        pass
+        logging.debug("Unable to read application version", exc_info=True)
     return "v1.0.0"
 
 
@@ -1314,7 +1420,7 @@ def clear_old_audit_logs(days_to_keep: int = 90):
             try:
                 os.remove(temp_file)
             except Exception:
-                pass
+                logging.debug("Unable to remove temporary file", exc_info=True)
 
 
 # Initialize on successful load

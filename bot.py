@@ -5,7 +5,6 @@ Initializes the dispatcher, attaches middlewares, orchestrator, and starts polli
 import asyncio
 import logging
 import os
-import signal
 
 import psutil
 import sentry_sdk
@@ -13,6 +12,8 @@ from tortoise import Tortoise
 
 from core import auth, config, i18n, keyboards, messaging, node_updates, nodes_db, shared_state, utils
 from core.i18n import I18nFilter, _, get_language_keyboard, log_text
+from core.log_maintenance import maintain_logs
+from core.telegram_runtime import run_polling, _install_shutdown_signal_handlers
 from core.middlewares import (
     AutoDeleteMessageMiddleware,
     CallbackTTLMiddleware,
@@ -24,7 +25,7 @@ from core.web.app import start_web_server
 if os.path.isdir("/proc_host"):
     psutil.PROCFS_PATH = "/proc_host"
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramServerError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -439,35 +440,12 @@ async def unrecognized_message_handler(message: types.Message):
         await message.answer(i18n._("unrecognized_command", lang), parse_mode="HTML")
 
 
-def _install_shutdown_signal_handlers(loop: asyncio.AbstractEventLoop, dispatcher: Dispatcher) -> None:
-    # Own the single process-wide SIGINT/SIGTERM handler instead of letting aiogram's
-    # start_polling(handle_signals=True) register one per dispatcher: with two dispatchers
-    # (main bot + Alert Bot) polling concurrently, the second registration silently
-    # overwrites the first, so the main bot never learns about the stop signal and hangs
-    # until systemd's stop-sigterm timeout kills the process and its subprocesses.
-    async def _stop_polling_safe() -> None:
-        try:
-            await dispatcher.stop_polling()
-        except RuntimeError:
-            pass  # Signal arrived before polling actually started; nothing to stop yet.
-
-    def _on_signal(sig: signal.Signals) -> None:
-        logging.warning(f"Received {sig.name} signal. Initiating graceful shutdown...")
-        asyncio.create_task(_stop_polling_safe())
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, _on_signal, sig)
-        except NotImplementedError:
-            pass  # Not supported on Windows event loops; rely on KeyboardInterrupt instead.
-
-
 async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     logging.info("Shutdown signal received. Stopping services...")
     try:
         await dispatcher.stop_polling()
     except Exception:
-        pass
+        logging.debug("Polling already stopped", exc_info=True)
     if web_runner:
         try:
             await asyncio.wait_for(web_runner.cleanup(), timeout=5.0)
@@ -510,18 +488,21 @@ async def shutdown(dispatcher: Dispatcher, bot_instance: Bot, web_runner=None):
     try:
         await utils.save_agent_availability_async()
     except Exception:
-        pass
+        logging.debug("Unable to save availability at shutdown", exc_info=True)
     logging.info("Bot stopped successfully.")
 
 
 async def main():
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
+    _install_shutdown_signal_handlers(loop, asyncio.current_task())
     web_runner = None
     try:
         logging.info(log_text("bot_starting_mode", mode=config.INSTALL_MODE.upper()))
         await nodes_db.init_db()
         await node_updates.initialize()
-        await asyncio.to_thread(utils.cleanup_old_logs, max_days=config.LOG_RETENTION_DAYS)
+        log_task = asyncio.create_task(maintain_logs(config.LOG_DIR, config.LOG_RETENTION_DAYS), name="LogMaintenance")
+        background_tasks.add(log_task)
+        log_task.add_done_callback(background_tasks.discard)
         await auth.load_users_async()
         await utils.load_alerts_config_async()
         await utils.load_services_config_async()
@@ -538,21 +519,21 @@ async def main():
         # Register the catch-all handler LAST so it doesn't intercept module commands
         dp.message.register(unrecognized_message_handler)
 
-        _install_shutdown_signal_handlers(loop, dp)
-
         logging.info(log_text("web_server_starting"))
         web_runner = await start_web_server(bot)
         if not web_runner:
             logging.warning("Web Server NOT started.")
         logging.info(log_text("polling_starting"))
-        await utils.safe_delete_webhook(bot, drop_pending_updates=True)
         while True:
             try:
-                await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), handle_signals=False)
+                await run_polling(bot, dp, allowed_updates=dp.resolve_used_update_types())
                 break
-            except (TelegramNetworkError, asyncio.TimeoutError) as e:
-                logging.warning("Telegram network error in polling loop: %s. Reconnecting in 5s...", e)
+            except (TelegramNetworkError, asyncio.TimeoutError, TelegramServerError) as e:
+                err_msg = str(e).strip() or type(e).__name__
+                logging.warning("Telegram network error in polling loop: %s. Reconnecting in 5s...", err_msg)
                 await asyncio.sleep(5)
+    except asyncio.CancelledError:
+        logging.info("Main task stopped.")
     except (KeyboardInterrupt, SystemExit):
         logging.info("Exit main.")
     except Exception as e:

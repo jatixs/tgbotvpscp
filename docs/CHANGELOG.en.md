@@ -10,6 +10,63 @@
     <img src="https://img.shields.io/badge/status-stable-green?style=for-the-badge" alt="Status Stable"/>
 </p>
 
+## [Unreleased]
+
+### 🚀 Major Highlights
+
+* ⚡ **Full Single Page Application (SPA) Web Panel** — Server management is elevated to a modern web app experience without unnecessary page reloads:
+  * **Instant section transitions:** Navigating between Main Dashboard (`/`), Server Monitoring (`/nodes`), Operations Center (`/operations`), and Settings (`/settings`) happens instantly via an AJAX client-side router. No white flashes, dropped form state, or script re-execution.
+  * **Hardware-Accelerated View Transitions without Jitter:** Integrated browser-native View Transitions API with GPU acceleration for fluid cross-fading. Eliminated double-animation stutter, while preserving an accessible CSS fallback with entrance animations and `aria-busy` indicators for older browsers.
+  * **Live URL and History Synchronization:** Filters, tabs, and page numbers (`node_id`, `status`, `page`, `per_page`, `tab`) sync immediately to the address bar via `history.pushState`. Browser Back and Forward buttons operate smoothly and predictably.
+
+* 📊 **7-Day Uptime Status Capsules** — Visual reliability tracking on the main dashboard inspired by modern cloud status pages:
+  * **6-hour resolution:** The past week is displayed as 28 sleek capsules. Each capsule is split into three 2-hour segments, enabling administrators to assess outages at a glance.
+  * **Intuitive color coding:** Green indicates healthy service, yellow highlights internet or ping drops, red marks host downtime or server reboots, and grey represents pre-monitoring time.
+  * **Interactive incident cards:** Hovering on desktop or tapping on mobile reveals a detailed card with the exact timestamp, uptime percentage, and down-to-the-minute outage duration for both network and host issues.
+  * **Self-pruning storage:** Data is kept in a rolling 7-day window, preventing database bloat while maintaining an accurate recent history.
+
+* 📑 **Operations Center & Infrastructure Audit Trail** — Granular visibility and control over all remote server operations:
+  * **Paginated browsing:** Command history no longer causes endless scrolling — switch pages and choose page sizes from 10 to 100 entries.
+  * **Full execution context:** Each card displays the dispatcher, progress status, exit code, and terminal logs, with network traffic updates streaming in real time.
+
+---
+
+### 🛡️ Production Stability & Security
+
+* 🔄 **Resilient Telegram Runtime (Zero-Crash Polling):**
+  * **`deleteWebhook` Timeout Recovery:** If the Telegram API hangs while purging backlogged updates at startup (`drop_pending_updates=True`), the system automatically falls back to an instant unbinding (`drop_pending_updates=False`) from the 2nd attempt onwards. Eliminates systemd restart crash loops caused by Telegram latency.
+  * **Continuous Long Polling:** The main bot update loop gracefully handles network timeouts and 502 Bad Gateway errors by pausing briefly and reconnecting without killing the service process.
+  * **Isolated Restart Notifications:** The `core/restart_notification.py` service dispatches maintenance alerts independently from the core bot event loop.
+
+* 🔒 **Core Security Hardening (Subprocess & Code Quality):**
+  * **Command Injection Eradication:** Subprocess calls in `manage.py` (`git`, `docker`, `systemctl`, `journalctl`, `sqlite3`, etc.) now strictly use fixed static argument tuples in `asyncio.create_subprocess_exec`, fully neutralizing command injection risks.
+  * **Zero-Suppression Standard:** Reached 100% compliance with CodeQL, Codacy, and Bandit standards without relying on suppression comments (`# noqa`, `# nosec`).
+  * **Randomness Scope Isolation:** Visual canvas animation helpers in `common.js` are separated from cryptographic utilities, eliminating false positives in security scanners.
+
+* 🧹 **Automated Log Hygiene:**
+  * Log retention in `logs/` is reduced from 30 to 7 days, with background pruning every 6 hours to protect server disk space from runaway log growth.
+
+---
+
+### 🎯 Usability & Interface Polish (UX)
+
+* **Refined Terminology:** Eliminated ambiguous and outdated jargon:
+  * Replaced "VNC" with "Terminal" / "SSH Terminal" (matching the underlying SSH protocol).
+  * Replaced "ROM" ("ПЗУ") with "Disk".
+  * Clear "Download / Upload" terminology for speed tests.
+  * Removed confusing "(on/off)" suffixes from mute buttons and aligned the conversational tone across UI views.
+* **Intuitive Uptime Metrics:** Clarified distinctions between OS uptime and service availability: widget title set to "Server uptime", cumulative runtime labeled "Online", and reliability named "Availability".
+* **Node Traffic Synchronization:** Changing the network interface in a node modal immediately recalculates bandwidth usage and updates the interface badge.
+* **Resilient Metrics Sparklines:** CPU and Disk sparklines render reliably under sustained steady load or 100% saturation, dynamically switching to alert colors when crossing warning thresholds.
+* **Interface Memory:** Active network adapter selections are remembered in the browser individually for each server.
+
+---
+
+### ⚙️ Maintenance & Dependencies
+* Resolved vulnerability GHSA-xmj3-9gf7-h52w by bumping `setuptools` to `>=84.1.0`.
+* Pruned deprecated callback handlers and dead code in `modules/nodes.py`, `modules/services.py`, and `modules/selftest.py`.
+* Preserved local user file edits during automated updates and deployments.
+
 ## [1.27.3] - 2026-11-08
 
 ### ✨ Added

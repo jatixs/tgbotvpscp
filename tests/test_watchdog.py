@@ -2,31 +2,17 @@ import os
 import sys
 import tempfile
 import shutil
-import types
 import unittest
 from base64 import b64encode
 from unittest.mock import patch, MagicMock
+
+from tests.support import AIOGRAM_DEPENDENCIES, CORE_DEPENDENCIES, mock_optional_modules
 
 os.environ.setdefault("DATA_ENCRYPTION_KEY", b64encode(b"0" * 32).decode())
 os.environ.setdefault("TG_BOT_TOKEN", "123456789:TEST_BOT_TOKEN")
 os.environ.setdefault("TG_ADMIN_ID", "12345")
 
-modules_to_mock = [
-    "aiohttp", "aiohttp.web", "argon2", "argon2.exceptions", "aiosqlite",
-    "requests", "PIL", "PIL.Image", "qrcode",
-    "netifaces", "sentry_sdk", "yaml", "docker", "docker.client", "docker.errors",
-    "asyncssh", "tortoise",
-    "aiogram", "aiogram.filters", "aiogram.fsm", "aiogram.fsm.context",
-    "aiogram.fsm.state", "aiogram.fsm.storage", "aiogram.fsm.storage.memory",
-    "aiogram.types", "aiogram.exceptions",
-]
-
-for m in modules_to_mock:
-    if m not in sys.modules:
-        mod = MagicMock()
-        mod.__path__ = []
-        mod.__spec__ = types.SimpleNamespace(name=m, origin=None, submodule_search_locations=[])
-        sys.modules[m] = mod
+mock_optional_modules((*CORE_DEPENDENCIES, *AIOGRAM_DEPENDENCIES, "docker.client", "docker.errors"))
 
 # Add project root to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

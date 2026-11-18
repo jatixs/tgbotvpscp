@@ -15,6 +15,7 @@ gc.collect() is called to free memory.
 import asyncio
 import gc
 import importlib
+import importlib.util
 import inspect
 import logging
 import os
@@ -22,6 +23,8 @@ import sys
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import partial
+from pathlib import Path
 
 import psutil
 
@@ -99,18 +102,6 @@ class HandlerCollector:
         """Capture router inclusion — extract handlers from the router."""
         self._routers.append(router)
 
-    class _InnerCallbackQuery:
-        """Handles the .register() API variant used by some modules."""
-        def __init__(self, parent):
-            self._parent = parent
-
-        def register(self, handler, *filters):
-            self._parent.callback_handlers.append((filters, handler.__name__))
-
-    @property
-    def callback_query_obj(self):
-        return self._InnerCallbackQuery(self)
-
 
 class _CallbackQueryCollector:
     """
@@ -178,6 +169,19 @@ class ModuleOrchestrator:
         self._dp = dp
         self._bot = bot
         self._config = module_config
+        self._module_imports = {}
+        root = Path(__file__).resolve().parent.parent
+        for namespace in ("modules", "modules.custom", "custom.modules"):
+            directory = root.joinpath(*namespace.split("."))
+            if directory.resolve() != directory:
+                continue
+            for source in directory.glob("*.py"):
+                name = f"{namespace}.{source.stem}"
+                if source.is_symlink() or not source.is_file():
+                    continue
+                if name in module_config and source.stem.isidentifier() and not source.stem.startswith("__"):
+                    # Bind lazy imports to names discovered in the installation, once at startup.
+                    self._module_imports[name] = (source, partial(importlib.import_module, name))
         self._unload_ttl = unload_ttl
         self._modules: dict[str, ModuleInfo] = {}
         self._locks: dict[str, asyncio.Lock] = {}
@@ -214,10 +218,29 @@ class ModuleOrchestrator:
         total = len(self._modules)
         logging.info(log_text("orchestrator_setup_complete", loaded=loaded, total=total))
 
+    def _import_configured_module(self, module_name):
+        if module_name not in self._module_imports:
+            raise ValueError("Unregistered module")
+        source, load = self._module_imports[module_name]
+        # Finding a child spec imports its parent. Check each package before that can happen.
+        parts = module_name.split(".")
+        for depth in range(1, len(parts)):
+            package = ".".join(parts[:depth])
+            directory = source.parents[len(parts) - depth - 1]
+            spec = importlib.util.find_spec(package)
+            if not spec or not spec.submodule_search_locations:
+                raise ImportError(f"Missing plugin package: {package}")
+            if spec.origin and Path(spec.origin).resolve() != directory / "__init__.py":
+                raise ImportError(f"Unexpected package origin: {package}")
+        spec = importlib.util.find_spec(module_name)
+        if not spec or not spec.origin or Path(spec.origin).resolve() != source or source.resolve() != source:
+            raise ImportError(f"Module does not resolve to its registered file: {module_name}")
+        return load()
+
     async def _load_always_on(self, module_name: str, info: ModuleInfo):
         """Load an ALWAYS_ON module immediately."""
         try:
-            module = importlib.import_module(module_name)
+            module = self._import_configured_module(module_name)
             info.state = ModuleState.LOADED
             info.last_used = time.time()
             info.load_count = 1
@@ -248,7 +271,7 @@ class ModuleOrchestrator:
             pre_modules = set(sys.modules.keys())
 
             # Import module to collect handlers
-            module = importlib.import_module(module_name)
+            module = self._import_configured_module(module_name)
 
             # Collect handlers via proxy dispatcher
             collector = HandlerCollector()
@@ -283,7 +306,7 @@ class ModuleOrchestrator:
             logging.error(f"  ❌ Failed to setup lazy handlers for {module_name}: {e}", exc_info=True)
             # Fallback: load normally
             try:
-                module = importlib.import_module(module_name)
+                module = self._import_configured_module(module_name)
                 info.state = ModuleState.LOADED
                 if hasattr(module, "register_handlers"):
                     module.register_handlers(self._dp)
@@ -360,7 +383,7 @@ class ModuleOrchestrator:
             rss_before = self._get_process_rss()
 
             try:
-                module = importlib.import_module(module_name)
+                module = self._import_configured_module(module_name)
                 info.state = ModuleState.LOADED
                 info.last_used = time.time()
                 info.load_count += 1
@@ -450,14 +473,6 @@ class ModuleOrchestrator:
             try:
                 await asyncio.sleep(60)  # Check every 60 seconds
                 now = time.time()
-                if now - getattr(self, "_last_log_cleanup", 0) > 3600 * 6:
-                    self._last_log_cleanup = now
-                    try:
-                        from .utils import cleanup_old_logs
-                        await asyncio.to_thread(cleanup_old_logs, max_days=config.LOG_RETENTION_DAYS)
-                    except Exception as exc:
-                        logging.debug("Periodic log cleanup error: %s", exc)
-
                 for module_name, info in self._modules.items():
                     if (
                         info.tier == ModuleTier.ON_DEMAND
