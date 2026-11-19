@@ -328,23 +328,41 @@ async def waf_middleware(request: web.Request, handler: Handler) -> web.StreamRe
 @web.middleware
 async def security_headers_middleware(request: web.Request, handler: Handler) -> web.StreamResponse:
     """Inject standard HTTP security headers on every response."""
-    response = await handler(request)
+    raised_error = False
+    try:
+        response = await handler(request)
+    except web.HTTPException as error:
+        # Raised redirects and errors need the same cache policy as normal responses.
+        response = error
+        raised_error = True
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     response.headers.setdefault("X-XSS-Protection", "0")
     response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
-    if request.path.startswith("/api/"):
+    is_page = response.content_type == "text/html" or request.headers.get("Sec-Fetch-Dest") == "document"
+    if is_page or response.status >= 400:
+        response.headers["Cache-Control"] = "no-store"
+    elif request.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
-    elif response.content_type == "text/html":
-        # Pages must always be revalidated, otherwise browsers keep stale markup after an update.
-        response.headers.setdefault("Cache-Control", "no-cache")
+    if is_page:
+        # Speculation caches are separate from the HTTP cache. Clear only those,
+        # preserving session cookies, local preferences, and service worker assets.
+        response.headers.setdefault("Clear-Site-Data", '"prefetchCache", "prerenderCache"')
+        vary = [value.strip() for value in response.headers.get("Vary", "").split(",") if value.strip()]
+        if "*" not in vary:
+            for header in ("Sec-Purpose", "Purpose"):
+                if header.lower() not in {value.lower() for value in vary}:
+                    vary.append(header)
+            response.headers["Vary"] = ", ".join(vary)
     is_https = request.scheme == "https" or WEB_PUBLIC_URL.lower().startswith("https://")
     if is_https:
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
         )
+    if raised_error:
+        raise response
     return response
 
 

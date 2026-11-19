@@ -18,6 +18,9 @@
   * **Instant section transitions:** Navigating between Main Dashboard (`/`), Server Monitoring (`/nodes`), Operations Center (`/operations`), and Settings (`/settings`) happens instantly via an AJAX client-side router. No white flashes, dropped form state, or script re-execution.
   * **Hardware-Accelerated View Transitions without Jitter:** Integrated browser-native View Transitions API with GPU acceleration for fluid cross-fading. Eliminated double-animation stutter, while preserving an accessible CSS fallback with entrance animations and `aria-busy` indicators for older browsers.
   * **Live URL and History Synchronization:** Filters, tabs, and page numbers (`node_id`, `status`, `page`, `per_page`, `tab`) sync immediately to the address bar via `history.pushState`. Browser Back and Forward buttons operate smoothly and predictably.
+  * **Correct Return from Settings:** The Back button returns to node monitoring when Settings was opened from there, or to the dashboard when opened from the main page. The return route survives a page refresh.
+  * **Smooth Transitions across Screen Sizes:** The current page and charts remain visible until the request completes, and the incoming page initializes inside the transition. Animation duration and travel adapt to screen dimensions and respect reduced motion preferences. Returning to monitoring displays the last snapshot until fresh data arrives.
+  * **Headers without Overlap:** Different header layouts fade out and in sequentially, preventing overlapping controls and stretched snapshots when their dimensions differ.
 
 * 📊 **7-Day Uptime Status Capsules** — Visual reliability tracking on the main dashboard inspired by modern cloud status pages:
   * **6-hour resolution:** The past week is displayed as 28 sleek capsules. Each capsule is split into three 2-hour segments, enabling administrators to assess outages at a glance.
@@ -32,6 +35,15 @@
 ---
 
 ### 🛡️ Production Stability & Security
+
+* 🖱️ **Protection against Repeated Clicks:**
+  * **Latest Selection instead of a Request Queue:** Rapid page and log tab changes are combined with a short delay. Selecting an already loading page or active log stream does not open another connection.
+  * **Services without Duplicate Requests:** Identical data requests share one pending connection, list refreshes reuse the active service stream, and another command for the same service is blocked until the previous confirmation and execution finish.
+  * **Connection Cleanup and Recovery:** Leaving the dashboard closes log and service streams and cancels queued switches and reconnects. Late events are ignored, and request locks are released after errors, cancellation, or timeouts.
+
+* 🌐 **Resilient Navigation during Server Errors:**
+  * **Protection against Stale Prefetch Cache:** HTML pages and error responses use `Cache-Control: no-store`, while prefetch and prerender caches are cleared without resetting sessions or user preferences. The policy also covers HTTP errors and redirects.
+  * **502/503/504 Handling without Losing the Current Screen:** Navigation retries a transient gateway failure once unless the server specifies `Retry-After`. If the retry fails, the current page stays visible with a notification instead of forcing navigation to an error document.
 
 * 🔄 **Resilient Telegram Runtime (Zero-Crash Polling):**
   * **`deleteWebhook` Timeout Recovery:** If the Telegram API hangs while purging backlogged updates at startup (`drop_pending_updates=True`), the system automatically falls back to an instant unbinding (`drop_pending_updates=False`) from the 2nd attempt onwards. Eliminates systemd restart crash loops caused by Telegram latency.

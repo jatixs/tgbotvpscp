@@ -29,7 +29,9 @@
         window.i18n.btn_stop = {{ web_services_btn_stop | tojson }};
         window.i18n.btn_restart = {{ web_services_btn_restart | tojson }};
         window.USER_ROLE_LEVEL = {{ user_role_level }};
-        const I18N = JSON.parse({{ i18n_json | tojson }});
+        var I18N = JSON.parse({{ i18n_json | tojson }});
+        if (typeof I18N === 'string') { try { I18N = JSON.parse(I18N); } catch {} }
+        window.I18N = Object.assign({}, window.I18N || {}, I18N);
         const SYS_CONFIG = JSON.parse({{ config_json | tojson }});
         const master_billing_json = JSON.parse({{ master_billing_json | default('null', true) | tojson }});
         {{ user_role_js | safe }}
@@ -671,7 +673,7 @@
                     </div>
                 </div>
                 <div class="mt-auto pt-4 border-t border-gray-200 dark:border-white/5 flex justify-between items-center gap-3">
-                    <a href="/nodes"
+                    <a href="/nodes" rel="nofollow"
                         class="monitor-link-btn inline-flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-bold transition shadow-lg shadow-purple-500/20"
                         title="{{ web_monitor_title }}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"

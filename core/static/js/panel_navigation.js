@@ -1,6 +1,12 @@
 /* Navigation between dashboard, server monitoring, operations history, and settings. Bundles load once. */
 (() => {
-    const pages = new Set(['/', '/nodes', '/operations', '/settings']);
+    const ALLOWED_ROUTES = new Map([
+        ['/', '/'],
+        ['/nodes', '/nodes'],
+        ['/operations', '/operations'],
+        ['/settings', '/settings']
+    ]);
+    const pages = new Set(ALLOWED_ROUTES.keys());
     const pageKeyMap = {
         '/': 'dashboard',
         '/nodes': 'nodes',
@@ -14,6 +20,17 @@
     };
     const allModalIds = Object.values(modalIdMap);
     let pending = null;
+    let pendingTarget = null;
+    let navigationTimer = null;
+    let activeTransition = null;
+
+    function scheduleNavigation(href) {
+        clearTimeout(navigationTimer);
+        navigationTimer = setTimeout(() => {
+            navigationTimer = null;
+            navigate(href);
+        }, 120);
+    }
 
     function normalizePath(pathname) {
         if (!pathname) return '';
@@ -24,7 +41,9 @@
     function sanitizeQueryParams(searchParams) {
         const clean = new URLSearchParams();
         for (const [key, val] of searchParams.entries()) {
-            if (key === 'node_id' && /^\d+$/.test(val)) {
+            if (key === 'return_to' && val === '/nodes') {
+                clean.set(key, val);
+            } else if (key === 'node_id' && /^\d+$/.test(val)) {
                 clean.set(key, val);
             } else if (key === 'status' && /^[a-z_]{1,20}$/.test(val)) {
                 clean.set(key, val);
@@ -57,17 +76,27 @@
         const currentDomPage = currentMain ? currentMain.dataset.panelPage : null;
         const expectedPage = pageKeyMap[normPath];
         if (history && currentDomPage === expectedPage && url.search === location.search) {
+            if (pending) {
+                pending.abort();
+                pending = null;
+                pendingTarget = null;
+                document.querySelector('main')?.removeAttribute('aria-busy');
+            }
             if (url.hash) return;
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
 
+        const baseRoute = ALLOWED_ROUTES.get(normPath) || null;
+        if (!baseRoute) return;
         const safeQuery = sanitizeQueryParams(url.searchParams);
-        const targetUrl = (normPath === '/' ? '/' : normPath) + safeQuery;
+        const targetUrl = baseRoute + safeQuery;
 
+        if (pending && pendingTarget === targetUrl) return;
         if (pending) pending.abort();
         const controller = new AbortController();
         pending = controller;
+        pendingTarget = targetUrl;
         const mainEl = document.querySelector('main');
         if (mainEl) mainEl.setAttribute('aria-busy', 'true');
 
@@ -77,7 +106,27 @@
                 cache: 'no-store',
                 signal: controller.signal,
             };
-            const response = await fetch(targetUrl, options);
+            const requestClient = (typeof window !== 'undefined' && typeof window.secureFetch === 'function')
+                ? window.secureFetch
+                : (typeof secureFetch === 'function' ? secureFetch : null);
+            if (!requestClient) throw new Error('Secure transport unavailable');
+            let response = await requestClient(targetUrl, options);
+            // A transient gateway failure must not send the user to an error document.
+            if ([502, 503, 504].includes(response.status) && !controller.signal.aborted) {
+                const retryAfter = response.headers?.get('Retry-After');
+                if (!retryAfter) {
+                    response = await requestClient(targetUrl, options);
+                }
+            }
+            if ([502, 503, 504].includes(response.status)) {
+                if (!controller.signal.aborted) {
+                    const message = document.documentElement.lang === 'ru'
+                        ? 'Сервер временно недоступен. Попробуйте перейти ещё раз позже.'
+                        : 'The server is temporarily unavailable. Please try again later.';
+                    window.showToast?.(message);
+                }
+                return;
+            }
 
             if (!response.ok) throw new Error('Navigation unavailable');
             const responsePath = normalizePath(new URL(response.url, location.href).pathname);
@@ -90,11 +139,6 @@
             if (!main || !nav || main.dataset.panelPage !== expectedPage) throw new Error('Unexpected page');
             if (controller.signal.aborted) return;
 
-            window.destroyDashboard?.();
-            window.destroyNodesMonitor?.();
-            window.destroyOperations?.();
-            window.destroySettings?.();
-
             const targetModalId = modalIdMap[expectedPage];
             const sections = [main, nav, targetModalId ? doc.getElementById(targetModalId) : null].filter(Boolean);
             sections.forEach(section => {
@@ -104,6 +148,12 @@
             });
 
             function updateDOM() {
+                // A newer request may supersede us while the browser captures the old frame.
+                if (controller.signal.aborted) return;
+                window.destroyDashboard?.();
+                window.destroyNodesMonitor?.();
+                window.destroyOperations?.();
+                window.destroySettings?.();
                 window.scrollTo(0, 0);
                 document.querySelector('main')?.replaceWith(document.importNode(main, true));
                 document.querySelector('nav')?.replaceWith(document.importNode(nav, true));
@@ -118,58 +168,89 @@
                 if (doc.documentElement?.lang) document.documentElement.lang = doc.documentElement.lang;
                 if (doc.body) document.body.className = doc.body.className;
                 document.body.style.overflow = '';
+                if (history) window.history.pushState({ panelRoute: true }, '', targetUrl);
+                window.applyPanelBootstrap?.();
+                if (typeof applyThemeUI === 'function') {
+                    const curTheme = typeof getResolvedTheme === 'function' ? getResolvedTheme() : (localStorage.getItem('theme') || 'dark');
+                    applyThemeUI(curTheme);
+                }
+                if (expectedPage === 'dashboard') {
+                    window.initDashboard?.();
+                } else if (expectedPage === 'nodes') {
+                    window.initNodesMonitor?.();
+                } else if (expectedPage === 'operations') {
+                    window.initOperations?.();
+                } else if (expectedPage === 'settings') {
+                    window.initSettings?.();
+                }
+                if (typeof initNotifications === 'function') initNotifications();
+                if (typeof renderHeaderBilling === 'function') renderHeaderBilling();
+                if (typeof initNodeModalScaling === 'function') initNodeModalScaling();
+                if (typeof initHapticsToggle === 'function') initHapticsToggle();
+                if (typeof initGlobalLazyLoad === 'function') initGlobalLazyLoad();
+                if (typeof parsePageEmojis === 'function') parsePageEmojis();
             }
 
+            const isPerfMode = Boolean(document.documentElement?.classList?.contains?.('perf-mode'))
+                || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+            const isDocumentHidden = typeof document !== 'undefined' && Boolean(document.hidden);
+
+            activeTransition?.skipTransition?.();
             let hasViewTransitions = false;
-            if (typeof document.startViewTransition === 'function') {
+            let domUpdated = false;
+
+            if (!isPerfMode && !isDocumentHidden && typeof document.startViewTransition === 'function') {
                 hasViewTransitions = true;
                 if (document.documentElement?.dataset) {
                     document.documentElement.dataset.panelNavigating = 'true';
                 }
                 try {
-                    await document.startViewTransition(() => updateDOM()).finished;
-                } catch {
-                } finally {
-                    if (document.documentElement?.dataset) {
-                        delete document.documentElement.dataset.panelNavigating;
+                    const transition = document.startViewTransition(() => {
+                        domUpdated = true;
+                        updateDOM();
+                    });
+                    activeTransition = transition;
+                    if (transition && typeof transition.ready?.catch === 'function') {
+                        transition.ready.catch(() => {});
                     }
+                    if (transition && typeof transition.finished?.catch === 'function') {
+                        transition.finished.catch(() => {});
+                    }
+                    // Keep navigation styles until the visual animation has actually finished.
+                    const finish = () => {
+                        if (activeTransition !== transition) return;
+                        activeTransition = null;
+                        if (document.documentElement?.dataset) delete document.documentElement.dataset.panelNavigating;
+                    };
+                    Promise.resolve(transition.finished).then(finish, finish);
+                    await (transition.updateCallbackDone || transition.finished || Promise.resolve());
+                } catch {
+                    if (!domUpdated) {
+                        hasViewTransitions = false;
+                        updateDOM();
+                    }
+                    if (!activeTransition && document.documentElement?.dataset) delete document.documentElement.dataset.panelNavigating;
                 }
             } else {
                 updateDOM();
             }
 
-            if (history) window.history.pushState({ panelRoute: true }, '', targetUrl);
-            window.applyPanelBootstrap?.();
-            if (expectedPage === 'dashboard') {
-                window.initDashboard?.();
-            } else if (expectedPage === 'nodes') {
-                window.initNodesMonitor?.();
-            } else if (expectedPage === 'operations') {
-                window.initOperations?.();
-            } else if (expectedPage === 'settings') {
-                window.initSettings?.();
-            }
-            if (typeof initNotifications === 'function') initNotifications();
-            if (typeof renderHeaderBilling === 'function') renderHeaderBilling();
-            if (typeof initNodeModalScaling === 'function') initNodeModalScaling();
-            if (typeof initHapticsToggle === 'function') initHapticsToggle();
-            if (typeof initGlobalLazyLoad === 'function') initGlobalLazyLoad();
-            if (typeof parsePageEmojis === 'function') parsePageEmojis();
-
+            if (controller.signal.aborted) return;
             const newMain = document.querySelector('main');
-            if (newMain && !hasViewTransitions) {
+            if (newMain && !hasViewTransitions && !isPerfMode) {
                 newMain.classList.remove('panel-page-enter');
                 void newMain.offsetWidth;
                 newMain.classList.add('panel-page-enter');
             }
         } catch (error) {
-            if (error.name !== 'AbortError') {
+            if (!controller.signal.aborted && error.name !== 'AbortError') {
                 console.error('[Panel Navigation]', error);
                 window.location.assign(url.href);
             }
         } finally {
             if (pending === controller) {
                 pending = null;
+                pendingTarget = null;
                 document.querySelector('main')?.removeAttribute('aria-busy');
             }
         }
@@ -182,7 +263,7 @@
             || !window.panelNavigationHandles(link.href)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        navigate(link.href);
+        scheduleNavigation(link.href);
     }, true);
 
     document.addEventListener('submit', event => {
@@ -191,13 +272,14 @@
             event.preventDefault();
             event.stopImmediatePropagation();
             const params = new URLSearchParams(new FormData(form)).toString();
-            navigate('/operations' + (params ? ('?' + params) : ''));
+            scheduleNavigation('/operations' + (params ? ('?' + params) : ''));
         }
     }, true);
 
     window.addEventListener('popstate', event => {
         if (event.state?.panelRoute && pages.has(normalizePath(location.pathname)) && document.querySelector('main[data-panel-page]')) {
             event.stopImmediatePropagation();
+            clearTimeout(navigationTimer);
             navigate(location.href, { history: false });
         }
     }, true);

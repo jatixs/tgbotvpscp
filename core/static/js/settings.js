@@ -739,69 +739,123 @@ function renderNodes() {
     }
 }
 window.startNodeRename = function (token) {
-    document.getElementById(`edit_name_${token}`).classList.remove('hidden');
-    const input = document.getElementById(`input_name_${token}`);
-
-    input.focus({ preventScroll: true });
-
-    const node = NODES_DATA.find(n => String(n.id) === token);
-    if (node) input.value = node.name;
-
+    if (token) {
+        const editEl = document.getElementById(`edit_name_${token}`);
+        if (editEl) editEl.classList.remove('hidden');
+        const input = document.getElementById(`input_name_${token}`);
+        if (input) {
+            input.focus({ preventScroll: true });
+            if (typeof NODES_DATA !== 'undefined' && Array.isArray(NODES_DATA)) {
+                const node = NODES_DATA.find(n => String(n.id) === String(token));
+                if (node) input.value = node.name;
+            }
+        }
+        return;
+    }
+    const nameDisplay = document.getElementById('nodeNameContainer');
+    const nameInputContainer = document.getElementById('nodeNameInputContainer');
+    const nameInput = document.getElementById('modalNodeNameInput');
+    const currentName = document.getElementById('modalNodeName')?.textContent?.trim();
+    if (nameDisplay && nameInputContainer && nameInput) {
+        nameDisplay.classList.add('hidden');
+        nameInputContainer.classList.remove('hidden');
+        nameInput.value = currentName || '';
+        nameInput.focus({ preventScroll: true });
+    }
 };
 
 window.cancelNodeRename = function (token) {
-    document.getElementById(`edit_name_${token}`).classList.add('hidden');
+    if (token) {
+        const el = document.getElementById(`edit_name_${token}`);
+        if (el) el.classList.add('hidden');
+        return;
+    }
+    const nameDisplay = document.getElementById('nodeNameContainer');
+    const nameInputContainer = document.getElementById('nodeNameInputContainer');
+    if (nameDisplay && nameInputContainer) {
+        nameDisplay.classList.remove('hidden');
+        nameInputContainer.classList.add('hidden');
+    }
 };
 
 window.saveNodeRename = async function (token) {
-    const input = document.getElementById(`input_name_${token}`);
-    const newName = input.value.trim();
-    if (!newName) return;
+    if (token) {
+        const input = document.getElementById(`input_name_${token}`);
+        if (!input) return;
+        const newName = input.value.trim();
+        if (!newName) return;
 
-    // Optimistic update
-    const nodeIndex = NODES_DATA.findIndex(n => String(n.id) === token);
-    const oldName = NODES_DATA[nodeIndex].name;
-    if (nodeIndex > -1) {
-        NODES_DATA[nodeIndex].name = newName;
-        renderNodes();
-    }
+        // Optimistic update
+        const nodeIndex = typeof NODES_DATA !== 'undefined' && Array.isArray(NODES_DATA)
+            ? NODES_DATA.findIndex(n => String(n.id) === String(token))
+            : -1;
+        const oldName = nodeIndex > -1 ? NODES_DATA[nodeIndex].name : '';
+        if (nodeIndex > -1) {
+            NODES_DATA[nodeIndex].name = newName;
+            if (typeof renderNodes === 'function') renderNodes();
+        }
 
-    try {
-        const res = await fetch('/api/nodes/rename', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                node_id: Number(token),
-                name: newName
-            })
-        });
+        try {
+            const res = await fetch('/api/nodes/rename', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    node_id: Number(token),
+                    name: newName
+                })
+            });
 
-        if (res.ok) {
-            if (window.showToast) {
-                const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
-                window.showToast(msg);
+            if (res.ok) {
+                if (window.showToast) {
+                    const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
+                    window.showToast(msg);
+                }
+            } else {
+                let data = {};
+                try { data = await res.json(); } catch {}
+                // Revert
+                if (nodeIndex > -1) {
+                    NODES_DATA[nodeIndex].name = oldName;
+                    if (typeof renderNodes === 'function') renderNodes();
+                }
+                const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
+                const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+                if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, errTitle);
             }
-        } else {
-            const data = await res.json();
+        } catch (e) {
+            console.error(e);
             // Revert
             if (nodeIndex > -1) {
                 NODES_DATA[nodeIndex].name = oldName;
-                renderNodes();
+                if (typeof renderNodes === 'function') renderNodes();
             }
-            const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
-            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error"; // FIX: Localized title
-            if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, errTitle);
+            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
         }
+        return;
+    }
+
+    const nameInput = document.getElementById('modalNodeNameInput');
+    if (!nameInput) return;
+    const newName = nameInput.value.trim();
+    if (!newName || typeof currentNodeId === 'undefined' || !currentNodeId) return;
+    if (typeof renderNodeModalTitle === 'function') {
+        renderNodeModalTitle(document.getElementById('modalNodeName'), newName);
+    }
+    if (typeof cancelNodeRename === 'function') cancelNodeRename();
+    try {
+        const res = await fetch('/api/nodes/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ node_id: currentNodeId, name: newName })
+        });
+        if (!res.ok) throw new Error("Failed to rename node");
+        if (typeof updateNodeNameInList === 'function') updateNodeNameInList(currentNodeId, newName);
     } catch (e) {
-        console.error(e);
-        // Revert
-        if (nodeIndex > -1) {
-            NODES_DATA[nodeIndex].name = oldName;
-            renderNodes();
-        }
-        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error"; // FIX: Localized title
+        console.error("Dashboard node rename error:", e);
+        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
         if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 };
@@ -2155,6 +2209,13 @@ async function handleSettingsBtnClick(btn, actionCallback) {
         if (typeof actionCallback === 'function') {
             await actionCallback();
         }
+    } catch (error) {
+        console.error('Settings action failed:', error);
+        const message = window.I18N?.web_services_request_failed
+            || (document.documentElement.lang === 'ru'
+                ? 'Не удалось выполнить действие. Повторите попытку.'
+                : 'The action failed. Please try again.');
+        window.showToast?.(message);
     } finally {
         settingsBtnTimer = setTimeout(() => {
             btn.classList.remove('force-expanded');

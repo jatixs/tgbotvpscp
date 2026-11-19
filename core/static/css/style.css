@@ -7,8 +7,18 @@
 .nodes-grid-empty { flex: 1; min-height: 240px; grid-template-columns: minmax(0, 1fr) !important; }
 .nodes-empty-state { grid-column: 1 / -1; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 240px; padding: 2rem; }
 main[aria-busy="true"] { pointer-events: none; }
-.panel-page-enter { animation: panel-page-enter .16s cubic-bezier(0, 0, 0.2, 1); }
-@keyframes panel-page-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+:root {
+    --panel-transition-duration: 280ms;
+    --panel-transition-distance: clamp(3px, 0.8vmin, 10px);
+    --panel-transition-easing: cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Shorter travel on phones and landscape screens; no fixed viewport dimensions. */
+@media (max-width: 639px), (max-height: 500px) {
+    :root { --panel-transition-duration: 240ms; --panel-transition-distance: 4px; }
+}
+html { scrollbar-gutter: stable; }
+.panel-page-enter { animation: panel-page-enter var(--panel-transition-duration) var(--panel-transition-easing) backwards; }
+@keyframes panel-page-enter { from { opacity: 0; transform: translateY(var(--panel-transition-distance)); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { main[aria-busy="true"] { transition: none; } .panel-page-enter { animation: none; } }
 
 img.emoji {
@@ -1212,14 +1222,24 @@ html.dark .telegram-only-overlay-badge {
 /* --- Performance and accessibility modes --- */
 
 /* Light version (Perf-mode) */
+html.perf-mode,
 html.perf-mode *,
-html.perf-mode *:before,
-html.perf-mode *:after {
+html.perf-mode *::before,
+html.perf-mode *::after,
+html.perf-mode::view-transition-group(*),
+html.perf-mode::view-transition-old(*),
+html.perf-mode::view-transition-new(*) {
+    animation: none !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition: none !important;
     transition-duration: 0.01ms !important;
     backdrop-filter: none !important;
     box-shadow: none !important;
+}
+
+html.perf-mode .panel-page-enter {
+    animation: none !important;
 }
 
 html.perf-mode .animate-float,
@@ -3207,7 +3227,7 @@ main[data-panel-page] {
     animation-name: themeFadeIn;
 }
 
-/* Page Navigation Mode: Root background remains static; header and content smoothly crossfade */
+/* Page navigation: crossfade content, but replace different header layouts sequentially. */
 html[data-panel-navigating]::view-transition-old(root),
 html[data-panel-navigating]::view-transition-new(root) {
     animation: none !important;
@@ -3215,39 +3235,51 @@ html[data-panel-navigating]::view-transition-new(root) {
 }
 
 html[data-panel-navigating]::view-transition-group(main-header) {
-    animation-duration: 0.14s;
-    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    animation: none;
+}
+
+html[data-panel-navigating]::view-transition-old(main-header),
+html[data-panel-navigating]::view-transition-new(main-header) {
+    height: auto;
+    object-fit: contain;
+    object-position: top left;
 }
 
 html[data-panel-navigating]::view-transition-old(main-header) {
-    animation: 0.08s cubic-bezier(0.4, 0, 1, 1) both panelFadeOut;
+    animation: var(--panel-transition-duration) linear both panelHeaderOut;
 }
 
 html[data-panel-navigating]::view-transition-new(main-header) {
-    animation: 0.14s cubic-bezier(0, 0, 0.2, 1) both panelFadeIn;
+    animation: var(--panel-transition-duration) linear both panelHeaderIn;
+}
+
+/* An open menu belongs to the outgoing page, not to the incoming header. */
+html[data-panel-navigating]::view-transition-group(mobile-settings-dropdown) {
+    animation: none;
+    visibility: hidden;
 }
 
 html[data-panel-navigating]::view-transition-group(panel-main) {
-    animation-duration: 0.18s;
+    animation-duration: var(--panel-transition-duration);
     animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 html[data-panel-navigating]::view-transition-old(panel-main) {
-    animation: 0.09s cubic-bezier(0.4, 0, 1, 1) both panelMainOut;
+    animation: var(--panel-transition-duration) var(--panel-transition-easing) both panelMainOut;
 }
 
 html[data-panel-navigating]::view-transition-new(panel-main) {
-    animation: 0.16s cubic-bezier(0, 0, 0.2, 1) both panelMainIn;
+    animation: var(--panel-transition-duration) var(--panel-transition-easing) both panelMainIn;
 }
 
-@keyframes panelFadeOut {
-    from { opacity: 1; }
-    to { opacity: 0; }
+@keyframes panelHeaderOut {
+    0% { opacity: 1; }
+    45%, 100% { opacity: 0; }
 }
 
-@keyframes panelFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+@keyframes panelHeaderIn {
+    0%, 55% { opacity: 0; }
+    100% { opacity: 1; }
 }
 
 @keyframes panelMainOut {
@@ -3257,14 +3289,14 @@ html[data-panel-navigating]::view-transition-new(panel-main) {
     }
     to {
         opacity: 0;
-        transform: translateY(-4px);
+        transform: translateY(calc(-1 * var(--panel-transition-distance)));
     }
 }
 
 @keyframes panelMainIn {
     from {
         opacity: 0;
-        transform: translateY(6px);
+        transform: translateY(var(--panel-transition-distance));
     }
     to {
         opacity: 1;
@@ -3287,5 +3319,12 @@ html[data-panel-navigating]::view-transition-new(panel-main) {
     }
     to {
         opacity: 1;
+    }
+}
+
+/* Honor motion preferences for native transitions as well as the CSS fallback. */
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) {
+        animation: none !important;
     }
 }

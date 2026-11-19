@@ -7,13 +7,28 @@ window.applyPanelBootstrap = function (root = document) {
     window.USER_ROLE_LEVEL = Number(page.dataset.panelRoleLevel || 0);
     window.IS_MAIN_ADMIN = page.dataset.panelOwner === 'true';
     try {
-        window.I18N = JSON.parse(page.dataset.panelI18n || '{}');
+        const rawI18n = page.getAttribute('data-panel-i18n') || page.dataset.panelI18n || '{}';
+        let parsed = typeof rawI18n === 'string' ? JSON.parse(rawI18n) : rawI18n;
+        if (typeof parsed === 'string') {
+            try { parsed = JSON.parse(parsed); } catch {}
+        }
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+            window.I18N = Object.assign({}, window.I18N || {}, parsed);
+        }
     } catch {
-        window.I18N = {};
+        if (!window.I18N) window.I18N = {};
+    }
+    if (typeof globalThis !== 'undefined' && window.I18N) {
+        try { globalThis.I18N = window.I18N; } catch {}
     }
     window.i18n = window.i18n || {};
     try {
-        window.master_billing_json = JSON.parse(page.dataset.panelBilling || 'null');
+        const rawBilling = page.getAttribute('data-panel-billing') || page.dataset.panelBilling || 'null';
+        let parsedBilling = typeof rawBilling === 'string' ? JSON.parse(rawBilling) : rawBilling;
+        if (typeof parsedBilling === 'string') {
+            try { parsedBilling = JSON.parse(parsedBilling); } catch {}
+        }
+        window.master_billing_json = parsedBilling;
     } catch {
         window.master_billing_json = null;
     }

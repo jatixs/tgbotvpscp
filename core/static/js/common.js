@@ -5,9 +5,13 @@
 /* /core/static/js/common.js */
 
 if (window.Chart) {
-    window.Chart.defaults.animation.duration = 420;
-    window.Chart.defaults.animation.easing = 'easeOutQuart';
-    window.Chart.defaults.animations.colors.properties = ['color', 'borderColor'];
+    if (document.documentElement.classList.contains('perf-mode')) {
+        window.Chart.defaults.animation = false;
+    } else {
+        window.Chart.defaults.animation.duration = 420;
+        window.Chart.defaults.animation.easing = 'easeOutQuart';
+        window.Chart.defaults.animations.colors.properties = ['color', 'borderColor'];
+    }
 
     const legendDatasetFadePlugin = {
         id: 'legend-dataset-fade',
@@ -256,10 +260,19 @@ async function secureFetch(url, options = {}) {
     return response;
 }
 
+const pendingSSERequests = new Map();
+
 function sseRequest(url, eventName) {
-    return new Promise((resolve, reject) => {
+    const key = JSON.stringify([url, eventName]);
+    if (pendingSSERequests.has(key)) return pendingSSERequests.get(key);
+    const request = new Promise((resolve, reject) => {
         const source = new EventSource(url);
+        const timeout = setTimeout(() => {
+            source.close();
+            reject(new Error('SSE request timed out'));
+        }, 15000);
         source.addEventListener(eventName, function(e) {
+            clearTimeout(timeout);
             try {
                 const data = JSON.parse(e.data);
                 const decrypted = decryptApiResponse(data);
@@ -272,10 +285,15 @@ function sseRequest(url, eventName) {
             }
         });
         source.addEventListener('error', function(e) {
+            clearTimeout(timeout);
             source.close();
             reject(new Error("SSE Error"));
         });
+    }).finally(() => {
+        if (pendingSSERequests.get(key) === request) pendingSSERequests.delete(key);
     });
+    pendingSSERequests.set(key, request);
+    return request;
 }
 
 window.__chartRegistry = window.__chartRegistry || {};
@@ -2794,6 +2812,13 @@ document.addEventListener('keydown', (e) => {
 function togglePerfMode() {
     const isPerfMode = document.documentElement.classList.toggle('perf-mode');
     localStorage.setItem('perf_mode', isPerfMode ? '1' : '0');
+    if (window.Chart?.defaults) {
+        if (isPerfMode) {
+            window.Chart.defaults.animation = false;
+        } else {
+            window.Chart.defaults.animation = { duration: 420, easing: 'easeOutQuart' };
+        }
+    }
     if (typeof showToast === 'function') {
         showToast(isPerfMode ? (I18N?.web_perf_mode_on || 'Light mode enabled') : (I18N?.web_perf_mode_off || 'Light mode disabled'));
     }

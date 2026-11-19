@@ -21,7 +21,20 @@ let nodeServicesSSESource = null;
 let nodeTooltipController = null;
 let _lastServicesCache = null; // cached services for stable DOM updates
 
+function getI18n() {
+    return (typeof window !== 'undefined' && window.I18N)
+        ? window.I18N
+        : ((typeof I18N !== 'undefined' && typeof I18N === 'object') ? I18N : {});
+}
 
+function t(key, fallbackRu, fallbackEn) {
+    const dict = getI18n();
+    if (dict && typeof dict[key] === 'string' && dict[key].trim()) {
+        return dict[key];
+    }
+    const isEn = typeof document !== 'undefined' && document.documentElement?.lang === 'en';
+    return isEn ? (fallbackEn || fallbackRu || key) : (fallbackRu || fallbackEn || key);
+}
 
 function normalizeNode(node) {
     const decryptedName = decryptData(node.name) || 'Unknown';
@@ -42,9 +55,9 @@ function normalizeNode(node) {
 function getAvailabilityNote(availability) {
     if (!availability || !availability.has_ongoing_outage) return '';
     if (availability.ongoing_outage_kind === 'physical') {
-        return `${I18N?.web_nodes_monitor_outage_rebooting || 'Current outage is caused by a reboot'}: ${availability.current_downtime}`;
+        return `${t('web_nodes_monitor_outage_rebooting', 'Текущий простой вызван перезагрузкой', 'Current outage is caused by a reboot')}: ${availability.current_downtime}`;
     }
-    return `${I18N?.web_nodes_monitor_outage_pending || 'The reason will be determined after the node reconnects'}: ${availability.current_downtime}`;
+    return `${t('web_nodes_monitor_outage_pending', 'Причина будет определена после переподключения ноды', 'The reason will be determined after the node reconnects')}: ${availability.current_downtime}`;
 }
 
 function initUptimeTooltip() {
@@ -193,7 +206,7 @@ function initNodesMonitor() {
     stopNodesMonitorStream();
     
     // Reset state
-    allNodesData = [];
+    // Retain the last snapshot while the live stream reconnects on a return visit.
     currentFilter = 'all';
     currentCpuFilter = 'all';
     currentSort = 'name';
@@ -213,6 +226,11 @@ function initNodesMonitor() {
         if (window.__chartRegistry) delete window.__chartRegistry['modalNetChart'];
     }
     
+    if (allNodesData.length) {
+        updateStats();
+        renderNodes();
+    }
+
     // Subscribe to node updates
     connectNodesMonitorStream();
     
@@ -256,15 +274,15 @@ document.addEventListener('app:action:node-service-action', (e) => {
     if (!nodeId || !name || !cmd) return;
 
     const cmdLabels = {
-        restart: I18N?.web_service_restart || 'restart',
-        stop:    I18N?.web_service_stop    || 'stop',
-        start:   I18N?.web_service_start   || 'start',
+        restart: t('web_service_restart', 'перезапуск', 'restart'),
+        stop:    t('web_service_stop',    'остановка', 'stop'),
+        start:   t('web_service_start',   'запуск', 'start'),
     };
     const actionLabel = cmdLabels[cmd] || cmd;
 
     showConfirm(
-        I18N?.modal_title_confirm || 'Confirm',
-        (I18N?.web_service_confirm || 'Execute {action} for {name}?')
+        t('modal_title_confirm', 'Подтверждение', 'Confirm'),
+        t('web_service_confirm', 'Выполнить {action} для {name}?', 'Execute {action} for {name}?')
             .replace('{action}', actionLabel.toLowerCase())
             .replace('{name}', name),
         () => nodeServiceAction(nodeId, name, cmd, type)
@@ -352,7 +370,7 @@ function renderNodes() {
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                ${I18N?.web_no_nodes || 'No nodes found'}
+                ${t('web_no_nodes', 'Ноды не найдены', 'No nodes found')}
             </div>
         `);
         return;
@@ -392,15 +410,15 @@ function createNodeCard(node) {
     if (isRestarting) {
         statusClass = 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
         statusIcon = '<i class="icon icon-dot icon-dot-blue icon-xs mr-1"></i>';
-        statusText = I18N?.web_node_status_restarting || 'Restarting';
+        statusText = t('web_node_status_restarting', 'Перезагрузка', 'Restarting');
     } else if (isOnline) {
         statusClass = 'bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400';
         statusIcon = '<i class="icon icon-dot icon-dot-green icon-xs mr-1"></i>';
-        statusText = I18N?.web_node_status_online || 'Online';
+        statusText = t('web_node_status_online', 'В сети', 'Online');
     } else {
         statusClass = 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400';
         statusIcon = '<i class="icon icon-dot icon-dot-red icon-xs mr-1"></i>';
-        statusText = I18N?.web_node_status_offline || 'Offline';
+        statusText = t('web_node_status_offline', 'Не в сети', 'Offline');
     }
     
     const cpu = node.cpu || 0;
@@ -431,7 +449,7 @@ function createNodeCard(node) {
                         <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
                             <div class="ip-copy-container inline-flex items-center gap-1 group/ip" data-copy-ip="${escapeHtml(node.ip || '')}">
-                                <span class="ip-copy-text text-xs text-gray-500 dark:text-gray-400 font-mono select-all" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">${escapeHtml(node.ip || '-')}</span>
+                                <span class="ip-copy-text text-xs text-gray-500 dark:text-gray-400 font-mono select-all" title="${t('web_copy_ip', 'Скопировать IP', 'Copy IP')}">${escapeHtml(node.ip || '-')}</span>
                                 ${node.ip && node.ip !== '-' ? `
                                 ${renderCopyIpButton(node.ip)}` : ''}
                             </div>
@@ -460,7 +478,7 @@ function createNodeCard(node) {
                                 <span class="text-sm font-bold" style="color: #6366f1;">${cpu}</span>
                             </div>
                         </div>
-                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${I18N?.web_cpu || 'CPU'}</span>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${t('web_cpu', 'ЦП', 'CPU')}</span>
                     </div>
                     
                     <!-- RAM Circle -->
@@ -475,7 +493,7 @@ function createNodeCard(node) {
                                 <span class="text-sm font-bold" style="color: #a855f7;">${ram}</span>
                             </div>
                         </div>
-                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${I18N?.web_ram || 'RAM'}</span>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${t('web_ram', 'ОЗУ', 'RAM')}</span>
                     </div>
                     
                     <!-- Disk Circle -->
@@ -490,7 +508,7 @@ function createNodeCard(node) {
                                 <span class="text-sm font-bold" style="color: #22c55e;">${disk}</span>
                             </div>
                         </div>
-                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${I18N?.web_disk || 'Disk'}</span>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mt-1 uppercase tracking-wide">${t('web_disk', 'Диск', 'Disk')}</span>
                     </div>
                 </div>
                 
@@ -501,11 +519,11 @@ function createNodeCard(node) {
                 </div>
                 <div class="mt-2 pt-2 border-t border-gray-100 dark:border-white/5 text-[11px] text-gray-500 dark:text-gray-400 space-y-1">
                     <div class="flex justify-between gap-2">
-                        <span>${I18N?.web_nodes_monitor_last_outage || 'Last outage'}</span>
+                        <span>${t('web_nodes_monitor_last_outage', 'Посл. простой', 'Last outage')}</span>
                         <span class="font-mono text-right">${escapeHtml(lastOutage)}</span>
                     </div>
                     <div class="flex justify-between gap-2">
-                        <span>${I18N?.web_nodes_monitor_total_downtime || 'Total downtime'}</span>
+                        <span>${t('web_nodes_monitor_total_downtime', 'Всего простой', 'Total downtime')}</span>
                         <span class="font-mono text-right">${escapeHtml(totalDowntime)}</span>
                     </div>
                 </div>
@@ -514,7 +532,7 @@ function createNodeCard(node) {
             <!-- Actions -->
             <div class="px-4 pb-4 mb-3 pt-1 flex gap-2">
                 <button data-action="open-node-detail" data-token="${nodeId}" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
-                    ${I18N?.web_node_details || 'Node Details'}
+                    ${t('web_node_details', 'Подробнее', 'Node Details')}
                 </button>
                 ${(typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') ? `
                 <button data-action="quick-reboot" data-token="${nodeId}" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
@@ -665,26 +683,26 @@ window.toggleNodeSelection = function(token, checkbox) {
 // Mass commands
 window.massCommand = async function(cmd) {
     if (selectedNodes.size === 0) {
-        showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_nodes_monitor_select_nodes || 'Please select at least one node');
+        showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_nodes_monitor_select_nodes', 'Пожалуйста, выберите хотя бы одну ноду', 'Please select at least one node'));
         return;
     }
     
     // Get localized command name
     const cmdNames = {
-        'reboot': I18N?.web_nodes_monitor_btn_reboot || 'Reboot',
-        'selftest': I18N?.web_nodes_monitor_btn_selftest || 'System Test',
-        'speedtest': I18N?.web_nodes_monitor_btn_speedtest || 'Speedtest',
-        'traffic': I18N?.web_nodes_monitor_btn_traffic || 'Traffic'
+        'reboot': t('web_nodes_monitor_btn_reboot', 'Перезагрузка', 'Reboot'),
+        'selftest': t('web_nodes_monitor_btn_selftest', 'Тест системы', 'System Test'),
+        'speedtest': t('web_nodes_monitor_btn_speedtest', 'Тест скорости', 'Speedtest'),
+        'traffic': t('web_nodes_monitor_btn_traffic', 'Трафик', 'Traffic')
     };
     const cmdName = cmdNames[cmd] || cmd;
     
     const confirmMsg = cmd === 'reboot' 
-        ? (I18N?.web_nodes_monitor_confirm_mass_reboot || `Reboot ${selectedNodes.size} selected nodes?`)
-        : (I18N?.web_nodes_monitor_confirm_mass_command || `Execute {command} on {count} nodes?`)
+        ? t('web_nodes_monitor_confirm_mass_reboot', `Перезагрузить выбранные ноды (${selectedNodes.size})?`, `Reboot ${selectedNodes.size} selected nodes?`)
+        : t('web_nodes_monitor_confirm_mass_command', `Выполнить {command} на {count} нодах?`, `Execute {command} on {count} nodes?`)
             .replace('{command}', cmdName)
             .replace('{count}', selectedNodes.size);
     
-    showConfirm(I18N?.modal_title_confirm || 'Confirm', confirmMsg, async () => {
+    showConfirm(t('modal_title_confirm', 'Подтверждение', 'Confirm'), confirmMsg, async () => {
         for (const token of selectedNodes) {
             try {
                 await sendNodeCommand(token, cmd);
@@ -692,7 +710,7 @@ window.massCommand = async function(cmd) {
                 console.error(`Error executing ${cmd} on node:`, e);
             }
         }
-        showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_commands_sent || 'Commands sent to all selected nodes');
+        showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_commands_sent', 'Команды отправлены на все выбранные ноды', 'Commands sent to all selected nodes'));
         connectNodesMonitorStream();
     });
 }
@@ -703,11 +721,11 @@ window.quickReboot = async function(token) {
     const name = node ? node.name : 'Node';
     
     showConfirm(
-        I18N?.modal_title_confirm || 'Confirm',
-        (I18N?.web_reboot_node_confirm || 'Reboot {name}?').replace('{name}', name),
+        t('modal_title_confirm', 'Подтверждение', 'Confirm'),
+        t('web_reboot_node_confirm', `Перезагрузить ${name}?`, `Reboot ${name}?`).replace('{name}', name),
         async () => {
             await sendNodeCommand(token, 'reboot');
-            showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_reboot_sent || 'Reboot command sent');
+            showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_reboot_sent', 'Команда перезагрузки отправлена', 'Reboot command sent'));
             connectNodesMonitorStream();
         }
     );
@@ -905,15 +923,15 @@ function updateNodeModal(data) {
     if (isRestarting) {
         statusBadge.className = 'flex items-center gap-1 text-blue-600 dark:text-blue-400';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse';
-        statusText.textContent = I18N?.web_node_status_restarting || 'Restarting';
+        statusText.textContent = t('web_node_status_restarting', 'Перезагрузка', 'Restarting');
     } else if (isOnline) {
         statusBadge.className = 'flex items-center gap-1 text-green-600 dark:text-green-400';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse';
-        statusText.textContent = I18N?.web_node_status_online || 'Online';
+        statusText.textContent = t('web_node_status_online', 'В сети', 'Online');
     } else {
         statusBadge.className = 'flex items-center gap-1 text-red-600 dark:text-red-400';
         statusDot.className = 'w-1.5 h-1.5 rounded-full bg-red-500';
-        statusText.textContent = I18N?.web_node_status_offline || 'Offline';
+        statusText.textContent = t('web_node_status_offline', 'Не в сети', 'Offline');
     }
     
     document.getElementById('modalUptime').textContent = formatUptime(stats.uptime || 0);
@@ -923,14 +941,14 @@ function updateNodeModal(data) {
 
     const availability = data.availability || {};
     const titleEl = document.getElementById('availabilityPopoverTitle');
-    if (titleEl) titleEl.textContent = I18N?.web_avail_header || 'Uptime / Downtime';
-    document.getElementById('availabilityLabelCurrentUptime').textContent = I18N?.web_nodes_monitor_current_uptime || 'Current uptime';
-    document.getElementById('availabilityLabelLastOutage').textContent = I18N?.web_nodes_monitor_last_outage || 'Last outage';
-    document.getElementById('availabilityLabelLastReboot').textContent = I18N?.web_nodes_monitor_last_reboot || 'Last reboot';
-    document.getElementById('availabilityLabelTotalUptime').textContent = I18N?.web_nodes_monitor_total_uptime || 'Total uptime';
-    document.getElementById('availabilityLabelTotalDowntime').textContent = I18N?.web_nodes_monitor_total_downtime || 'Total downtime';
-    document.getElementById('availabilityLabelInternetDowntime').textContent = I18N?.web_nodes_monitor_internet_downtime || 'Internet downtime';
-    document.getElementById('availabilityLabelPhysicalDowntime').textContent = I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime';
+    if (titleEl) titleEl.textContent = t('web_avail_header', 'Аптайм / Доступность', 'Uptime / Downtime');
+    document.getElementById('availabilityLabelCurrentUptime').textContent = t('web_nodes_monitor_current_uptime', 'Текущий аптайм', 'Current uptime');
+    document.getElementById('availabilityLabelLastOutage').textContent = t('web_nodes_monitor_last_outage', 'Посл. простой', 'Last outage');
+    document.getElementById('availabilityLabelLastReboot').textContent = t('web_nodes_monitor_last_reboot', 'Посл. перезагрузка', 'Last reboot');
+    document.getElementById('availabilityLabelTotalUptime').textContent = t('web_nodes_monitor_total_uptime', 'Всего в сети', 'Total uptime');
+    document.getElementById('availabilityLabelTotalDowntime').textContent = t('web_nodes_monitor_total_downtime', 'Всего простой', 'Total downtime');
+    document.getElementById('availabilityLabelInternetDowntime').textContent = t('web_nodes_monitor_internet_downtime', 'Простой интернета', 'Internet downtime');
+    document.getElementById('availabilityLabelPhysicalDowntime').textContent = t('web_nodes_monitor_physical_downtime', 'Физический простой', 'Physical downtime');
     document.getElementById('modalAvailabilityCurrentUptime').textContent = availability.current_uptime || '-';
     document.getElementById('modalAvailabilityLastOutage').textContent = availability.last_downtime || '-';
     document.getElementById('modalAvailabilityLastReboot').textContent = availability.last_reboot || '-';
@@ -1089,8 +1107,8 @@ function updateModalCharts(series, which, animate = true) {
             data: {
                 labels,
                 datasets: [
-                    { label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ', data: rxData, yAxisID: 'y', borderColor: '#22c55e', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
-                    { label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ', data: txData, yAxisID: 'y', borderColor: '#3b82f6', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(59, 130, 246)'), fill: true },
+                    { label: t('web_label_rx', 'ВХ', 'RX'), data: rxData, yAxisID: 'y', borderColor: '#22c55e', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
+                    { label: t('web_label_tx', 'ИСХ', 'TX'), data: txData, yAxisID: 'y', borderColor: '#3b82f6', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(59, 130, 246)'), fill: true },
                     window.createPingDataset(series.ping)
                 ]
             },
@@ -1148,7 +1166,7 @@ function connectNodeServicesStream(token) {
 
     const container = document.getElementById('modalServicesContainer');
     if (container) {
-        setSafeHTML(container, `<div class="text-center py-4 text-gray-400">${I18N?.web_services_loading || I18N?.web_loading || 'Loading'}</div>`);
+        setSafeHTML(container, `<div class="text-center py-4 text-gray-400">${t('web_services_loading', 'Загрузка сервисов...', 'Loading services...')}</div>`);
         _lastServicesCache = null; // force full re-render on next data event
     }
 
@@ -1192,7 +1210,7 @@ function renderNodeServices(token, services) {
 
     if (services.length === 0) {
         _lastServicesCache = null;
-        setSafeHTML(container, `<div class="col-span-full text-center py-4 text-gray-400">${I18N?.web_services_empty || 'No services'}</div>`);
+        setSafeHTML(container, `<div class="col-span-full text-center py-4 text-gray-400">${t('web_services_empty', 'Нет сервисов', 'No services')}</div>`);
         if (btnContainer) btnContainer.classList.add('hidden');
         return;
     }
@@ -1226,8 +1244,8 @@ function renderNodeServices(token, services) {
                 const newCmd = isRunning ? 'stop' : 'start';
                 // Localized titles for the toggle button
                 const newTitle = isRunning
-                    ? (I18N?.web_service_stop || 'Stop')
-                    : (I18N?.web_service_start || 'Start');
+                    ? t('web_service_stop', 'Остановить', 'Stop')
+                    : t('web_service_start', 'Запустить', 'Start');
                 // Hardcoded SVG paths — no user input, safe to set without DOMPurify
                 // (DOMPurify strips SVG stroke-* attributes in HTML context)
                 const iconStop = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />';
@@ -1266,7 +1284,7 @@ function renderNodeServices(token, services) {
                     </button>
                     <button data-svc-toggle="true" data-action="node-service-action" data-token="${escapeHtml(token)}" data-name="${escapeHtml(svc.name)}" data-cmd="${svc.status === 'running' ? 'stop' : 'start'}" data-type="${escapeHtml(svc.type || 'systemd')}"
                             class="p-1 ${svc.status === 'running' ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded"
-                            title="${svc.status === 'running' ? (I18N?.web_service_stop || 'Stop') : (I18N?.web_service_start || 'Start')}">
+                            title="${svc.status === 'running' ? t('web_service_stop', 'Остановить', 'Stop') : t('web_service_start', 'Запустить', 'Start')}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             ${svc.status === 'running' 
                                 ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />'
@@ -1288,11 +1306,11 @@ function renderNodeServices(token, services) {
                 if (showAll) {
                     btn.classList.add('expanded');
                     if (blurOverlay) blurOverlay.style.display = 'none';
-                    setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_less || 'Show Less'}`);
+                    setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${t('web_show_less', 'Скрыть', 'Show Less')}`);
                 } else {
                     btn.classList.remove('expanded');
                     if (blurOverlay) blurOverlay.style.display = '';
-                    setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${I18N?.web_show_more || 'Show More'} (${services.length - INITIAL_SHOW})`);
+                    setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${t('web_show_more', 'Показать ещё', 'Show More')} (${services.length - INITIAL_SHOW})`);
                 }
             }
         } else {
@@ -1325,18 +1343,18 @@ window.nodeCommand = function(cmd) {
     
     if (cmd === 'reboot') {
         showConfirm(
-            I18N?.modal_title_confirm || 'Confirm',
-            (I18N?.web_reboot_node_confirm || 'Reboot {name}?').replace('{name}', name),
+            t('modal_title_confirm', 'Подтверждение', 'Confirm'),
+            t('web_reboot_node_confirm', 'Перезагрузить {name}?', 'Reboot {name}?').replace('{name}', name),
             async () => {
                 await sendNodeCommand(currentNodeId, cmd);
-                showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_command_sent || 'Command sent');
+                showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_command_sent', 'Команда отправлена', 'Command sent'));
                 closeNodeDetailModal();
                 connectNodesMonitorStream();
             }
         );
     } else {
         sendNodeCommand(currentNodeId, cmd).then(() => {
-            showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_command_sent || 'Command sent');
+            showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_command_sent', 'Команда отправлена', 'Command sent'));
         });
     }
 }
@@ -1351,10 +1369,10 @@ async function nodeServiceAction(nodeId, service, action, type = 'systemd') {
         
         if (!response.ok) throw new Error('Service action failed');
         
-        showAlert(I18N?.modal_title_alert || 'Alert', I18N?.web_command_sent || 'Command sent');
+        showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_command_sent', 'Команда отправлена', 'Command sent'));
         setTimeout(() => connectNodeServicesStream(nodeId), 2000);
     } catch (error) {
-        showAlert(I18N?.modal_title_error || 'Error', error.message);
+        showAlert(t('modal_title_error', 'Ошибка', 'Error'), error.message);
     }
 }
 
@@ -1386,9 +1404,9 @@ function formatUptime(seconds) {
     const m = Math.floor((seconds % 3600) / 60);
     
     const parts = [];
-    if (d > 0) parts.push(`${d}${I18N?.web_time_d || 'd'}`);
-    if (h > 0) parts.push(`${h}${I18N?.web_time_h || 'h'}`);
-    parts.push(`${m}${I18N?.web_time_m || 'm'}`);
+    if (d > 0) parts.push(`${d}${t('web_time_d', 'д', 'd')}`);
+    if (h > 0) parts.push(`${h}${t('web_time_h', 'ч', 'h')}`);
+    parts.push(`${m}${t('web_time_m', 'м', 'm')}`);
     
     return parts.join(' ');
 }
@@ -1408,9 +1426,9 @@ function formatBytes(bytes) {
 }
 
 function formatSpeed(v) {
-    const sKbps = (typeof I18N !== 'undefined' && I18N.unit_kbps) ? I18N.unit_kbps : 'Kbps';
-    const sMbps = (typeof I18N !== 'undefined' && I18N.unit_mbps) ? I18N.unit_mbps : 'Mbps';
-    const sGbps = (typeof I18N !== 'undefined' && I18N.unit_gbps) ? I18N.unit_gbps : 'Gbps';
+    const sKbps = t('unit_kbps', 'Кбит/с', 'Kbps');
+    const sMbps = t('unit_mbps', 'Мбит/с', 'Mbps');
+    const sGbps = t('unit_gbps', 'Гбит/с', 'Gbps');
     if (v === null || v === undefined) return '0 ' + sKbps;
     return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' ' + sGbps : (v >= 1024 ? (v / 1024).toFixed(2) + ' ' + sMbps : v.toFixed(2) + ' ' + sKbps);
 }
@@ -1427,7 +1445,7 @@ function resolveLocalizedMessage(message) {
     const localizedKeyMatch = message.match(/^\[([a-z0-9_]+)\]$/i);
     if (!localizedKeyMatch) return message;
 
-    const localizedValue = I18N?.[localizedKeyMatch[1]];
+    const localizedValue = getI18n()?.[localizedKeyMatch[1]];
     return localizedValue || message;
 }
 
@@ -1526,15 +1544,15 @@ window.showPingErrorModal = function(event) {
         event.stopPropagation();
     }
     const mode = window.GLOBAL_PING_MODE || "http";
-    const title = (typeof I18N !== 'undefined' && I18N.web_ping_error_title) ? I18N.web_ping_error_title : "Error: ping unavailable";
-    const desc = (typeof I18N !== 'undefined' && I18N.web_ping_error_desc) ? I18N.web_ping_error_desc : "The system could not measure network latency.";
-    const btnText = (typeof I18N !== 'undefined' && I18N.web_ping_how_to_fix_btn) ? I18N.web_ping_how_to_fix_btn : "How to fix?";
+    const title = t('web_ping_error_title', 'Ошибка: пинг недоступен', 'Error: ping unavailable');
+    const desc = t('web_ping_error_desc', 'Система не смогла измерить сетевую задержку.', 'The system could not measure network latency.');
+    const btnText = t('web_ping_how_to_fix_btn', 'Как исправить?', 'How to fix?');
     
     let fixText = "";
     if (mode === "tcp") {
-        fixText = (typeof I18N !== 'undefined' && I18N.web_ping_fix_tcp) ? I18N.web_ping_fix_tcp : "TCP mode selected. Check firewall for port 53 out.";
+        fixText = t('web_ping_fix_tcp', 'Выбран режим TCP. Проверьте фаервол на исходящий порт 53.', 'TCP mode selected. Check firewall for port 53 out.');
     } else {
-        fixText = (typeof I18N !== 'undefined' && I18N.web_ping_fix_http) ? I18N.web_ping_fix_http : "HTTP mode selected. Check firewall for port 443 out.";
+        fixText = t('web_ping_fix_http', 'Выбран режим HTTP. Проверьте фаервол на исходящий порт 443.', 'HTTP mode selected. Check firewall for port 443 out.');
     }
 
     const htmlContent = `

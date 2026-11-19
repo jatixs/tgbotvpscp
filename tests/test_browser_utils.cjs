@@ -161,3 +161,38 @@ test('browser reads authenticated Fernet data from Python and rejects a changed 
     assert.equal(context.decryptData('2001:db8::1'), '2001:db8::1');
     assert.equal(context.decryptData(context.encryptData('Проверка веб-панели: status ✓')), 'Проверка веб-панели: status ✓');
 });
+
+test('settings action failures are handled and the expanded button is always restored', async () => {
+    const source = fs.readFileSync('core/static/js/settings.js', 'utf8');
+    const start = source.indexOf('let settingsBtnTimer = null;');
+    const end = source.indexOf('// --- Meta/SEO Modal Logic ---', start);
+    for (const fail of [false, true]) {
+        const classes = new Set();
+        const timers = [], errors = [], messages = [];
+        let calls = 0, blurred = false;
+        const button = {
+            closest: () => null,
+            classList: { add: name => classes.add(name), remove: name => classes.delete(name) },
+            blur() { blurred = true; }
+        };
+        const context = vm.createContext({
+            window: { I18N: {}, showToast: message => messages.push(message) },
+            document: { documentElement: { lang: 'ru' } },
+            console: { error: (...args) => errors.push(args) },
+            setTimeout: callback => { timers.push(callback); return 1; }, clearTimeout() {}
+        });
+        vm.runInContext(source.slice(start, end), context);
+        await context.handleSettingsBtnClick(button, async () => {
+            calls++;
+            if (fail) throw new Error('request failed');
+        });
+        assert.equal(calls, 1);
+        assert.equal(errors.length, fail ? 1 : 0);
+        assert.equal(messages.length, fail ? 1 : 0);
+        assert.equal(classes.has('force-expanded'), true);
+        assert.equal(timers.length, 1);
+        timers[0]();
+        assert.equal(classes.has('force-expanded'), false);
+        assert.equal(blurred, true);
+    }
+});

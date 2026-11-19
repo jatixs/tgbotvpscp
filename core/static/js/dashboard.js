@@ -46,7 +46,14 @@ let chartRes = null;
 let chartNet = null;
 let nodeSSESource = null;
 let logSSESource = null;
+let logSwitchTimer = null;
+let pendingLogKey = null;
+let activeLogKey = null;
 let servicesSSESource = null;
+let servicesReconnectTimer = null;
+let servicesLoadRequest = null;
+let servicesLoadContainer = null;
+const pendingServiceControls = new Set();
 
 let agentChart = null;
 let agentRangeCtl = null;
@@ -96,6 +103,12 @@ window.initDashboard = function () {
 
     window.initGlobalLazyLoad?.();
 
+    if (typeof applyDashboardLayout === 'function') applyDashboardLayout();
+    if (typeof initDashboardEditOverlays === 'function') initDashboardEditOverlays();
+    if (typeof initNodeSortDropdown === 'function') initNodeSortDropdown();
+    if (typeof initAgentIpBadge === 'function') initAgentIpBadge();
+    if (typeof loadServices === 'function') loadServices();
+
     window.rebindDashboardSSE();
 
     initAgentChartRange();
@@ -125,9 +138,20 @@ window.initDashboard = function () {
     }
 
     initDashboardUptimeTooltip();
+    if (typeof updateQuickStatCharts === 'function') updateQuickStatCharts();
 };
 
 function cleanupDashboardSources() {
+    clearTimeout(logSwitchTimer);
+    logSwitchTimer = null;
+    pendingLogKey = null;
+    activeLogKey = null;
+    clearTimeout(servicesReconnectTimer);
+    servicesReconnectTimer = null;
+    if (servicesSSESource) {
+        servicesSSESource.close();
+        servicesSSESource = null;
+    }
     if (nodeSSESource) {
         nodeSSESource.close();
         nodeSSESource = null;
@@ -153,6 +177,14 @@ window.destroyDashboard = function () {
         agentChart.destroy?.();
         agentChart = null;
     }
+    [quickCpuChart, quickRamChart, quickDiskChart, chartRes, chartNet].forEach(chart => {
+        try { chart?.destroy?.(); } catch {}
+    });
+    quickCpuChart = null;
+    quickRamChart = null;
+    quickDiskChart = null;
+    chartRes = null;
+    chartNet = null;
 };
 
 function initAgentChartRange() {
@@ -590,7 +622,7 @@ document.addEventListener('click', function(e) {
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+function initNodeSortDropdown() {
     const wrapper = document.getElementById('nodeSortDropdownWrapper');
     if (wrapper) {
         const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
@@ -601,6 +633,10 @@ document.addEventListener('DOMContentLoaded', () => {
             else selectedTextEl.textContent = wrapper.dataset.txtCustom;
         }
     }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initNodeSortDropdown();
 });
 
 function updateNodesScrollMode(container, count) {
@@ -1057,11 +1093,19 @@ function renderAgentUptimePills(avail) {
     const downtimeLabel = document.getElementById('uptime_downtime_label');
     const pctLabel = document.getElementById('uptime_percent_label');
 
-    if (onlineLabel) onlineLabel.innerText = (I18N?.web_nodes_monitor_total_uptime || 'Total uptime') + ': ' + formatDuration(onlineSecs);
-    if (downtimeLabel) downtimeLabel.innerText = (I18N?.web_agent_downtime || 'Downtime') + ': ' + formatDuration(downSecs);
+    const isEn = typeof document !== 'undefined' && document.documentElement?.lang === 'en';
+    if (onlineLabel) {
+        const defaultOnline = isEn ? 'Online' : 'В сети';
+        onlineLabel.innerText = (I18N?.web_nodes_monitor_total_uptime || defaultOnline) + ': ' + formatDuration(onlineSecs);
+    }
+    if (downtimeLabel) {
+        const defaultDown = isEn ? 'Downtime' : 'Простой';
+        downtimeLabel.innerText = (I18N?.web_agent_downtime || defaultDown) + ': ' + formatDuration(downSecs);
+    }
     if (pctLabel) {
         const rollingPct = avail.rolling_uptime_pct !== undefined ? avail.rolling_uptime_pct : 100;
-        pctLabel.innerText = `${rollingPct}% ${I18N?.web_availability || I18N?.web_uptime || 'Доступность'}`;
+        const defaultAvail = isEn ? 'Availability' : 'Доступность';
+        pctLabel.innerText = `${rollingPct}% ${I18N?.web_availability || I18N?.web_uptime || defaultAvail}`;
     }
 
     const uptimeOnlineBar = document.getElementById('uptimeBarOnline');
@@ -1271,6 +1315,11 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
     // Skip while the block is sized "small" (canvas hidden, width is 0) - it will be
     // picked up on the next data tick once the block is resized and becomes visible.
     if (!canvas || canvas.clientWidth === 0) return existingChart;
+
+    if (existingChart && existingChart.canvas !== canvas) {
+        try { existingChart.destroy(); } catch {}
+        existingChart = null;
+    }
 
     const rawData = quickStatsHistory[historyKey];
     if (!rawData || !rawData.length) return existingChart;
@@ -1515,23 +1564,25 @@ function formatUptime(bt) {
     const d = Math.floor(seconds / 86400);
     const h = Math.floor((seconds % 86400) / 3600);
     const m = Math.floor((seconds % 3600) / 60);
-    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : 'd';
-    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : 'h';
-    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : 'm';
+    const isEn = typeof document !== 'undefined' && document.documentElement?.lang === 'en';
+    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : (isEn ? 'd' : 'д');
+    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : (isEn ? 'h' : 'ч');
+    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : (isEn ? 'm' : 'м');
     if (d > 0) return `${d}${unitD} ${h}${unitH}`;
     if (h > 0) return `${h}${unitH} ${m}${unitM}`;
     return `${m}${unitM}`;
 }
 
 function formatDuration(seconds) {
-    if (!seconds) return '0m';
+    const isEn = typeof document !== 'undefined' && document.documentElement?.lang === 'en';
+    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : (isEn ? 'd' : 'д');
+    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : (isEn ? 'h' : 'ч');
+    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : (isEn ? 'm' : 'м');
+    if (!seconds) return `0${unitM}`;
     const s = Math.floor(seconds);
     const d = Math.floor(s / 86400);
     const h = Math.floor((s % 86400) / 3600);
     const m = Math.floor((s % 3600) / 60);
-    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : 'd';
-    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : 'h';
-    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : 'm';
     if (d > 0) return `${d}${unitD} ${h}${unitH}`;
     if (h > 0) return `${h}${unitH} ${m}${unitM}`;
     return `${m}${unitM}`;
@@ -2099,6 +2150,23 @@ window.switchLogType = function (
     serviceName = selectedServiceLog?.name,
     serviceType = selectedServiceLog?.type
 ) {
+    if (!document.getElementById('logsContainer')) return;
+    const key = JSON.stringify([type, type === 'service' ? serviceName : null, type === 'service' ? serviceType : null]);
+    if (pendingLogKey === key) return;
+    clearTimeout(logSwitchTimer);
+    logSwitchTimer = null;
+    pendingLogKey = null;
+    if (activeLogKey === key && logSSESource && logSSESource.readyState !== 2) return;
+    pendingLogKey = key;
+    logSwitchTimer = setTimeout(() => {
+        logSwitchTimer = null;
+        pendingLogKey = null;
+        if (!document.getElementById('logsContainer')) return;
+        startLogStream(type, serviceName, serviceType, key);
+    }, 150);
+};
+
+function startLogStream(type, serviceName, serviceType, key) {
     if (type === 'service' && !trackedServiceLogs.some(service =>
         service.name === serviceName && service.type === serviceType
     )) return;
@@ -2144,8 +2212,11 @@ window.switchLogType = function (
         ? `&service=${encodeURIComponent(serviceName)}&service_type=${encodeURIComponent(serviceType)}`
         : '';
     logSSESource = new EventSource(`/api/events/logs?type=${encodeURIComponent(type)}${serviceQuery}`);
+    activeLogKey = key;
+    const source = logSSESource;
 
     logSSESource.addEventListener('logs', (e) => {
+        if (logSSESource !== source || document.getElementById('logsContainer') !== container) return;
         if (overlay) overlay.classList.add('hidden');
 
         try {
@@ -2208,6 +2279,7 @@ window.switchLogType = function (
     });
 
     logSSESource.onerror = () => {
+        if (logSSESource !== source) return;
         if (overlay) overlay.classList.add('hidden');
     };
 };
@@ -2582,7 +2654,12 @@ window.startNodeRename = function () {
     }
 };
 
-window.cancelNodeRename = function () {
+window.cancelNodeRename = function (token) {
+    if (token) {
+        const el = document.getElementById(`edit_name_${token}`);
+        if (el) el.classList.add('hidden');
+        return;
+    }
     const nameDisplay = document.getElementById('nodeNameContainer');
     const nameInputContainer = document.getElementById('nodeNameInputContainer');
 
@@ -2913,15 +2990,20 @@ function initServicesSSE() {
     const container = document.getElementById('services-container');
     if (!container) return;
 
-    // Close existing connection if any
+    if (servicesSSESource && servicesSSESource.readyState !== 2) return;
+    clearTimeout(servicesReconnectTimer);
+    servicesReconnectTimer = null;
+    // Close a terminal connection before opening a replacement.
     if (servicesSSESource) {
         servicesSSESource.close();
         servicesSSESource = null;
     }
 
     servicesSSESource = new EventSource('/api/events/services');
+    const source = servicesSSESource;
 
     servicesSSESource.addEventListener('services', (e) => {
+        if (servicesSSESource !== source || document.getElementById('services-container') !== container) return;
         try {
             const data = JSON.parse(e.data);
             const encryptedServices = data.services || [];
@@ -2940,6 +3022,7 @@ function initServicesSSE() {
     });
 
     servicesSSESource.addEventListener('session_status', (e) => {
+        if (servicesSSESource !== source) return;
         if (e.data === 'expired') {
             servicesSSESource.close();
             window.location.reload();
@@ -2947,16 +3030,19 @@ function initServicesSSE() {
     });
 
     servicesSSESource.addEventListener('shutdown', () => {
+        if (servicesSSESource !== source) return;
         servicesSSESource.close();
     });
 
     servicesSSESource.onerror = (err) => {
+        if (servicesSSESource !== source) return;
         console.error('SSE Services error:', err);
         // Try to reconnect after 5 seconds
         servicesSSESource.close();
         servicesSSESource = null;
-        setTimeout(() => {
-            if (document.getElementById('services-container')) {
+        servicesReconnectTimer = setTimeout(() => {
+            servicesReconnectTimer = null;
+            if (document.getElementById('services-container') === container) {
                 initServicesSSE();
             }
         }, 5000);
@@ -2967,9 +3053,12 @@ function initServicesSSE() {
 function loadServices() {
     const container = document.getElementById('services-container');
     if (!container) return;
+    if (servicesLoadContainer === container && servicesLoadRequest) return servicesLoadRequest;
+    servicesLoadContainer = container;
 
-    sseRequest('/api/services', 'services_list')
+    const request = sseRequest('/api/services', 'services_list')
         .then(data => {
+            if (document.getElementById('services-container') !== container) return;
             if (!data) {
                 container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
                 return;
@@ -2979,13 +3068,22 @@ function loadServices() {
             }
             renderServices(data);
 
-            // Restart SSE connection after manual refresh
+            // Reuse an existing live connection after manual refresh.
             initServicesSSE();
         })
         .catch(err => {
+            if (document.getElementById('services-container') !== container) return;
             console.error('Error loading services:', err);
             container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
+        })
+        .finally(() => {
+            if (servicesLoadRequest === request) {
+                servicesLoadRequest = null;
+                servicesLoadContainer = null;
+            }
         });
+    servicesLoadRequest = request;
+    return request;
 }
 
 function renderServices(services, forceRender = false) {
@@ -3513,12 +3611,15 @@ function renderServiceInfo(info) {
 }
 
 async function controlService(name, type, action) {
-    const confirmKey = 'web_services_confirm_' + action;
-    const confirmMsg = (I18N[confirmKey] || 'Are you sure you want to {action} {name}?').replace('{name}', name).replace('{action}', action);
-
-    if (!await window.showModalConfirm(confirmMsg, I18N.modal_title_confirm)) return;
-
+    const key = JSON.stringify([name, type]);
+    if (pendingServiceControls.has(key)) return;
+    pendingServiceControls.add(key);
     try {
+        const confirmKey = 'web_services_confirm_' + action;
+        const confirmMsg = (I18N[confirmKey] || 'Are you sure you want to {action} {name}?').replace('{name}', name).replace('{action}', action);
+
+        if (!await window.showModalConfirm(confirmMsg, I18N.modal_title_confirm)) return;
+
         const res = await fetch('/api/services/' + action, {
             method: 'POST',
             headers: {
@@ -3535,6 +3636,8 @@ async function controlService(name, type, action) {
     } catch (err) {
         console.error('Error:', err);
         window.showModalAlert(I18N.web_services_request_failed || 'Request failed', I18N.modal_title_error || 'Error');
+    } finally {
+        pendingServiceControls.delete(key);
     }
 }
 
@@ -3780,7 +3883,7 @@ async function loadAgentIpv4() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+async function initAgentIpBadge() {
     const badge = document.getElementById('agentIpBadge');
     if (!badge) return;
 
@@ -3824,6 +3927,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             handler(e);
         }
     });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await initAgentIpBadge();
 });
 
 
