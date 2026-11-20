@@ -42,6 +42,7 @@ from ..utils import (
     save_alerts_config_async,
 )
 from .auth import get_current_user
+from .notification_state import clear_user_notifications, get_user_notifications
 from .sse import prepare_event_stream
 
 routes = web.RouteTableDef()
@@ -422,24 +423,7 @@ async def api_get_notifications(request: web.Request) -> web.StreamResponse:
 
     uid = int(user["id"])
     lang = get_user_lang(uid)
-    user_alerts = ALERTS_CONFIG.get(uid, {})
-
-    filtered: list[dict[str, Any]] = []
-    for notification in list(shared_state.WEB_NOTIFICATIONS):
-        if user_alerts.get(notification["type"], False):
-            notif_copy = notification.copy()
-            if "text_map" in notif_copy and isinstance(notif_copy["text_map"], dict):
-                text_map = notif_copy["text_map"]
-                localized_text = text_map.get(lang) or text_map.get(current_config.DEFAULT_LANGUAGE)
-                if localized_text:
-                    notif_copy["text"] = localized_text
-                del notif_copy["text_map"]
-            filtered.append(notif_copy)
-
-    last_read = shared_state.WEB_USER_LAST_READ.get(uid, 0)
-    unread_count = sum(1 for item in filtered if item["time"] > last_read)
-    
-    payload = json.dumps({"notifications": filtered, "unread_count": unread_count})
+    payload = json.dumps(get_user_notifications(uid, lang, current_config.DEFAULT_LANGUAGE))
     event_str = f"event: notifications\ndata: {payload}\n\n"
     await response.write(event_str.encode("utf-8"))
     
@@ -460,11 +444,11 @@ async def api_read_notifications(request: web.Request) -> web.StreamResponse:
 @routes.post("/api/notifications/clear")
 async def api_clear_notifications(request: web.Request) -> web.StreamResponse:
     user = get_current_user(request)
-    if not user or not _is_admin(user):
-        return encrypted_json_response({"error": "Admin required"}, status=403)
+    if not user:
+        return encrypted_json_response({"error": "Unauthorized"}, status=401)
 
-    shared_state.WEB_NOTIFICATIONS.clear()
-    shared_state.WEB_USER_LAST_READ.clear()
+    uid = int(user["id"])
+    clear_user_notifications(uid)
     return encrypted_json_response({"status": "ok"})
 
 

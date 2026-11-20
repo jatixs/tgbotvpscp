@@ -338,7 +338,7 @@ const groups = {
         btnId: 'saveThresholdsBtn'
     },
     intervals: {
-        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_ping_mode', 'conf_timeout'],
+        ids: ['conf_traffic', 'conf_services', 'conf_ping', 'conf_ping_mode', 'conf_ping_target', 'conf_timeout'],
         btnId: 'saveIntervalsBtn'
     }
 };
@@ -2484,30 +2484,35 @@ window.closePingTargetModal = function() {
     }
 };
 
-window.savePingTargetModal = function() {
+window.savePingTargetModal = async function() {
     const selected = document.querySelector('input[name="ping_target_radio"]:checked');
-    if (selected) {
-        const val = selected.value;
-        const hiddenInput = document.getElementById('conf_ping_target');
-        const btnLabel = document.getElementById('label_ping_server');
-        
-        let text = "Google";
-        if (val === "cloudflare") text = "Cloudflare";
-        if (val === "internal") text = (typeof I18N !== 'undefined' && I18N.web_ping_target_internal) ? I18N.web_ping_target_internal : "Internal network";
+    if (!selected) return;
 
-        if (hiddenInput.value !== val) {
-            hiddenInput.value = val;
-            triggerAutoSave('intervals');
-        }
-        if (btnLabel) {
-            btnLabel.textContent = val === 'internal' && typeof I18N !== 'undefined'
-                ? I18N.web_ping_target_internal_short || text
-                : text;
-            btnLabel.title = text;
-        }
-        if (window.showToast) window.showToast(text);
+    const val = selected.value;
+    const hiddenInput = document.getElementById('conf_ping_target');
+    const btnLabel = document.getElementById('label_ping_server');
+    if (!hiddenInput) return;
+
+    let text = "Google";
+    if (val === "cloudflare") text = "Cloudflare";
+    if (val === "internal") text = (typeof I18N !== 'undefined' && I18N.web_ping_target_internal)
+        ? I18N.web_ping_target_internal : "Internal network";
+
+    const changed = hiddenInput.value !== val;
+    hiddenInput.value = val;
+    if (btnLabel) {
+        btnLabel.textContent = val === 'internal' && typeof I18N !== 'undefined'
+            ? I18N.web_ping_target_internal_short || text
+            : text;
+        btnLabel.title = text;
     }
     window.closePingTargetModal();
+
+    if (changed) {
+        // PING_TARGET is part of system configuration, not notification preferences.
+        checkForChanges('intervals');
+        await window.saveSystemConfig('intervals');
+    }
 };
 
 window.destroySettings = function () {

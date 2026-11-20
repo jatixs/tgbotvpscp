@@ -174,6 +174,11 @@
                     const curTheme = typeof getResolvedTheme === 'function' ? getResolvedTheme() : (localStorage.getItem('theme') || 'dark');
                     applyThemeUI(curTheme);
                 }
+                // Rebind shared header controls before page-specific initialization.
+                // A settings/dashboard error must not leave the replaced nav inert.
+                if (typeof initNotifications === 'function') initNotifications();
+                if (typeof renderHeaderBilling === 'function') renderHeaderBilling();
+
                 if (expectedPage === 'dashboard') {
                     window.initDashboard?.();
                 } else if (expectedPage === 'nodes') {
@@ -183,8 +188,6 @@
                 } else if (expectedPage === 'settings') {
                     window.initSettings?.();
                 }
-                if (typeof initNotifications === 'function') initNotifications();
-                if (typeof renderHeaderBilling === 'function') renderHeaderBilling();
                 if (typeof initNodeModalScaling === 'function') initNodeModalScaling();
                 if (typeof initHapticsToggle === 'function') initHapticsToggle();
                 if (typeof initGlobalLazyLoad === 'function') initGlobalLazyLoad();

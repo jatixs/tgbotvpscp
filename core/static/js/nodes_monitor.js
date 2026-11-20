@@ -1577,7 +1577,9 @@ window.showPingErrorModal = function(event) {
     }
 };
 
-window.closeSystemModal = closeSystemModal;
+// Keep the node monitor's private modal closer inside this module.
+// common.js owns the global window.closeSystemModal handler because it resolves
+// showModalConfirm() promises used by notification clearing and other API actions.
 window.showAlert = showAlert;
 window.showConfirm = showConfirm;
 })();

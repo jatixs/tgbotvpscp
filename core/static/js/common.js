@@ -1969,26 +1969,35 @@ window.checkSessionStatus = function() {
 
 let lastUnreadCount = -1;
 let lastNotificationsJson = "";
+let lastNotificationsList = null;
+let notificationOutsideClickBound = false;
 
 function initNotifications() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
 
-    const btn = document.getElementById('notifBtn');
-    if (!btn) return;
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
-    newBtn.addEventListener('click', toggleNotifications);
-    const clearBtn = document.getElementById('notifClearBtn');
-    if (clearBtn) {
-        const newClearBtn = clearBtn.cloneNode(true);
-        clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
-        newClearBtn.addEventListener('click', clearNotifications);
+    // SPA replaces the entire <nav>, including both notification buttons.
+    // Delegating clicks to document keeps the handler alive without cloning
+    // or re-binding detached header elements after every route change.
+    if (!document.getElementById('notifBtn')) return;
+
+    lastNotificationsJson = "";
+    if (lastNotificationsList !== null) {
+        updateNotifUI(lastNotificationsList, Math.max(0, lastUnreadCount));
     }
+    if (notificationOutsideClickBound) return;
+    notificationOutsideClickBound = true;
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) {
+        const target = e.target;
+        if (target.closest('#notifClearBtn')) {
+            clearNotifications(e);
+            return;
+        }
+        if (target.closest('#notifBtn')) {
+            toggleNotifications();
+        } else if (!target.closest('#notifDropdown')) {
             if (typeof closeNotifications === 'function') closeNotifications();
         }
-        if (!e.target.closest('#mobileSettingsDropdown') && !e.target.closest('#mobileSettingsBtn')) {
+        if (!target.closest('#mobileSettingsDropdown') && !target.closest('#mobileSettingsBtn')) {
             if (typeof closeMobileSettings === 'function') closeMobileSettings();
         }
     });
@@ -2207,23 +2216,77 @@ function createBlurOverlay(id, content) {
     });
 }
 
-async function clearNotifications(e) {
-    if (e) e.stopPropagation();
+let notificationClearInProgress = false;
 
-    if (!await window.showModalConfirm(I18N.web_clear_notif_confirm || "Clear all notifications?", I18N.modal_title_confirm)) return;
+async function clearNotifications(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    if (notificationClearInProgress) return;
+
+    const clearBtn = document.getElementById('notifClearBtn');
+    notificationClearInProgress = true;
+    if (clearBtn) clearBtn.disabled = true;
 
     try {
-        const res = await fetch('/api/notifications/clear', {
-            method: 'POST'
-        });
+        const message = (typeof I18N !== 'undefined' && I18N.web_clear_notif_confirm)
+            || "Clear all notifications?";
+        const title = typeof I18N !== 'undefined' ? I18N.modal_title_confirm : undefined;
+        if (!await window.showModalConfirm(message, title)) return;
 
-        if (res.ok) {
-            updateNotifUI([], 0);
-            if (window.showToast) window.showToast(I18N.web_notifications_cleared);
+        const sendClear = () => fetch('/api/notifications/clear', {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        let response = await sendClear();
+        let errorMessage = '';
+        if (!response.ok) {
+            errorMessage = `HTTP ${response.status}`;
+            try {
+                const body = await response.json();
+                if (body && typeof body.error === 'string') errorMessage = body.error;
+            } catch (_) { /* HTTP status remains available without JSON */ }
+
+            // An authenticated session can outlive its one-hour CSRF token.
+            // Refresh it via the authenticated status endpoint, then retry once.
+            if (response.status === 403 && errorMessage === 'Invalid CSRF token') {
+                const auth = await fetch('/api/auth/status', {
+                    method: 'GET', credentials: 'same-origin', cache: 'no-store'
+                });
+                if (auth.ok) {
+                    response = await sendClear();
+                    errorMessage = `HTTP ${response.status}`;
+                    if (!response.ok) {
+                        try {
+                            const body = await response.json();
+                            if (body && typeof body.error === 'string') errorMessage = body.error;
+                        } catch (_) { /* Retain HTTP status */ }
+                    }
+                }
+            }
         }
-    } catch (e) {
-        console.error("Clear notifications error:", e);
-        if (window.showModalAlert) window.showModalAlert(String(e), I18N.web_error_short || "Error");
+        if (!response.ok) throw new Error(errorMessage);
+
+        const result = await response.json();
+        if (!result || result.status !== 'ok') {
+            throw new Error('Notification clear was not confirmed by the server');
+        }
+        // The shared API/SSE cutoff is committed; make the local list match immediately.
+        updateNotifUI([], 0);
+        if (typeof window.showToast === 'function') {
+            window.showToast((typeof I18N !== 'undefined' && I18N.web_notifications_cleared)
+                || 'Notifications cleared');
+        }
+    } catch (error) {
+        console.error('Clear notifications error:', error);
+        if (typeof window.showToast === 'function') {
+            const prefix = (typeof I18N !== 'undefined' && I18N.web_error_short) || 'Error';
+            window.showToast(`${prefix}: ${error.message || error}`);
+        }
+    } finally {
+        notificationClearInProgress = false;
+        if (clearBtn && clearBtn.isConnected) clearBtn.disabled = false;
     }
 }
 window.clearNotifications = clearNotifications;
@@ -2265,6 +2328,7 @@ function updateNotifUI(list, count) {
     } else badge.classList.add('hidden');
 
     lastUnreadCount = count;
+    lastNotificationsList = list;
 
     const clearBtn = document.getElementById('notifClearBtn');
     if (clearBtn) {
@@ -2683,11 +2747,21 @@ function animateModalClose(modal) {
 let sysModalResolve = null;
 
 function closeSystemModal(result) {
+    // Resolve the pending confirmation before any visual clean-up. A rendering
+    // or animation error must not swallow the user's OK and leave API work stuck.
+    const resolve = sysModalResolve;
+    sysModalResolve = null;
+    if (resolve) resolve(result);
+
     const modal = document.getElementById('systemModal');
-    animateModalClose(modal);
-    if (sysModalResolve) {
-        sysModalResolve(result);
-        sysModalResolve = null;
+    if (modal) {
+        try {
+            animateModalClose(modal);
+        } catch (error) {
+            console.error('System modal close animation failed:', error);
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
     }
 }
 window.closeSystemModal = closeSystemModal;

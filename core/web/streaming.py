@@ -27,6 +27,7 @@ from ..utils import (
     get_node_uptime_snapshot,
 )
 from .auth import COOKIE_NAME, SERVER_SESSIONS, _get_public_base_url, get_current_user
+from .notification_state import get_user_notifications
 
 # Lazy imports: traffic_module and services are loaded on-demand
 # from modules import traffic as traffic_module
@@ -492,26 +493,10 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                 )
             await _write_sse(response, "nodes_list", {"nodes": nodes_data})
 
-            user_alerts = shared_state.ALERTS_CONFIG.get(user_id, {})
-            user_lang = get_user_lang(user_id)
-            filtered_notifications: list[dict[str, Any]] = []
-            for notification in list(shared_state.WEB_NOTIFICATIONS):
-                if user_alerts.get(notification["type"], False):
-                    notif_copy = notification.copy()
-                    text_map = notif_copy.get("text_map")
-                    if isinstance(text_map, dict):
-                        localized_text = text_map.get(user_lang) or text_map.get(DEFAULT_LANGUAGE)
-                        if localized_text:
-                            notif_copy["text"] = localized_text
-                        del notif_copy["text_map"]
-                    filtered_notifications.append(notif_copy)
-
-            last_read = shared_state.WEB_USER_LAST_READ.get(user_id, 0)
-            unread_count = sum(1 for item in filtered_notifications if item["time"] > last_read)
             await _write_sse(
                 response,
                 "notifications",
-                {"notifications": filtered_notifications, "unread_count": unread_count},
+                get_user_notifications(user_id, get_user_lang(user_id), DEFAULT_LANGUAGE),
             )
 
             if shutdown_event:

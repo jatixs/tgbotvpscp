@@ -174,6 +174,8 @@ function createFixture({ initialPath = '/nodes', enableViewTransitions = false, 
         console,
         window,
         document,
+        initNotifications: () => actions.push('initNotifications'),
+        renderHeaderBilling: () => actions.push('renderHeaderBilling'),
         location: window.location,
         fetch: window.fetch,
         secureFetch: window.secureFetch,
@@ -630,4 +632,29 @@ test('click bursts request only the final page and reuse an in-flight navigation
     await new Promise(resolve => setTimeout(resolve, 0));
     assert.equal(f.getPushedUrl(), '/settings');
     assert.equal(f.actions.filter(action => action === 'initSettings').length, 1);
+});
+
+test('SPA dashboard to settings reinitializes header before settings-specific code', async () => {
+    const f = createFixture({initialPath: '/'});
+    const click = f.docListeners.get('click');
+    click({
+        target: {closest: sel => sel === 'a' ? {
+            href: 'http://localhost:8080/settings', target: '_self',
+            hasAttribute: () => false,
+        } : null},
+        button: 0,
+        preventDefault() {},
+        stopImmediatePropagation() {},
+    });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    const {actions} = f;
+    assert.ok(actions.includes('nav.replaceWith'), 'SPA must replace navigation DOM');
+    assert.ok(actions.includes('initNotifications'), 'bell must be wired after header replacement');
+    assert.ok(actions.includes('renderHeaderBilling'), 'billing must be re-rendered on new header');
+    assert.ok(actions.indexOf('nav.replaceWith') < actions.indexOf('initNotifications'));
+    assert.ok(actions.indexOf('initNotifications') < actions.indexOf('initSettings'),
+        'route errors must not prevent the new bell from working');
+    assert.ok(actions.indexOf('renderHeaderBilling') < actions.indexOf('initSettings'),
+        'billing must not depend on settings page initialization');
+    assert.equal(f.getAssignedUrl(), null, 'no forced full-page reload');
 });
