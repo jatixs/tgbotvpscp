@@ -570,6 +570,14 @@ def main(argv=None):
         return
 
     try:
+        # core.config initializes its encrypted settings DB synchronously on import.
+        # Import it before asyncio.run() for every DB-backed CLI command: importing
+        # for the first time inside the running loop raises from init_bot_db_sync().
+        config = None
+        if args.command in {"adduser", "webpass", "stats", "update-nodes", "tls"}:
+            from core import config as cli_config
+            config = cli_config
+
         if args.command == "adduser":
             asyncio.run(cmd_adduser(args))
         elif args.command == "webpass":
@@ -585,9 +593,6 @@ def main(argv=None):
         elif args.command == "status":
             asyncio.run(cmd_status(args))
         elif args.command == "update-nodes":
-            # Importing config initializes the settings database synchronously.
-            from core import config
-
             asyncio.run(cmd_update_nodes(args, config))
         elif args.command == "tls" and args.tls_command == "status":
             asyncio.run(cmd_tls_status(args))
