@@ -32,8 +32,8 @@
         var I18N = JSON.parse({{ i18n_json | tojson }});
         if (typeof I18N === 'string') { try { I18N = JSON.parse(I18N); } catch {} }
         window.I18N = Object.assign({}, window.I18N || {}, I18N);
-        const SYS_CONFIG = JSON.parse({{ config_json | tojson }});
-        const master_billing_json = JSON.parse({{ master_billing_json | default('null', true) | tojson }});
+        window.SYS_CONFIG = JSON.parse({{ config_json | tojson }});
+        window.master_billing_json = JSON.parse({{ master_billing_json | default('null', true) | tojson }});
         {{ user_role_js | safe }}
     </script>
     <script src="/static/vendor/twemoji.min.js"></script>
@@ -246,7 +246,7 @@
     </nav>
     <main data-panel-page="dashboard" data-panel-i18n="{{ i18n_json | forceescape }}" data-panel-key="{{ panel_web_key }}"
           data-panel-role="{{ panel_role }}" data-panel-role-level="{{ user_role_level }}" data-panel-owner="{{ panel_owner }}"
-          data-panel-billing="{{ master_billing_json | forceescape }}" data-panel-ping-mode="{{ global_ping_mode }}"
+          data-panel-billing="{{ master_billing_json | forceescape }}" data-panel-config="{{ config_json | forceescape }}" data-panel-ping-mode="{{ global_ping_mode }}"
           class="max-w-7xl mx-auto px-4 mt-4 sm:mt-8 relative z-10">
         <div id="dashboardBlocksContainer" class="grid grid-cols-12 gap-6 pb-20 grid-flow-row-dense">
             <div data-block-id="quick_stats_uptime" data-default-size="small" class="dashboard-block relative col-span-12 sm:col-span-6 lg:col-span-3 lg:row-span-1 bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl p-5 shadow-lg dark:shadow-none flex flex-col justify-between h-32 overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-help"

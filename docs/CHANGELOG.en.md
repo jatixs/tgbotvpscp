@@ -4,11 +4,38 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.28.0-blue?style=for-the-badge" alt="Version 1.28.0"/>
+    <img src="https://img.shields.io/badge/version-v1.28.1-blue?style=for-the-badge" alt="Version 1.28.1"/>
     <img src="https://img.shields.io/badge/build-99-purple?style=for-the-badge" alt="Build 99"/>
-    <img src="https://img.shields.io/badge/date-Nov%2019%202026-green?style=for-the-badge" alt="Date Nov 19 2026"/>
+    <img src="https://img.shields.io/badge/date-Nov%2020%202026-green?style=for-the-badge" alt="Date Nov 20 2026"/>
     <img src="https://img.shields.io/badge/status-stable-green?style=for-the-badge" alt="Status Stable"/>
 </p>
+
+## [1.28.1] - 2026-11-20
+
+Version **1.28.1** focuses on WebUI reliability. Navigation, notifications, billing, and settings now work together across page transitions without requiring a manual refresh.
+
+### 🔧 WebUI fixes
+
+* **The notification bell works after navigation.** Opening Settings or another section without a full page reload no longer leaves the notification controls unresponsive.
+* **The billing button stays visible.** Server rental details and the billing control are restored in the header when moving between Dashboard and Settings.
+* **Settings initialize correctly.** User, node, and configuration data are available after in-app navigation, just as they are on a fresh page load.
+* **Confirmation dialogs no longer block actions.** Fixed a handler conflict that allowed the “Clear all” dialog to close without sending the request.
+
+### 🔔 Notifications
+
+* **“Clear all” now clears the visible list.** After server confirmation, the list updates and a success message appears.
+* **Clearing affects only the current user.** Other users retain their own notification history.
+* **Errors are visible.** Failed requests show a message rather than failing silently. If the security token has expired, the app attempts to refresh it and retry once.
+* **Repeated taps are handled safely.** Rapid taps do not start overlapping clear operations.
+
+### ⚙️ Settings and reliability
+
+* **Ping target selection saves correctly.** Choosing Google, Cloudflare, or the internal network updates the system configuration without extra steps.
+* **Added regression tests.** Automated checks cover navigation, header controls, confirmation dialogs, notification clearing, and restoring page data.
+
+> **Note:** This is a maintenance release for existing features. No server reconfiguration or notification setup is required.
+
+---
 
 ## [1.28.0] - 2026-11-19
 

@@ -24,12 +24,12 @@
         var I18N = JSON.parse({{ i18n_json | tojson }});
         if (typeof I18N === 'string') { try { I18N = JSON.parse(I18N); } catch {} }
         window.I18N = Object.assign({}, window.I18N || {}, I18N);
-        const master_billing_json = JSON.parse({{ master_billing_json | default('null', true) | tojson }});
-        const USERS_DATA = JSON.parse({{ users_data_json | tojson }});
-        const NODES_DATA = JSON.parse({{ nodes_data_json | tojson }});
+        window.master_billing_json = JSON.parse({{ master_billing_json | default('null', true) | tojson }});
+        window.USERS_DATA = JSON.parse({{ users_data_json | tojson }});
+        window.NODES_DATA = JSON.parse({{ nodes_data_json | tojson }});
         window.HAS_ACTIVE_NODES = {{ val_has_active_nodes }};
-        const KEYBOARD_CONFIG = JSON.parse({{ keyboard_config_json | tojson }});
-        let USER_ALERTS = JSON.parse({{ user_alerts_json | tojson }});
+        window.KEYBOARD_CONFIG = JSON.parse({{ keyboard_config_json | tojson }});
+        window.USER_ALERTS = JSON.parse({{ user_alerts_json | tojson }});
         {{ user_role_js | safe }}
         </script>
         <script src="/static/vendor/twemoji.min.js" crossorigin="anonymous"></script>
@@ -221,6 +221,12 @@
         </nav>
         <main data-panel-page="settings" data-panel-i18n="{{ i18n_json | forceescape }}" data-panel-key="{{ panel_web_key }}"
               data-panel-role="{{ panel_role }}" data-panel-role-level="{{ user_role_level }}" data-panel-owner="{{ panel_owner }}"
+              data-panel-billing="{{ master_billing_json | default('null', true) | forceescape }}"
+              data-panel-users="{{ users_data_json | forceescape }}"
+              data-panel-nodes="{{ nodes_data_json | forceescape }}"
+              data-panel-keyboard="{{ keyboard_config_json | forceescape }}"
+              data-panel-user-alerts="{{ user_alerts_json | forceescape }}"
+              data-panel-has-active-nodes="{{ val_has_active_nodes }}"
               class="max-w-4xl mx-auto px-4 mt-6 sm:mt-8 relative z-10">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col gap-6">
