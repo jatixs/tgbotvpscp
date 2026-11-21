@@ -25,10 +25,15 @@
         if (typeof I18N === 'string') { try { I18N = JSON.parse(I18N); } catch {} }
         window.I18N = Object.assign({}, window.I18N || {}, I18N);
         const I18N_ALL = {{ all_locales | default({}) | tojson }};
+        window.I18N_ALL = I18N_ALL;
         const BOT_USERNAME = {{ bot_username | default('') | tojson }};
+        window.BOT_USERNAME = BOT_USERNAME;
         const TG_CLIENT_ID = {{ tg_client_id | default('') | tojson }};
+        window.TG_CLIENT_ID = TG_CLIENT_ID;
         const CURRENT_LANG = {{ current_lang | default('') | tojson }};
+        window.CURRENT_LANG = CURRENT_LANG;
         const TELEGRAM_ONLY_MODE = {{ 'true' if telegram_only_mode else 'false' }};
+        window.TELEGRAM_ONLY_MODE = TELEGRAM_ONLY_MODE;
         {{ web_key_js | safe }}
         </script>
         {% if tg_client_id %}

@@ -310,8 +310,8 @@ LOG_FILE_PATH = "/opt/tg-bot/logs/node/node.log"
 # Create log directory if missing (for manual run)
 try:
     os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
-except Exception:
-    pass
+except OSError:
+    logging.warning("Unable to create node log directory", exc_info=True)
 
 file_handler = logging.FileHandler(LOG_FILE_PATH)
 stream_handler = logging.StreamHandler()
@@ -796,6 +796,24 @@ def _do_icmp_ping(target_ip="8.8.8.8"):
         logging.debug("ICMP probe unavailable", exc_info=True)
     return None
 
+def get_ipv6_address():
+    """Report a global interface address; skip loopback, link-local and ULA."""
+    try:
+        for interface in psutil.net_if_addrs().values():
+            for info in interface:
+                if info.family != socket.AF_INET6:
+                    continue
+                try:
+                    address = ipaddress.ip_address(info.address.split("%", 1)[0])
+                except ValueError:
+                    continue
+                if address.version == 6 and address.is_global:
+                    return str(address)
+    except (OSError, RuntimeError) as error:
+        logging.debug("Could not collect node IPv6 address: %s", error)
+    return ""
+
+
 def get_system_stats():
     global _HEARTBEAT_NET_STATS
     try:
@@ -919,6 +937,8 @@ def get_system_stats():
             "process_cpu": get_top_processes('cpu'),
             "process_ram": get_top_processes('ram'),
             "external_ip": ext_ip,
+            "ipv4": ext_ip,
+            "ipv6": get_ipv6_address(),
             "ping": ping_ms if ping_ms is not None else "n/a"
         }
         return result

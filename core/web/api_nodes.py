@@ -35,6 +35,7 @@ from ..config import (
 )
 from ..i18n import STRINGS, get_user_lang
 from ..i18n import get_text as _
+from ..network_addresses import node_ip_addresses
 from ..messaging import send_alert
 from ..rbac import get_role_level as get_user_role_level
 from ..rbac import is_admin as _is_admin
@@ -122,6 +123,8 @@ def _build_nodes_monitor_payload(all_nodes: dict[str, dict[str, Any]], *, now: f
                 "id": node["id"],
                 "name": encrypt_for_web(node.get("name", "Unknown")),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
+                "ipv4": encrypt_for_web(node_ip_addresses(node)["ipv4"]),
+                "ipv6": encrypt_for_web(node_ip_addresses(node)["ipv6"]),
                 "status": status,
                 "cpu": stats.get("cpu", 0),
                 "ram": stats.get("ram", 0),
@@ -494,6 +497,8 @@ async def handle_nodes_list_json(request: web.Request) -> web.StreamResponse:
                 "id": node["id"],
                 "name": encrypt_for_web(node.get("name", "Unknown")),
                 "ip": encrypt_for_web(node.get("ip", "Unknown")),
+                "ipv4": encrypt_for_web(node_ip_addresses(node)["ipv4"]),
+                "ipv6": encrypt_for_web(node_ip_addresses(node)["ipv6"]),
                 "status": status,
                 "cpu": stats.get("cpu", 0),
                 "ram": stats.get("ram", 0),

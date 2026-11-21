@@ -14,9 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # Важно выкачать всю историю для проверки старых коммитов
+          fetch-depth: 0 # Fetch complete history to audit all commits
 
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Если найдет секрет — сборка упадет и пришлет уведомление
+          # Fails the build and sends an alert if secrets are detected

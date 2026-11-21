@@ -1,4 +1,18 @@
 /* Read server-rendered page configuration without evaluating inline JavaScript. */
+function readPanelJson(page, attribute, fallback = null) {
+    const raw = page.getAttribute(attribute);
+    if (raw === null) return fallback;
+    try {
+        let parsed = JSON.parse(raw);
+        if (typeof parsed === 'string') {
+            try { parsed = JSON.parse(parsed); } catch {}
+        }
+        return parsed;
+    } catch {
+        return fallback;
+    }
+}
+
 window.applyPanelBootstrap = function (root = document) {
     const page = root.querySelector('main[data-panel-page]');
     if (!page) return;
@@ -22,16 +36,20 @@ window.applyPanelBootstrap = function (root = document) {
         try { globalThis.I18N = window.I18N; } catch {}
     }
     window.i18n = window.i18n || {};
-    try {
-        const rawBilling = page.getAttribute('data-panel-billing') || page.dataset.panelBilling || 'null';
-        let parsedBilling = typeof rawBilling === 'string' ? JSON.parse(rawBilling) : rawBilling;
-        if (typeof parsedBilling === 'string') {
-            try { parsedBilling = JSON.parse(parsedBilling); } catch {}
-        }
-        window.master_billing_json = parsedBilling;
-    } catch {
-        window.master_billing_json = null;
+    // Every SPA target carries its own data; fetched <script> tags are not executed.
+    // Rehydrate the globals that full page loads previously created inline.
+    window.master_billing_json = readPanelJson(page, 'data-panel-billing');
+    if (page.dataset.panelPage === 'settings') {
+        window.USERS_DATA = readPanelJson(page, 'data-panel-users');
+        window.NODES_DATA = readPanelJson(page, 'data-panel-nodes');
+        window.KEYBOARD_CONFIG = readPanelJson(page, 'data-panel-keyboard', {});
+        window.USER_ALERTS = readPanelJson(page, 'data-panel-user-alerts', {});
+        window.HAS_ACTIVE_NODES = page.dataset.panelHasActiveNodes === 'true';
+    } else if (page.dataset.panelPage === 'dashboard') {
+        window.SYS_CONFIG = readPanelJson(page, 'data-panel-config', {});
     }
-    window.GLOBAL_PING_MODE = page.dataset.panelPingMode || 'http';
+    if (page.dataset.panelPingMode) {
+        window.GLOBAL_PING_MODE = page.dataset.panelPingMode;
+    }
 };
 window.applyPanelBootstrap();

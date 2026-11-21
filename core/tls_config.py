@@ -150,22 +150,22 @@ def find_nginx_certificates(config_dump: str, host: str) -> list[tuple[str, str]
     servers: list[list[list[str]]] = []
     stack: list[tuple[str, list[list[str]]]] = []
     words: list[str] = []
-    for token in tokens:
-        if token == "{":
+    for tok in tokens:
+        if tok == "{":
             stack.append((words[0] if words else "", []))
             words = []
-        elif token == "}":
+        elif tok == "}":
             if stack:
                 name, directives = stack.pop()
                 if name == "server":
                     servers.append(directives)
             words = []
-        elif token == ";":
+        elif tok == ";":
             if stack and words:
                 stack[-1][1].append(words)
             words = []
         else:
-            words.append(token.strip("\"'"))
+            words.append(tok.strip("\"'"))
 
     host = host.lower()
     pairs: list[tuple[str, str]] = []

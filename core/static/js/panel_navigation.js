@@ -108,7 +108,7 @@
             };
             const requestClient = (typeof window !== 'undefined' && typeof window.secureFetch === 'function')
                 ? window.secureFetch
-                : (typeof secureFetch === 'function' ? secureFetch : null);
+                : (typeof window.secureFetch === 'function' ? window.secureFetch : null);
             if (!requestClient) throw new Error('Secure transport unavailable');
             let response = await requestClient(targetUrl, options);
             // A transient gateway failure must not send the user to an error document.
@@ -147,7 +147,7 @@
                 });
             });
 
-            function updateDOM() {
+            const updateDOM = function updateDOM() {
                 // A newer request may supersede us while the browser captures the old frame.
                 if (controller.signal.aborted) return;
                 window.destroyDashboard?.();
@@ -170,10 +170,15 @@
                 document.body.style.overflow = '';
                 if (history) window.history.pushState({ panelRoute: true }, '', targetUrl);
                 window.applyPanelBootstrap?.();
-                if (typeof applyThemeUI === 'function') {
-                    const curTheme = typeof getResolvedTheme === 'function' ? getResolvedTheme() : (localStorage.getItem('theme') || 'dark');
-                    applyThemeUI(curTheme);
+                if (typeof window.applyThemeUI === 'function') {
+                    const curTheme = typeof window.getResolvedTheme === 'function' ? window.getResolvedTheme() : (localStorage.getItem('theme') || 'dark');
+                    window.applyThemeUI(curTheme);
                 }
+                // Rebind shared header controls before page-specific initialization.
+                // A settings/dashboard error must not leave the replaced nav inert.
+                if (typeof window.initNotifications === 'function') window.initNotifications();
+                if (typeof window.renderHeaderBilling === 'function') window.renderHeaderBilling();
+
                 if (expectedPage === 'dashboard') {
                     window.initDashboard?.();
                 } else if (expectedPage === 'nodes') {
@@ -183,13 +188,11 @@
                 } else if (expectedPage === 'settings') {
                     window.initSettings?.();
                 }
-                if (typeof initNotifications === 'function') initNotifications();
-                if (typeof renderHeaderBilling === 'function') renderHeaderBilling();
-                if (typeof initNodeModalScaling === 'function') initNodeModalScaling();
-                if (typeof initHapticsToggle === 'function') initHapticsToggle();
-                if (typeof initGlobalLazyLoad === 'function') initGlobalLazyLoad();
-                if (typeof parsePageEmojis === 'function') parsePageEmojis();
-            }
+                if (typeof window.initNodeModalScaling === 'function') window.initNodeModalScaling();
+                if (typeof window.initHapticsToggle === 'function') window.initHapticsToggle();
+                if (typeof window.initGlobalLazyLoad === 'function') window.initGlobalLazyLoad();
+                if (typeof window.parsePageEmojis === 'function') window.parsePageEmojis();
+            };
 
             const isPerfMode = Boolean(document.documentElement?.classList?.contains?.('perf-mode'))
                 || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);

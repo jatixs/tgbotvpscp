@@ -57,8 +57,8 @@ def run_crash_alert_oneshot():
             with open(bot_log_path, "r", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
                 error_tail = "".join(lines[-20:]).strip()
-        except Exception:
-            pass
+        except OSError:
+            logging.debug("Unable to read bot log for crash alert", exc_info=True)
 
     if not error_tail:
         try:

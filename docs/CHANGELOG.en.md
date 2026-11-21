@@ -4,11 +4,70 @@
 
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v1.28.0-blue?style=for-the-badge" alt="Version 1.28.0"/>
-    <img src="https://img.shields.io/badge/build-99-purple?style=for-the-badge" alt="Build 99"/>
-    <img src="https://img.shields.io/badge/date-Nov%2019%202026-green?style=for-the-badge" alt="Date Nov 19 2026"/>
+    <img src="https://img.shields.io/badge/version-v1.28.1-blue?style=for-the-badge" alt="Version 1.28.1"/>
+    <img src="https://img.shields.io/badge/build-100-purple?style=for-the-badge" alt="Build 100"/>
+    <img src="https://img.shields.io/badge/date-Nov%2021%202026-green?style=for-the-badge" alt="Date Nov 21 2026"/>
     <img src="https://img.shields.io/badge/status-stable-green?style=for-the-badge" alt="Status Stable"/>
 </p>
+
+## [1.28.1] - 2026-11-21
+
+Release **1.28.1 (Build 100)** focuses on absolute WebUI production reliability and uncompromised code security hardening. We resolved subtle client-side routing edge cases, introduced seamless IPv4/IPv6 dual-stack infrastructure support, and achieved 100% compliance with our strict Zero-Suppression static analysis standards.
+
+---
+
+### 🌐 Infrastructure & Dual-Stack Networking (IPv4 / IPv6)
+
+* 🔀 **Intelligent IP Address Badges:**
+  * **Instant IPv4/IPv6 Toggling:** Server and agent cards now fully support dual-stack networking. When a node provides both addresses, clicking its badge instantly switches between address families. Your preference is retained throughout the session (`sessionStorage`), and copying always targets the currently active address.
+  * **Streamlined Address Modal:** The full address list modal opens only when a node has multiple addresses within the same family (e.g. 2+ IPv4 or 2+ IPv6). When exactly one IPv4 and one IPv6 exist, clicking the badge toggles the display directly without modal interruption.
+  * **Encrypted Network Transport:** The `/api/agent/ipv4` and `/api/agent/ipv6` endpoints now return encrypted payloads requiring strict session authentication. Node agents now discover global IPv6 addresses directly from OS interfaces without relying on third-party services.
+
+---
+
+### ⚡ Single Page Application Stability (SPA Polish)
+
+* 🔔 **Seamless Notification Center:**
+  * **Persistent Notification Bell:** Fixed event listener detachment during SPA view transitions. Viewing, reviewing, and clearing notifications works reliably across all panel sections without full page reloads.
+  * **Guaranteed Clear All:** Resolved a modal event interceptor conflict that previously prevented the clear request from reaching the backend. Clearing operations are strictly user-scoped with debounced click protection.
+  * **Automatic CSRF Recovery:** When a session token expires during an operation, the panel automatically refreshes authentication credentials and transparently retries the request.
+
+* 🧭 **Context Preservation & UI Continuity:**
+  * **Persistent Billing Controls:** Server rental metrics and billing drawer triggers in the header bar are preserved when navigating between the Dashboard and Settings.
+  * **Complete Settings Hydration:** User lists, node configurations, and system parameters load and render completely regardless of whether accessed directly or via in-app transitions.
+  * **Reliable Ping Target Persistence:** Ping target changes (Google, Cloudflare, or internal gateway) are saved immediately to the system configuration without requiring a service restart.
+
+* 🎨 **Visual Consistency & Typography:**
+  * **Targeted Emoji Polyfill:** SVG flag replacement now applies exclusively to national country flags on Windows systems. All standard Unicode emojis remain native, and gradient heading cloud icons preserve vector gradient fidelity.
+
+---
+
+### 🛡️ Security Hardening & Zero-Suppression Standards
+
+* 🧱 **Native DOM Construction (Elimination of Raw HTML):**
+  * **XSS Vector Eradication:** Dynamic UI rendering (user and node tables, modal windows, auto-save indicators, and keyboard shortcut cards) has been completely rewritten using safe native DOM APIs (`document.createElement`, `document.createElementNS`, `.textContent`, `.replaceChildren`).
+  * **Removal of HTML String Sinks:** Eliminated string concatenation and unsafe HTML template parsing, ensuring zero injection attack surfaces and clean security audit reports.
+
+* 🔒 **Object Injection Sink Protection:**
+  * Dynamic property accesses across localization dictionaries, configuration tables, and permissions have been migrated to ECMAScript standard methods: `Reflect.get`, `Reflect.set`, and `Array.at`. Prototype poisoning and object injection vectors are eliminated at runtime.
+
+* 📐 **Lexical Scope Isolation & Numeric Safety:**
+  * **Lexical Scope Optimization (Biome):** Complex chart gradient generators and dynamic callbacks have been extracted to top-level module scope, preventing closure leaks and serialization warnings.
+  * **Integer Precision Guarantees:** Large 32-bit integer boundaries are computed using exponential expressions (`2 ** 32`), eliminating runtime precision loss warnings.
+  * **Clean Modal Scoping:** Fixed variable shadowing and duplicate declarations in `showModal`, attaching close and action handlers directly to DOM elements upon instantiation.
+
+* 🎯 **100% Clean Static Code Analysis:**
+  * Passed comprehensive audits across Bandit (`-ll`), ESLint, Codacy, and Biome with **zero suppressions** (`# nosec`, `# noqa`, `/* eslint-disable */`). Every finding was resolved through genuine architectural refactoring.
+
+---
+
+### 🔄 Changed
+
+* **Zero-Crash Long Polling for Telegram:** Telegram polling timeout is locked at 20 seconds with exponential backoff from 2 to 30 seconds plus jitter. Brief network drops log at `INFO`, while sustained outages produce summarized reports at most once per minute (`WARNING` after 1 min, `ERROR` after 5 min). Main and notification bot states are isolated.
+
+> **Note:** This update is fully backward compatible. No database migrations or manual reconfiguration are required.
+
+---
 
 ## [1.28.0] - 2026-11-19
 

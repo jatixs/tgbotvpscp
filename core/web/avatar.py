@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 
 
 def get_avatar_html(user: dict) -> str:
-    raw = str(user.get("photo_url", ""))
+    raw = str(user.get("photo_url") or "🏳️")
     try:
         parsed = urlsplit(raw)
         if (
