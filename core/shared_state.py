@@ -24,6 +24,8 @@ AGENT_BOT_START_TIME: float = time.time()
 AGENT_AVAILABILITY: dict = {}
 WEB_NOTIFICATIONS = deque(maxlen=50)
 WEB_USER_LAST_READ = {}
+# Per-user cutoff for hiding previously cleared web notifications.
+WEB_USER_CLEARED_AT = {}
 RECENT_SSH_LOGINS = {}
 IS_RESTARTING = False
 

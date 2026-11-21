@@ -18,6 +18,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from .. import config as current_config
 from .. import nodes_db, shared_state
+from ..network_addresses import collect_ipv6_addresses
 from ..config import ADMIN_USER_ID, BASE_DIR, DEFAULT_LANGUAGE, TG_BOT_NAME
 from ..i18n import get_text as _
 from ..i18n import get_user_lang
@@ -28,6 +29,7 @@ from ..rbac import is_root as _is_root
 from ..utils import encrypt_for_web, generate_favicons, get_app_version, get_web_key
 
 from . import auth as web_auth
+from .agent_addresses import agent_address_response
 # Lazy import traffic_module when needed
 from .avatar import get_avatar_html as _get_avatar_html
 
@@ -297,22 +299,12 @@ async def handle_service_worker(request: web.Request) -> web.StreamResponse:
 
 @routes.get("/api/agent/ipv4")
 async def handle_agent_ipv4(request: web.Request) -> web.StreamResponse:
-    user = web_auth.get_current_user(request)
-    if not user:
-        return web.json_response({"error": "Unauthorized"}, status=401)
+    return await agent_address_response(request, 4, _collect_ipv4_addresses, _agent_ip)
 
-    ips = _collect_ipv4_addresses()
-    primary = _agent_ip()
-    if primary in {"", "Loading...", "Unknown", "-"}:
-        primary = ips[0] if ips else "-"
 
-    return web.json_response({
-        "primary": primary,
-        "source_ip": primary,
-        "agent_ip": primary,
-        "ips": ips,
-        "count": len(ips),
-    })
+@routes.get("/api/agent/ipv6")
+async def handle_agent_ipv6(request: web.Request) -> web.StreamResponse:
+    return await agent_address_response(request, 6, collect_ipv6_addresses)
 
 
 @routes.get("/terminal")
@@ -504,7 +496,6 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_services_search": _("web_services_search", lang),
         "web_services_info_title": _("web_services_info_title", lang),
         "web_services_info_loading": _("web_services_info_loading", lang),
-        "user_role_level": get_role_level(user_id),
         "web_disk": _("web_disk", lang),
         "web_rx": _("web_rx", lang),
         "web_tx": _("web_tx", lang),

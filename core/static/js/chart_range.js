@@ -41,11 +41,32 @@
     const STREAM_URL = '/api/events/metrics';
     const RECONNECT_DELAY = 5000;
 
-    const CLOCK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chart-range-icon"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
-    const CHEVRON_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="chart-range-chevron"><path d="M6 9l6 6 6-6"/></svg>';
+    function createRangeIcon(kind) {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', kind === 'clock' ? '2' : '2.5');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        svg.setAttribute('class', kind === 'clock' ? 'chart-range-icon' : 'chart-range-chevron');
+        if (kind === 'clock') {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', '12');
+            circle.setAttribute('cy', '12');
+            circle.setAttribute('r', '9');
+            svg.appendChild(circle);
+        }
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', kind === 'clock' ? 'M12 7v5l3 2' : 'M6 9l6 6 6-6');
+        svg.appendChild(path);
+        return svg;
+    }
 
     function t(key, fallback) {
-        return (typeof I18N !== 'undefined' && I18N && I18N[key]) ? I18N[key] : fallback;
+        if (typeof window.I18N === 'undefined' || !window.I18N) return fallback;
+        const val = Reflect.get(window.I18N, key);
+        return val !== undefined ? val : fallback;
     }
 
     function unitLabel(group) {
@@ -196,11 +217,11 @@
 
             const clockWrapper = document.createElement('span');
             clockWrapper.className = 'inline-flex';
-            clockWrapper.innerHTML = CLOCK_ICON;
+            clockWrapper.appendChild(createRangeIcon('clock'));
 
             const chevronWrapper = document.createElement('span');
             chevronWrapper.className = 'inline-flex';
-            chevronWrapper.innerHTML = CHEVRON_ICON;
+            chevronWrapper.appendChild(createRangeIcon('chevron'));
 
             btn.append(liveSpan, clockWrapper.firstElementChild || clockWrapper, labelSpan, chevronWrapper.firstElementChild || chevronWrapper);
             mount.replaceChildren(btn);
@@ -215,7 +236,7 @@
                 label.className = 'chart-interface-label';
                 button.append(label);
                 const chevron = document.createElement('span');
-                chevron.innerHTML = CHEVRON_ICON;
+                chevron.appendChild(createRangeIcon('chevron'));
                 button.append(chevron.firstElementChild || chevron);
                 button.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -603,7 +624,7 @@
             const raw = payload.data;
             if (!raw) return null;
             const text = typeof window.decryptData === 'function' ? window.decryptData(raw)
-                : (typeof decryptData === 'function' ? decryptData(raw) : raw);
+                : (typeof window.decryptData === 'function' ? window.decryptData(raw) : raw);
             try {
                 return JSON.parse(text);
             } catch (e) {
@@ -846,7 +867,7 @@
     let activeExpandedChart = null;
 
     function createExpandedGradient(color) {
-        const fillColor = Chart.helpers.color(color);
+        const fillColor = window.Chart.helpers.color(color);
         const topColor = fillColor.alpha(0.5).rgbString();
         // Keep the fill visible near zero, where CPU usage often sits.
         const bottomColor = fillColor.alpha(0.25).rgbString();
@@ -870,7 +891,7 @@
         const sourceCanvas = document.getElementById(canvasId);
         if (!sourceCanvas) return;
 
-        const sourceChart = (typeof Chart !== 'undefined' ? Chart.getChart(sourceCanvas) : null)
+        const sourceChart = (typeof window.Chart !== 'undefined' ? window.Chart.getChart(sourceCanvas) : null)
             || window.__chartRegistry?.[canvasId]
             || window[canvasId];
         if (!sourceChart || !sourceChart.data) return;
@@ -969,7 +990,7 @@
             }
         };
 
-        const expandedChart = new Chart(expandedCtx, {
+        const expandedChart = new window.Chart(expandedCtx, {
             type: sourceChart.config.type || 'line',
             data: {
                 labels: [...(sourceChart.data.labels || [])],

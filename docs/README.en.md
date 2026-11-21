@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.28.0-blue?style=for-the-badge" alt="Version 1.28.0"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-99-purple?style=for-the-badge" alt="Build 99"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.28.1-blue?style=for-the-badge" alt="Version 1.28.1"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-100-purple?style=for-the-badge" alt="Build 100"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%233670A0.svg?style=for-the-badge&logo=python&logoColor=ffdd54" alt="Python"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/stargazers"><img src="https://img.shields.io/github/stars/jatixs/tgbotvpscp?style=for-the-badge&logo=github&color=gold" alt="GitHub Stars"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/releases"><img src="https://img.shields.io/github/downloads/jatixs/tgbotvpscp/total?style=for-the-badge&logo=github&color=blue" alt="Downloads"/></a>
@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <b>v1.28.0</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.28.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)
 </p>
 
@@ -32,7 +32,7 @@
 
 ## 📋 Table of Contents
 
-1. [About](#ℹ%EF%B8%8F-about-the-project)
+1. [About](#%EF%B8%8F-about-the-project)
 2. [Key Features](#-key-features)
 3. [Architecture](#%EF%B8%8F-architecture)
 4. [Quick Start](#-quick-start)
@@ -667,8 +667,8 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.28.0 (Build 99)<br>
-  <b>Release Date:</b> November 19, 2026<br>
+  <b>Version:</b> 1.28.1 (Build 100)<br>
+  <b>Release Date:</b> November 21, 2026<br>
   <b>License:</b> GPL-3.0 license<br>
   <b>Status:</b> Release<br>
   <br>
