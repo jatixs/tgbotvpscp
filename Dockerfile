@@ -45,7 +45,8 @@ RUN apt-get update \
 COPY --from=builder /build/wheels /wheels
 RUN pip install --no-cache-dir --upgrade pip 'setuptools>=84.1.0' wheel && \
     pip install --no-cache-dir /wheels/* && \
-    rm -rf /wheels
+    rm -rf /wheels && \
+    find /usr/local/lib/python3* -name "ensurepip" -type d -exec rm -rf {} +
 
 RUN groupadd -g 1001 tgbot && \
     useradd -u 1001 -g 1001 -m -s /bin/bash tgbot && \

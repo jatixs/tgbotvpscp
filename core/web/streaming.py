@@ -18,6 +18,7 @@ from .. import config as current_config
 from .. import metrics_history, nodes_db, shared_state
 from ..config import BASE_DIR, DEFAULT_LANGUAGE, DEPLOY_MODE
 from ..i18n import get_user_lang, _
+from ..network_addresses import node_ip_addresses
 from ..rbac import is_admin as _is_admin
 from ..utils import (
     decrypt_data,
@@ -81,6 +82,9 @@ def _session_expired(current_token: str | None) -> bool:
 
 def _encrypt_node_stats_for_web(stats: dict[str, Any] | None) -> dict[str, Any]:
     payload = dict(stats or {})
+    for key in ("ipv4", "ipv6", "external_ip"):
+        if key in payload:
+            payload[key] = encrypt_for_web(payload[key] or "")
     ping = payload.get("ping")
     payload["ping"] = encrypt_for_web(ping) if ping is not None else ""
     return payload
@@ -460,8 +464,8 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                 current_stats.update({"cpu": latest["c"], "ram": latest["r"]})
                 try:
                     current_stats["disk"] = psutil.disk_usage(get_host_path("/")).percent
-                except Exception:
-                    pass
+                except OSError:
+                    logging.debug("Unable to refresh agent disk usage", exc_info=True)
 
             await _write_sse(
                 response,
@@ -482,6 +486,8 @@ async def handle_sse_stream(request: web.Request) -> web.StreamResponse:
                         "id": node["id"],
                         "name": node.get("name", "Unknown"),
                         "ip": encrypt_for_web(node.get("ip", "Unknown")),
+                        "ipv4": encrypt_for_web(node_ip_addresses(node)["ipv4"]),
+                        "ipv6": encrypt_for_web(node_ip_addresses(node)["ipv6"]),
                         "status": status,
                         "cpu": stats.get("cpu", 0),
                         "ram": stats.get("ram", 0),
@@ -908,6 +914,8 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
                 payload = {
                     "name": encrypt_for_web(node.get("name")),
                     "ip": encrypt_for_web(node.get("ip")),
+                    "ipv4": encrypt_for_web(node_ip_addresses(node)["ipv4"]),
+                    "ipv6": encrypt_for_web(node_ip_addresses(node)["ipv6"]),
                     "stats": _encrypt_node_stats_for_web(node.get("stats")),
                     "history": node.get("history", []),
                     "id": node["id"],

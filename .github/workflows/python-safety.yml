@@ -25,5 +25,5 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Safety Check
-        # Проверяет зависимости из requirements.txt по базе уязвимостей
+        # Scans dependencies from requirements.txt against the vulnerability database
         run: safety check -r requirements.txt

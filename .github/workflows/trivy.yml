@@ -18,21 +18,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Сборка образа для сканирования (без пуша)
+      # Build Docker image for scanning (without push)
       - name: Build Docker image
         run: docker build -t tg-vps-bot:${{ github.sha }} .
 
-      # Запуск сканирования Trivy
+      # Run Trivy vulnerability scan
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: 'tg-vps-bot:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH' # Ищем только критические и высокие угрозы
-          ignore-unfixed: true      # Игнорировать уязвимости, для которых нет патчей
+          severity: 'CRITICAL,HIGH' # Scan only critical and high severity vulnerabilities
+          ignore-unfixed: true      # Ignore vulnerabilities without available fixes
 
-      # Загрузка результатов в GitHub Security
+      # Upload scan results to GitHub Security
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:

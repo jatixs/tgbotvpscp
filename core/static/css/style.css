@@ -21,6 +21,32 @@ html { scrollbar-gutter: stable; }
 @keyframes panel-page-enter { from { opacity: 0; transform: translateY(var(--panel-transition-distance)); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { main[aria-busy="true"] { transition: none; } .panel-page-enter { animation: none; } }
 
+.gradient-cloud {
+    display: inline-block;
+    font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif;
+    font-variant-emoji: text;
+    background-image: inherit;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+    vertical-align: -0.06em;
+    padding: 0.08em 0.18em 0.14em 0.18em;
+    margin-right: -0.08em;
+}
+
+.ip-address-toggle { min-width: 0; max-width: 100%; }
+.ip-address-toggle[data-ip-switch="true"] { cursor: pointer; }
+.ip-address-toggle .ip-copy-text {
+    min-width: 0;
+    max-width: clamp(7rem, 32vw, 19rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ip-family-label { flex-shrink: 0; }
+
 img.emoji {
 	height: 1em;
 	width: 1em;

@@ -1,5 +1,20 @@
 #!/bin/bash
 
+run_logged() {
+    local log_file="$1"
+    local mode="$2"
+    shift 2
+    local tee_args=()
+    if [ "$mode" = "append" ]; then
+        tee_args=(-a)
+    elif [ "$mode" != "overwrite" ]; then
+        return 2
+    fi
+    "$@" 2>&1 | sudo tee "${tee_args[@]}" "$log_file" >/dev/null
+    local command_status=${PIPESTATUS[0]}
+    return "$command_status"
+}
+
 GIT_BRANCH="main"
 AUTO_AGENT_URL=""
 AUTO_NODE_TOKEN=""
@@ -615,7 +630,7 @@ EOF
     mapfile -d '' -t certbot_args < <(
         "${PYTHON_BIN}" "${helper}" certbot-args "${TLS_HOST}" "${HTTPS_EMAIL}" "${certbot_cmd}" "${webroot}"
     )
-    ( sudo "${certbot_args[@]}" > "${certbot_log}" 2>&1 ) &
+    run_logged "${certbot_log}" overwrite sudo "${certbot_args[@]}" &
     certbot_pid=$!
     spinner "${certbot_pid}" "Получение сертификата Let's Encrypt"
     wait "${certbot_pid}" || certbot_rc=$?
@@ -847,7 +862,7 @@ setup_repo_and_dirs() {
     clone_or_reuse_repo() {
         local target="$1"
         for attempt in 1 2 3; do
-            if sudo git clone --depth 1 --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${target}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
+            if run_logged "/tmp/${SERVICE_NAME}_install.log" append sudo git clone --depth 1 --branch "${GIT_BRANCH}" "${GITHUB_REPO_URL}" "${target}"; then
                 return 0
             fi
             sudo rm -rf "${target}"
@@ -933,8 +948,8 @@ download_vendor_assets() {
         local urls=("$@")
         if [ ! -s "${dest}" ]; then
             local raw_repo_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${GIT_BRANCH}/core/static/vendor/${filename}"
-            sudo curl -fsSL --connect-timeout 8 --max-time 20 --retry 1 \
-                -o "${dest}" "${raw_repo_url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1 || true
+            run_logged "/tmp/${SERVICE_NAME}_install.log" append sudo curl -fsSL --connect-timeout 8 --max-time 20 --retry 1 \
+                -o "${dest}" "${raw_repo_url}" || true
         fi
 
         local backup_tmp=""
@@ -946,8 +961,8 @@ download_vendor_assets() {
         local updated=false
         for url in "${urls[@]}"; do
             local tmp_download="${dest}.tmp.$$"
-            if sudo curl -fsSL --connect-timeout 5 --max-time 15 \
-                -o "${tmp_download}" "${url}" >> /tmp/${SERVICE_NAME}_install.log 2>&1; then
+            if run_logged "/tmp/${SERVICE_NAME}_install.log" append sudo curl -fsSL --connect-timeout 5 --max-time 15 \
+                -o "${tmp_download}" "${url}"; then
                 if [ -s "${tmp_download}" ]; then
                     sudo mv -f "${tmp_download}" "${dest}"
                     updated=true
@@ -1382,13 +1397,6 @@ install_ookla_speedtest() {
         run_with_spinner "Установка curl" sudo apt-get install -y -q curl
     fi
     
-    # Get Ubuntu version
-    UBUNTU_VERSION=""
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        UBUNTU_VERSION="$VERSION_ID"
-    fi
-    
     # Add Ookla repository
     run_with_spinner "Добавление репозитория Ookla" bash -c 'curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash'
     
@@ -1600,7 +1608,6 @@ ensure_env_variables() {
     for var_entry in "${ENV_VARS[@]}"; do
         local var_name=$(echo "$var_entry" | cut -d'|' -f1)
         local default_val=$(echo "$var_entry" | cut -d'|' -f2)
-        local var_desc=$(echo "$var_entry" | cut -d'|' -f3)
         
         if ! grep -q "^${var_name}=" "${ENV_FILE}"; then
             if [ "$var_name" == "DATA_ENCRYPTION_KEY" ]; then

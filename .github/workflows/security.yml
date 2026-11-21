@@ -18,10 +18,10 @@ jobs:
       - name: 🐍 Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.11' # Убедитесь, что версия совпадает
+          python-version: '3.11' # Ensure matching Python version
 
       - name: 📦 Install Bandit
         run: pip install bandit
 
       - name: 🛡️ Run Bandit Scan
-        run: bandit -r . -ll # -r . сканирует весь проект, -ll показывает проблемы среднего уровня и выше
+        run: bandit -r . -ll # -r . scans recursively, -ll reports medium severity and higher

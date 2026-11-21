@@ -16,7 +16,7 @@ async function onTelegramAuth(data) {
             return;
         }
         console.error("Telegram Auth error:", data.error);
-        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Auth Error";
+        const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Auth Error";
         if (window.showModalAlert) await window.showModalAlert("Error: " + data.error, errTitle);
         else alert(errTitle + ": " + data.error);
         return;
@@ -42,8 +42,8 @@ async function onTelegramAuth(data) {
             const uname = userObj.preferred_username || userObj.username || uid;
             
             if (response.status === 403) {
-                const title = (typeof I18N !== 'undefined' && I18N.login_access_denied) ? I18N.login_access_denied : "Access Denied";
-                let msgTemplate = (typeof I18N !== 'undefined' && I18N.login_unauthorized) ? I18N.login_unauthorized : "User <b>@{username}</b> is not authorized.<br><br>Please ask the administrator to add your ID: <b>{id}</b>";
+                const title = (typeof window.I18N !== 'undefined' && window.I18N.login_access_denied) ? window.I18N.login_access_denied : "Access Denied";
+                let msgTemplate = (typeof window.I18N !== 'undefined' && window.I18N.login_unauthorized) ? window.I18N.login_unauthorized : "User <b>@{username}</b> is not authorized.<br><br>Please ask the administrator to add your ID: <b>{id}</b>";
                 
                 const msg = msgTemplate.replace('{username}', uname).replace('{id}', uid);
                 
@@ -53,21 +53,21 @@ async function onTelegramAuth(data) {
                     alert(`${title}\n\n${msg.replace(/<br>/g, '\n').replace(/<b>/g, '').replace(/<\/b>/g, '')}`);
                 }
             } else {
-                const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Auth Error";
+                const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Auth Error";
                 if (window.showModalAlert) await window.showModalAlert("Error: " + (d.error || "Unknown"), errTitle);
                 else alert(errTitle + ": " + (d.error || "Unknown"));
             }
         }
     } catch (e) {
         console.error(e);
-        const errTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_conn_error_short) ? window.I18N.web_conn_error_short : "Conn Error";
         if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 }
 window.onTelegramAuth = onTelegramAuth;
 
 function toggleTelegramLoginMode(mode) {
-    if (localStorage.getItem('telegram_only_mode') === '1' || (typeof TELEGRAM_ONLY_MODE !== 'undefined' && TELEGRAM_ONLY_MODE)) {
+    if (localStorage.getItem('telegram_only_mode') === '1' || (typeof window.TELEGRAM_ONLY_MODE !== 'undefined' && window.TELEGRAM_ONLY_MODE)) {
         return;
     }
     const container = document.getElementById('telegram-widget-container');
@@ -141,8 +141,8 @@ function setLoginLanguage(lang) {
     document.cookie = "guest_lang=" + lang + "; path=/; max-age=31536000";
     updateLangSlider(lang);
 
-    if (typeof I18N_ALL !== 'undefined' && I18N_ALL[lang]) {
-        const dict = I18N_ALL[lang];
+    if (typeof window.I18N_ALL !== 'undefined' && window.I18N_ALL[lang]) {
+        const dict = window.I18N_ALL[lang];
         window.I18N = dict;
 
         const elements = document.querySelectorAll('[data-i18n]');
@@ -156,7 +156,7 @@ function setLoginLanguage(lang) {
                 const key = el.getAttribute('data-i18n');
                 if (dict[key]) {
                     if (el.tagName === 'INPUT') el.placeholder = dict[key];
-                    else setSafeHTML(el, dict[key]);
+                    else window.setSafeHTML(el, dict[key]);
                 }
                 el.style.opacity = '1';
             });
@@ -194,6 +194,14 @@ function closeSupportModal() {
 window.openSupportModal = openSupportModal;
 window.closeSupportModal = closeSupportModal;
 
+function showFormElement(el) {
+    if (!el) return;
+    el.classList.remove('hidden');
+    el.classList.remove('animate-fade-in-up');
+    void el.offsetWidth; // trigger reflow
+    el.classList.add('animate-fade-in-up');
+}
+
 // --- UI Logic: Forms Switcher ---
 function toggleForms(target) {
     const magic = document.getElementById('magic-form');
@@ -205,14 +213,6 @@ function toggleForms(target) {
 
     [magic, password, reset, setPass].forEach(el => { el?.classList.add('hidden'); });
     if (errorBlock) errorBlock.classList.add('hidden');
-
-    const show = (el) => {
-        if (!el) return;
-        el.classList.remove('hidden');
-        el.classList.remove('animate-fade-in-up');
-        void el.offsetWidth; // trigger reflow
-        el.classList.add('animate-fade-in-up');
-    };
 
     // Show/Hide Back Arrow based on context
     if (backArrow) {
@@ -227,10 +227,10 @@ function toggleForms(target) {
         }
     }
 
-    if (target === 'password') show(password);
-    else if (target === 'reset') show(reset);
-    else if (target === 'set-password') show(setPass);
-    else show(magic);
+    if (target === 'password') showFormElement(password);
+    else if (target === 'reset') showFormElement(reset);
+    else if (target === 'set-password') showFormElement(setPass);
+    else showFormElement(magic);
 }
 
 // --- API: Reset Password Request ---
@@ -272,12 +272,12 @@ async function requestPasswordReset() {
             // Hide back arrow on success screen
             if (backArrow) backArrow.classList.add('hidden');
 
-            const title = (I18N && I18N.login_link_sent_title) || "Link Sent!";
-            const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
-            const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
-            const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
+            const title = (window.I18N && window.I18N.login_link_sent_title) || "Link Sent!";
+            const desc = (window.I18N && window.I18N.login_link_sent_desc) || "Check your Telegram messages.";
+            const btnText = (window.I18N && window.I18N.login_go_to_bot) || "Go to Bot";
+            const botLink = (typeof window.BOT_USERNAME !== 'undefined' && window.BOT_USERNAME) ? `https://t.me/${window.BOT_USERNAME}` : "#";
 
-            setSafeHTML(container, `
+            window.setSafeHTML(container, `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
                         <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">
@@ -291,7 +291,7 @@ async function requestPasswordReset() {
             `);
         } else {
             if (data.error === 'not_found' && errorBlock) {
-                const errMsg = (I18N && I18N.login_error_user_not_found) || "User not found.";
+                const errMsg = (window.I18N && window.I18N.login_error_user_not_found) || "User not found.";
                 const errP = errorBlock.querySelector('p');
                 if (errP) errP.textContent = errMsg;
 
@@ -300,14 +300,14 @@ async function requestPasswordReset() {
                     adminLinkBtn.href = data.admin_url;
                 }
             } else {
-                const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+                const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
                 if (window.showModalAlert) await window.showModalAlert("Error: " + (data.error || "Unknown"), errTitle);
                 else alert(errTitle + ": " + (data.error || "Unknown"));
             }
         }
     } catch (e) {
-        const netErrTitle = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
-        const netErrMsg = (typeof I18N !== 'undefined' && I18N.web_conn_error) ? I18N.web_conn_error.replace('{error}', e) : "Connection error: " + e;
+        const netErrTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_conn_error_short) ? window.I18N.web_conn_error_short : "Conn Error";
+        const netErrMsg = (typeof window.I18N !== 'undefined' && window.I18N.web_conn_error) ? window.I18N.web_conn_error.replace('{error}', e) : "Connection error: " + e;
         if (window.showModalAlert) await window.showModalAlert(netErrMsg, netErrTitle);
     } finally {
         if (btn) {
@@ -326,21 +326,21 @@ async function submitNewPassword() {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
-    const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+    const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
 
     if (!p1 || p1.length < 4) {
-        const msg = (typeof I18N !== 'undefined' && I18N.pass_req_length) ? I18N.pass_req_length : "Password too short (min 4 chars).";
+        const msg = (typeof window.I18N !== 'undefined' && window.I18N.pass_req_length) ? window.I18N.pass_req_length : "Password too short (min 4 chars).";
         if (window.showModalAlert) await window.showModalAlert(msg, errTitle);
         return;
     }
     if (p1 !== p2) {
-        const msg = (typeof I18N !== 'undefined' && I18N.pass_match_error) ? I18N.pass_match_error : "Passwords do not match.";
+        const msg = (typeof window.I18N !== 'undefined' && window.I18N.pass_match_error) ? window.I18N.pass_match_error : "Passwords do not match.";
         if (window.showModalAlert) await window.showModalAlert(msg, errTitle);
         return;
     }
 
     btn.disabled = true;
-    btn.innerText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Saving...";
+    btn.innerText = (typeof window.I18N !== 'undefined' && window.I18N.web_saving_btn) ? window.I18N.web_saving_btn : "Saving...";
 
     try {
         const res = await fetch('/api/reset/confirm', {
@@ -356,11 +356,11 @@ async function submitNewPassword() {
 
         const data = await res.json();
         if (res.ok) {
-            const title = (I18N && I18N.reset_success_title) || "Success!";
-            const desc = (I18N && I18N.reset_success_desc) || "Password changed successfully.";
-            const btnText = (I18N && I18N.web_login_btn) || "Login";
+            const title = (window.I18N && window.I18N.reset_success_title) || "Success!";
+            const desc = (window.I18N && window.I18N.reset_success_desc) || "Password changed successfully.";
+            const btnText = (window.I18N && window.I18N.web_login_btn) || "Login";
 
-            setSafeHTML(container, `
+            window.setSafeHTML(container, `
                 <div class="text-center py-8 animate-fade-in-up">
                     <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-500/30">
                         <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
@@ -372,16 +372,53 @@ async function submitNewPassword() {
             `);
             window.history.replaceState({}, document.title, "/login");
         } else {
-            const errMsg = (typeof I18N !== 'undefined' && I18N.web_error) ? I18N.web_error.replace('{error}', data.error) : "Error: " + data.error;
+            const errMsg = (typeof window.I18N !== 'undefined' && window.I18N.web_error) ? window.I18N.web_error.replace('{error}', data.error) : "Error: " + data.error;
             if (window.showModalAlert) await window.showModalAlert(errMsg, errTitle);
             btn.disabled = false;
-            btn.innerText = (typeof I18N !== 'undefined' && I18N.web_save_btn) ? I18N.web_save_btn : "Save Password";
+            btn.innerText = (typeof window.I18N !== 'undefined' && window.I18N.web_save_btn) ? window.I18N.web_save_btn : "Save Password";
         }
     } catch (e) {
-        const connErrMsg = (typeof I18N !== 'undefined' && I18N.web_conn_error) ? I18N.web_conn_error.replace('{error}', e) : "Network error: " + e;
+        const connErrMsg = (typeof window.I18N !== 'undefined' && window.I18N.web_conn_error) ? window.I18N.web_conn_error.replace('{error}', e) : "Network error: " + e;
         if (window.showModalAlert) await window.showModalAlert(connErrMsg, errTitle);
         btn.disabled = false;
-        btn.innerText = (typeof I18N !== 'undefined' && I18N.web_save_btn) ? I18N.web_save_btn : "Save Password";
+        btn.innerText = (typeof window.I18N !== 'undefined' && window.I18N.web_save_btn) ? window.I18N.web_save_btn : "Save Password";
+    }
+}
+
+function applyTelegramOnlyMode(enabled) {
+    const loginOrSeparator = document.getElementById('login-or-separator');
+    const passwordLoginToggleBtn = document.getElementById('password-login-toggle-btn');
+    const switchToIdBtn = document.getElementById('switch-to-id-btn');
+    const switchToWidgetBtnContainer = document.getElementById('switch-to-widget-btn-container');
+
+    if (loginOrSeparator) {
+        loginOrSeparator.classList.toggle('hidden', enabled);
+    }
+    if (passwordLoginToggleBtn) {
+        passwordLoginToggleBtn.classList.toggle('hidden', enabled);
+    }
+    if (switchToIdBtn) {
+        switchToIdBtn.classList.toggle('hidden', enabled);
+    }
+    if (switchToWidgetBtnContainer) {
+        switchToWidgetBtnContainer.classList.toggle('hidden', enabled);
+    }
+    if (enabled) {
+        const cont = document.getElementById('telegram-widget-container');
+        const mForm = document.getElementById('magic-link-form');
+        if (mForm) mForm.classList.add('hidden');
+        if (cont) cont.classList.remove('hidden');
+    }
+}
+
+async function refreshTelegramOnlyMode() {
+    try {
+        const data = await window.sseRequest('/api/security/telegram_only_mode', 'telegram_only_mode');
+        const enabled = Boolean(data && data.enabled);
+        applyTelegramOnlyMode(enabled);
+        localStorage.setItem('telegram_only_mode', enabled ? '1' : '0');
+    } catch (e) {
+        console.error('Failed to refresh telegram-only mode on login page:', e);
     }
 }
 
@@ -392,10 +429,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const initData = window.Telegram.WebApp.initData;
         const mainCard = document.getElementById('main-card');
         if (mainCard) {
-            setSafeHTML(mainCard, `
+            window.setSafeHTML(mainCard, `
                 <div class="flex flex-col items-center justify-center py-12">
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-                    <p class="text-gray-500 dark:text-gray-400 font-medium">${(typeof I18N !== 'undefined' && I18N.web_logging_in) ? I18N.web_logging_in : "Authenticating via Telegram..."}</p>
+                    <p class="text-gray-500 dark:text-gray-400 font-medium">${(typeof window.I18N !== 'undefined' && window.I18N.web_logging_in) ? window.I18N.web_logging_in : "Authenticating via Telegram..."}</p>
                 </div>
             `);
         }
@@ -408,12 +445,12 @@ document.addEventListener("DOMContentLoaded", () => {
             if (res.ok) {
                 window.location.replace('/');
             } else {
-                const failMsg = (typeof I18N !== 'undefined' && I18N.login_webapp_auth_failed) ? I18N.login_webapp_auth_failed : "Web App auth failed";
+                const failMsg = (typeof window.I18N !== 'undefined' && window.I18N.login_webapp_auth_failed) ? window.I18N.login_webapp_auth_failed : "Web App auth failed";
                 throw new Error(res.body.error || failMsg);
             }
         }).catch(e => {
             console.error(e);
-            const errTitle = (typeof I18N !== 'undefined' && I18N.login_webapp_auth_error) ? I18N.login_webapp_auth_error : "Web App Auth Error";
+            const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.login_webapp_auth_error) ? window.I18N.login_webapp_auth_error : "Web App Auth Error";
             if (window.showModalAlert) window.showModalAlert(String(e), errTitle);
             else alert(errTitle + ": " + e);
             setTimeout(() => window.location.reload(), 3000); // Reload to show normal form
@@ -421,70 +458,36 @@ document.addEventListener("DOMContentLoaded", () => {
         return; // Prevent other initialization if we are authenticating via Web App
     }
 
-    const loginOrSeparator = document.getElementById('login-or-separator');
-    const passwordLoginToggleBtn = document.getElementById('password-login-toggle-btn');
-    const switchToIdBtn = document.getElementById('switch-to-id-btn');
-    const switchToWidgetBtnContainer = document.getElementById('switch-to-widget-btn-container');
+    applyTelegramOnlyMode(Boolean(window.TELEGRAM_ONLY_MODE));
+    refreshTelegramOnlyMode();
 
-    const applyTelegramOnlyMode = (enabled) => {
-        if (loginOrSeparator) {
-            loginOrSeparator.classList.toggle('hidden', enabled);
-        }
-        if (passwordLoginToggleBtn) {
-            passwordLoginToggleBtn.classList.toggle('hidden', enabled);
-        }
-        if (switchToIdBtn) {
-            switchToIdBtn.classList.toggle('hidden', enabled);
-        }
-        if (switchToWidgetBtnContainer) {
-            switchToWidgetBtnContainer.classList.toggle('hidden', enabled);
-        }
-        if (enabled) {
-            const cont = document.getElementById('telegram-widget-container');
-            const mForm = document.getElementById('magic-link-form');
-            if (mForm) mForm.classList.add('hidden');
-            if (cont) cont.classList.remove('hidden');
-        }
-    };
-
-    const refreshTelegramOnlyMode = async () => {
-        try {
-            const data = await sseRequest('/api/security/telegram_only_mode', 'telegram_only_mode');
-            const enabled = Boolean(data && data.enabled);
-            applyTelegramOnlyMode(enabled);
-            localStorage.setItem('telegram_only_mode', enabled ? '1' : '0');
-        } catch (e) {
-            console.error('Failed to refresh telegram-only mode on login page:', e);
-        }
-    };
-
-    if (typeof CURRENT_LANG !== 'undefined' && typeof updateLangSlider === 'function') {
-        updateLangSlider(CURRENT_LANG);
+    if (typeof window.CURRENT_LANG !== 'undefined' && typeof updateLangSlider === 'function') {
+        updateLangSlider(window.CURRENT_LANG);
     }
 
-    if (typeof I18N !== 'undefined' && I18N.web_title) {
-        document.title = I18N.web_title;
+    if (typeof window.I18N !== 'undefined' && window.I18N.web_title) {
+        document.title = window.I18N.web_title;
     }
 
-    if (window.twemoji) window.twemoji.parse(document.body, {
-        folder: 'svg',
-        ext: '.svg'
-    });
+    window.parsePageEmojis();
 
-    if (typeof I18N !== 'undefined') {
+    if (typeof window.I18N !== 'undefined') {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
-            if (I18N[key]) {
-                if (el.tagName === 'INPUT') el.placeholder = I18N[key];
-                else setSafeHTML(el, I18N[key]);
+            const i18nVal = Reflect.get(window.I18N, key);
+            if (i18nVal) {
+                if (el.tagName === 'INPUT') el.placeholder = i18nVal;
+                else window.setSafeHTML(el, i18nVal);
             }
-            if (el.title && I18N[key]) el.title = I18N[key];
+            if (el.title && i18nVal) el.title = i18nVal;
         });
 
         const gh = document.querySelector('a[title="GitHub"]');
-        if (gh && I18N['login_github_tooltip']) gh.title = I18N['login_github_tooltip'];
+        const ghTooltip = Reflect.get(window.I18N, 'login_github_tooltip');
+        if (gh && ghTooltip) gh.title = ghTooltip;
         const sp = document.querySelector('button[title="Support"]');
-        if (sp && I18N['login_support_tooltip']) sp.title = I18N['login_support_tooltip'];
+        const spTooltip = Reflect.get(window.I18N, 'login_support_tooltip');
+        if (sp && spTooltip) sp.title = spTooltip;
     }
 
     // 4. Handle URL Params
@@ -495,12 +498,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (urlParams.get('sent') === 'true' && formsContainer) {
         if (backArrow) backArrow.classList.add('hidden'); // Hide arrow on success
 
-        const title = (I18N && I18N.login_link_sent_title) || "Magic Link Sent!";
-        const desc = (I18N && I18N.login_link_sent_desc) || "Check your Telegram messages.";
-        const btnText = (I18N && I18N.login_go_to_bot) || "Go to Bot";
-        const botLink = (typeof BOT_USERNAME !== 'undefined' && BOT_USERNAME) ? `https://t.me/${BOT_USERNAME}` : "#";
+        const title = (window.I18N && window.I18N.login_link_sent_title) || "Magic Link Sent!";
+        const desc = (window.I18N && window.I18N.login_link_sent_desc) || "Check your Telegram messages.";
+        const btnText = (window.I18N && window.I18N.login_go_to_bot) || "Go to Bot";
+        const botLink = (typeof window.BOT_USERNAME !== 'undefined' && window.BOT_USERNAME) ? `https://t.me/${window.BOT_USERNAME}` : "#";
 
-        setSafeHTML(formsContainer, `
+        window.setSafeHTML(formsContainer, `
             <div class="text-center py-8 animate-fade-in-up">
                 <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
                     <svg class="w-8 h-8 text-blue-500 ml-[-2px] mt-[2px]" fill="currentColor" viewBox="0 0 24 24">
@@ -525,10 +528,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const cleanUrl = window.location.pathname;
             window.history.replaceState({}, document.title, cleanUrl);
         }
-        const expiredTitle = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
-        const expiredMsg = (typeof I18N !== 'undefined' && I18N.web_session_expired_desc) 
-            ? I18N.web_session_expired_desc 
-            : ((typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Время вашей сессии истекло или доступ был отозван. Пожалуйста, выполните вход повторно.");
+        const expiredTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_session_expired) ? window.I18N.web_session_expired : "Сессия истекла";
+        const expiredMsg = (typeof window.I18N !== 'undefined' && window.I18N.web_session_expired_desc) 
+            ? window.I18N.web_session_expired_desc 
+            : ((typeof window.I18N !== 'undefined' && window.I18N.web_please_relogin) ? window.I18N.web_please_relogin : "Время вашей сессии истекло или доступ был отозван. Пожалуйста, выполните вход повторно.");
         setTimeout(() => {
             if (window.showModalAlert) {
                 window.showModalAlert(expiredMsg, expiredTitle);
@@ -547,8 +550,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 6. Init Telegram Login
-    const tgClientId = (typeof TG_CLIENT_ID !== 'undefined' && TG_CLIENT_ID) ? TG_CLIENT_ID : "";
-    const botUsername = (typeof BOT_USERNAME !== 'undefined') ? BOT_USERNAME : "";
+    const tgClientId = (typeof window.TG_CLIENT_ID !== 'undefined' && window.TG_CLIENT_ID) ? window.TG_CLIENT_ID : "";
+    const botUsername = (typeof window.BOT_USERNAME !== 'undefined') ? window.BOT_USERNAME : "";
     const container = document.getElementById('telegram-widget-container');
     const magicForm = document.getElementById('magic-link-form');
 
@@ -573,7 +576,7 @@ document.addEventListener("DOMContentLoaded", () => {
         magicForm.classList.add('hidden');
     }
 
-    const serverTelegramOnly = (typeof TELEGRAM_ONLY_MODE !== 'undefined') ? Boolean(TELEGRAM_ONLY_MODE) : false;
+    const serverTelegramOnly = (typeof window.TELEGRAM_ONLY_MODE !== 'undefined') ? Boolean(window.TELEGRAM_ONLY_MODE) : false;
     const storedMode = localStorage.getItem('telegram_only_mode');
     if (serverTelegramOnly) {
         applyTelegramOnlyMode(true);
@@ -597,3 +600,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 });
+window.requestPasswordReset = requestPasswordReset;
+
+window.submitNewPassword = submitNewPassword;

@@ -58,6 +58,8 @@ const pendingServiceControls = new Set();
 let agentChart = null;
 let agentRangeCtl = null;
 let agentTrafficSnapshot = null;
+let agentAddressData = null;
+let agentIpRequest = null;
 let agentInterfaceSpeeds = {};
 let nodeResRangeCtl = null;
 let nodeNetRangeCtl = null;
@@ -67,7 +69,7 @@ let quickDiskChart = null;
 const QUICK_STATS_HISTORY_MAX = 30;
 const quickStatsHistory = { cpu: [], ram: [], disk: [] };
 let allNodesData = [];
-let currentNodeId = null;
+window.currentNodeId = null;
 let currentRenderList = [];
 let renderedCount = 0;
 const NODES_BATCH_SIZE = 15;
@@ -134,7 +136,7 @@ window.initDashboard = function () {
     }
     if (document.getElementById('logsContainer')) {
         renderServiceLogsTab();
-        switchLogType('bot');
+        window.switchLogType('bot');
     }
 
     initDashboardUptimeTooltip();
@@ -166,9 +168,9 @@ function cleanupDashboardSources() {
 
 window.destroyDashboard = function () {
     cleanupDashboardSources();
-    if (typeof closeHintModal === 'function') closeHintModal();
+    if (typeof window.closeHintModal === 'function') window.closeHintModal();
     if (typeof closeNodeModal === 'function') closeNodeModal();
-    if (typeof closeVncModal === 'function') closeVncModal();
+    if (typeof window.closeVncModal === 'function') window.closeVncModal();
     if (agentRangeCtl) {
         agentRangeCtl.destroy?.();
         agentRangeCtl = null;
@@ -218,7 +220,7 @@ function startNodeChartRanges() {
     if (typeof window.createChartRangeController !== 'function') return;
     if (nodeResRangeCtl) nodeResRangeCtl.destroy();
     if (nodeNetRangeCtl) nodeNetRangeCtl.destroy();
-    const getSource = () => (currentNodeId ? { source: 'node', node_id: currentNodeId } : null);
+    const getSource = () => (window.currentNodeId ? { source: 'node', node_id: window.currentNodeId } : null);
     nodeResRangeCtl = window.createChartRangeController({
         key: 'nodeResChart',
         mount: '[data-chart-range="nodeResChart"]',
@@ -366,7 +368,7 @@ function formatInterfaceList(interfaces, type, title, colorClass = "text-gray-50
 
 function getNodeUiParams(node) {
     const statusColor = node.status === 'online' ? "bg-green-500" : (node.status === 'restarting' ? "bg-blue-500" : "bg-red-500");
-    const statusText = node.status === 'restarting' ? (typeof I18N !== 'undefined' && I18N.web_status_restart ? I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
+    const statusText = node.status === 'restarting' ? (typeof window.I18N !== 'undefined' && window.I18N.web_status_restart ? window.I18N.web_status_restart : "RESTART") : node.status.toUpperCase();
     const statusTextClass = node.status === 'online' ? "text-green-500" : (node.status === 'restarting' ? "text-blue-500" : "text-red-500");
     const statusBg = node.status === 'online' ? "bg-green-500/10 text-green-600 dark:text-green-400" : (node.status === 'restarting' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-red-500/10 text-red-600 dark:text-red-400");
 
@@ -386,7 +388,7 @@ function updateNodesListUI(data) {
         allNodesData = (data.nodes || []).map(node => {
             node.rxSpeed = node.net_rx_speed || 0;
             node.txSpeed = node.net_tx_speed || 0;
-            const decryptedPing = typeof decryptData === 'function' ? decryptData(node.ping) : node.ping;
+            const decryptedPing = typeof window.decryptData === 'function' ? window.decryptData(node.ping) : node.ping;
             node.ping = decryptedPing !== '' && decryptedPing != null && !Number.isNaN(Number(decryptedPing)) ? Number(decryptedPing) : null;
             return node;
         });
@@ -397,7 +399,7 @@ function updateNodesListUI(data) {
         if (query) {
             newList = allNodesData.filter(node => {
                 const name = (node.name || "").toLowerCase();
-                const ip = (decryptData(node.ip) || "").toLowerCase();
+                const ip = (window.decryptData(node.ip) || "").toLowerCase();
                 return name.includes(query) || ip.includes(query);
             });
         } else {
@@ -529,7 +531,7 @@ function updateVisibleNodes(elements, dataList) {
                 if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
                 else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
                 pingBdg.className = `inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}`;
-                pingBdg.innerText = pingVal + ((typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms');
+                pingBdg.innerText = pingVal + ((typeof window.I18N !== 'undefined' && window.I18N.web_agent_ping_unit) ? window.I18N.web_agent_ping_unit : 'ms');
             } else {
                 pingBdg.className = 'hidden';
             }
@@ -557,7 +559,7 @@ function filterAndRenderNodes() {
     if (query) {
         newList = allNodesData.filter(node => {
             const name = (node.name || "").toLowerCase();
-            const ip = (decryptData(node.ip) || "").toLowerCase();
+            const ip = (window.decryptData(node.ip) || "").toLowerCase();
             return name.includes(query) || ip.includes(query);
         });
     } else {
@@ -656,27 +658,27 @@ function renderNodesList() {
     if (!container) return;
 
     if (currentRenderList.length === 0) {
-        let emptyText = (typeof I18N !== 'undefined' && I18N.web_no_nodes) ? I18N.web_no_nodes : "No nodes connected";
+        let emptyText = (typeof window.I18N !== 'undefined' && window.I18N.web_no_nodes) ? window.I18N.web_no_nodes : "No nodes connected";
         const searchInput = document.getElementById('nodeSearch');
         if (searchInput && searchInput.value.trim().length > 0 && allNodesData.length > 0) {
-            emptyText = (typeof I18N !== 'undefined' && I18N.web_search_nothing_found) ? I18N.web_search_nothing_found : "Nothing found";
+            emptyText = (typeof window.I18N !== 'undefined' && window.I18N.web_search_nothing_found) ? window.I18N.web_search_nothing_found : "Nothing found";
         }
-        container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${emptyText}</div>`);
+        container.innerHTML = window.DOMPurify.sanitize(`<div class="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">${emptyText}</div>`);
         updateNodesScrollMode(container, 0);
         return;
     }
 
-    container.innerHTML = DOMPurify.sanitize('');
+    container.innerHTML = window.DOMPurify.sanitize('');
     renderedCount = 0;
     updateNodesScrollMode(container, currentRenderList.length);
     renderNextNodeBatch();
     
-    if (typeof Sortable !== 'undefined') {
+    if (typeof window.Sortable !== 'undefined') {
         const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
         if (window.dashboardSortable) {
             window.dashboardSortable.destroy();
         }
-        window.dashboardSortable = Sortable.create(container, {
+        window.dashboardSortable = window.Sortable.create(container, {
             handle: '.drag-handle',
             animation: 150,
             disabled: sortMode !== 'custom',
@@ -708,19 +710,18 @@ function renderNextNodeBatch() {
 
     const batch = currentRenderList.slice(renderedCount, renderedCount + NODES_BATCH_SIZE);
 
-    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
-    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
-    const lblDisk = (typeof I18N !== 'undefined' && I18N.web_label_disk) ? I18N.web_label_disk : "DISK";
-    const lblStatus = (typeof I18N !== 'undefined' && I18N.web_label_status) ? I18N.web_label_status : "STATUS";
-    const lblRx = (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : "ВХ";
-    const lblTx = (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : "ИСХ";
+    const lblCpu = (typeof window.I18N !== 'undefined' && window.I18N.web_label_cpu) ? window.I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof window.I18N !== 'undefined' && window.I18N.web_label_ram) ? window.I18N.web_label_ram : "RAM";
+    const lblDisk = (typeof window.I18N !== 'undefined' && window.I18N.web_label_disk) ? window.I18N.web_label_disk : "DISK";
+    const lblStatus = (typeof window.I18N !== 'undefined' && window.I18N.web_label_status) ? window.I18N.web_label_status : "STATUS";
+    const lblRx = (typeof window.I18N !== 'undefined' && window.I18N.web_label_rx) ? window.I18N.web_label_rx : "ВХ";
+    const lblTx = (typeof window.I18N !== 'undefined' && window.I18N.web_label_tx) ? window.I18N.web_label_tx : "ИСХ";
 
     const sortMode = localStorage.getItem('dashboardSortMode') || 'custom';
     const dragHandleClass = (sortMode === 'custom' && window.isActivelySorting) ? '' : 'hidden ';
 
     const html = batch.map(node => {
         const ui = getNodeUiParams(node);
-        const displayIp = decryptData(node.ip);
         const rxP = formatSpeed(node.rxSpeed).split(' ');
         const rxVal = rxP[0] || '0.00';
         const rxUnit = rxP[1] || 'Kbps';
@@ -734,7 +735,7 @@ function renderNextNodeBatch() {
             let pingColor = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
             if (pingVal >= 50 && pingVal < 150) pingColor = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
             else if (pingVal >= 150) pingColor = 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
-            pingHtml = `<span data-ref="ping-badge" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}">${pingVal}${(typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms'}</span>`;
+            pingHtml = `<span data-ref="ping-badge" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${pingColor}">${pingVal}${(typeof window.I18N !== 'undefined' && window.I18N.web_agent_ping_unit) ? window.I18N.web_agent_ping_unit : 'ms'}</span>`;
         } else {
             pingHtml = `<span data-ref="ping-badge" class="hidden"></span>`;
         }
@@ -754,17 +755,10 @@ function renderNextNodeBatch() {
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
-                            <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${replaceEmojisWithFlagsHTML(escapeHtml(node.name))}</div>
+                            <div data-ref="name" class="font-bold text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">${window.replaceEmojisWithFlagsHTML(escapeHtml(node.name))}</div>
                         </div>
                         <div class="flex items-center gap-2 mt-1 min-w-0">
-                            <div class="ip-copy-container inline-flex items-center gap-1 group/ip max-w-full" data-copy-ip="${escapeHtml(displayIp)}">
-                                <span data-ref="ip" class="ip-copy-text text-[10px] sm:text-xs font-mono text-gray-400 truncate select-all" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">${escapeHtml(displayIp)}</span>
-                                <button type="button" class="ip-copy-btn p-0.5 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(displayIp)}" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">
-                                    <svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
-                                </button>
-                            </div>
+                            ${window.renderNodeIpBadge(node)}
                             ${pingHtml}
                         </div>
                     </div>
@@ -842,7 +836,7 @@ function applyAgentWarning(type, val, threshold, def) {
 function renderAgentTraffic() {
     const name = agentRangeCtl?.getInterface() || '';
     const badge = document.getElementById('trafficInterfaceName');
-    if (badge) badge.textContent = name || (typeof I18N !== 'undefined' && I18N.web_chart_all_interfaces) || 'All interfaces';
+    if (badge) badge.textContent = name || (typeof window.I18N !== 'undefined' && window.I18N.web_chart_all_interfaces) || 'All interfaces';
 
     const data = agentTrafficSnapshot;
     if (!data?.stats) return;
@@ -868,10 +862,10 @@ function renderAgentTraffic() {
     const interfaceStats = name ? (selected ? { [name]: selected } : {}) : data.stats.interfaces;
     const speedStyle = "text-xs text-gray-400 font-normal ml-2 pl-2 border-l border-gray-300 dark:border-white/20";
     const rxEl = document.getElementById('stat_net_recv');
-    if (rxEl) rxEl.innerHTML = DOMPurify.sanitize(`${(rxTotal == null ? '—' : formatBytes(rxTotal))} <span class="${speedStyle}">${(rxSpeed == null ? '—' : formatSpeed(rxSpeed))}</span>`);
+    if (rxEl) rxEl.innerHTML = window.DOMPurify.sanitize(`${(rxTotal == null ? '—' : formatBytes(rxTotal))} <span class="${speedStyle}">${(rxSpeed == null ? '—' : formatSpeed(rxSpeed))}</span>`);
 
     const txEl = document.getElementById('stat_net_sent');
-    if (txEl) txEl.innerHTML = DOMPurify.sanitize(`${(txTotal == null ? '—' : formatBytes(txTotal))} <span class="${speedStyle}">${(txSpeed == null ? '—' : formatSpeed(txSpeed))}</span>`);
+    if (txEl) txEl.innerHTML = window.DOMPurify.sanitize(`${(txTotal == null ? '—' : formatBytes(txTotal))} <span class="${speedStyle}">${(txSpeed == null ? '—' : formatSpeed(txSpeed))}</span>`);
 
     // Update S-size agent stats bars (TX/RX speed + progress)
     const barTxText = document.getElementById('agentStatsBarTxText');
@@ -889,13 +883,13 @@ function renderAgentTraffic() {
     if (interfaceStats) {
         const hintRx = document.getElementById('hint-rx');
         if (hintRx) {
-            const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_in) ? I18N.web_hint_traffic_in : "Inbound Traffic";
-            hintRx.innerHTML = DOMPurify.sanitize(formatInterfaceList(interfaceStats, 'rx', title, "text-green-500"));
+            const title = (typeof window.I18N !== 'undefined' && window.I18N.web_hint_traffic_in) ? window.I18N.web_hint_traffic_in : "Inbound Traffic";
+            hintRx.innerHTML = window.DOMPurify.sanitize(formatInterfaceList(interfaceStats, 'rx', title, "text-green-500"));
         }
         const hintTx = document.getElementById('hint-tx');
         if (hintTx) {
-            const title = (typeof I18N !== 'undefined' && I18N.web_hint_traffic_out) ? I18N.web_hint_traffic_out : "Outbound Traffic";
-            hintTx.innerHTML = DOMPurify.sanitize(formatInterfaceList(interfaceStats, 'tx', title, "text-blue-500"));
+            const title = (typeof window.I18N !== 'undefined' && window.I18N.web_hint_traffic_out) ? window.I18N.web_hint_traffic_out : "Outbound Traffic";
+            hintTx.innerHTML = window.DOMPurify.sanitize(formatInterfaceList(interfaceStats, 'tx', title, "text-blue-500"));
         }
     }
 
@@ -925,17 +919,17 @@ function updateAgentStatsUI(data) {
                 if (data.stats.cpu_freq) {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatHz(data.stats.cpu_freq)}</span>`;
                 }
-                cpuEl.innerHTML = DOMPurify.sanitize(html);
+                cpuEl.innerHTML = window.DOMPurify.sanitize(html);
                 const hintCpu = document.getElementById('hint-cpu');
                 if (hintCpu) {
-                    const title = (typeof I18N !== 'undefined' && I18N.web_top_cpu) ? I18N.web_top_cpu : "Top CPU Consumers";
-                    hintCpu.innerHTML = DOMPurify.sanitize(formatProcessList(data.stats.process_cpu, title, "text-blue-500"));
+                    const title = (typeof window.I18N !== 'undefined' && window.I18N.web_top_cpu) ? window.I18N.web_top_cpu : "Top CPU Consumers";
+                    hintCpu.innerHTML = window.DOMPurify.sanitize(formatProcessList(data.stats.process_cpu, title, "text-blue-500"));
                 }
             }
             if (progCpu) {
                 progCpu.style.width = data.stats.cpu + "%";
-                if (typeof SYS_CONFIG !== 'undefined') {
-                    applyAgentWarning('cpu', data.stats.cpu, SYS_CONFIG.cpu_threshold || 90, {
+                if (typeof window.SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('cpu', data.stats.cpu, window.SYS_CONFIG.cpu_threshold || 90, {
                         text: 'text-indigo-600 dark:text-indigo-400',
                         bg: 'bg-indigo-500',
                         iconBg: 'bg-indigo-100 dark:bg-indigo-500/20'
@@ -950,17 +944,17 @@ function updateAgentStatsUI(data) {
                 if (data.stats.ram_used !== undefined) {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.ram_total - data.stats.ram_used)} ${freeIcon}</span>`;
                 }
-                ramEl.innerHTML = DOMPurify.sanitize(html);
+                ramEl.innerHTML = window.DOMPurify.sanitize(html);
                 const hintRam = document.getElementById('hint-ram');
                 if (hintRam) {
-                    const title = (typeof I18N !== 'undefined' && I18N.web_top_ram) ? I18N.web_top_ram : "Top Memory Consumers";
-                    hintRam.innerHTML = DOMPurify.sanitize(formatProcessList(data.stats.process_ram, title, "text-purple-500"));
+                    const title = (typeof window.I18N !== 'undefined' && window.I18N.web_top_ram) ? window.I18N.web_top_ram : "Top Memory Consumers";
+                    hintRam.innerHTML = window.DOMPurify.sanitize(formatProcessList(data.stats.process_ram, title, "text-purple-500"));
                 }
             }
             if (progRam) {
                 progRam.style.width = data.stats.ram + "%";
-                if (typeof SYS_CONFIG !== 'undefined') {
-                    applyAgentWarning('ram', data.stats.ram, SYS_CONFIG.ram_threshold || 90, {
+                if (typeof window.SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('ram', data.stats.ram, window.SYS_CONFIG.ram_threshold || 90, {
                         text: 'text-purple-600 dark:text-purple-400',
                         bg: 'bg-purple-500',
                         iconBg: 'bg-purple-100 dark:bg-purple-500/20'
@@ -975,17 +969,17 @@ function updateAgentStatsUI(data) {
                 if (data.stats.disk_free) {
                     html += ` <span class="text-xs font-normal opacity-60">/ ${formatBytes(data.stats.disk_free)} ${freeIcon}</span>`;
                 }
-                diskEl.innerHTML = DOMPurify.sanitize(html);
+                diskEl.innerHTML = window.DOMPurify.sanitize(html);
                 const hintDisk = document.getElementById('hint-disk');
                 if (hintDisk) {
-                    const title = (typeof I18N !== 'undefined' && I18N.web_top_disk) ? I18N.web_top_disk : "Top I/O Usage";
-                    hintDisk.innerHTML = DOMPurify.sanitize(formatProcessList(data.stats.process_disk, title, "text-emerald-500"));
+                    const title = (typeof window.I18N !== 'undefined' && window.I18N.web_top_disk) ? window.I18N.web_top_disk : "Top I/O Usage";
+                    hintDisk.innerHTML = window.DOMPurify.sanitize(formatProcessList(data.stats.process_disk, title, "text-emerald-500"));
                 }
             }
             if (progDisk) {
                 progDisk.style.width = data.stats.disk + "%";
-                if (typeof SYS_CONFIG !== 'undefined') {
-                    applyAgentWarning('disk', data.stats.disk, SYS_CONFIG.disk_threshold || 95, {
+                if (typeof window.SYS_CONFIG !== 'undefined') {
+                    applyAgentWarning('disk', data.stats.disk, window.SYS_CONFIG.disk_threshold || 95, {
                         text: 'text-green-600 dark:text-green-400',
                         bg: 'bg-green-500',
                         iconBg: 'bg-green-100 dark:bg-green-500/20'
@@ -1026,48 +1020,42 @@ function updateAgentStatsUI(data) {
                         <span class="font-mono text-sm font-bold ${valueClass || 'text-gray-700 dark:text-gray-200'} text-right">${escapeHtml(String(value))}</span>
                     </div>`;
 
-                hintUptime.innerHTML = DOMPurify.sanitize(`
+                hintUptime.innerHTML = window.DOMPurify.sanitize(`
                     <div class="flex flex-col divide-y divide-gray-100 dark:divide-white/5 mt-2">
-                        ${mkRow(I18N?.web_agent_uptime_os || 'Current OS Uptime', data.stats.boot_time ? formatUptime(data.stats.boot_time) : '—')}
-                        ${mkRow(I18N?.web_nodes_monitor_last_outage || 'Last outage', fmtDt(avail.last_downtime_at))}
-                        ${mkRow(I18N?.web_nodes_monitor_last_reboot || 'Last reboot', fmtDt(avail.last_reboot_at))}
-                        ${mkRow(I18N?.web_nodes_monitor_total_uptime || 'Total uptime', formatDuration(avail.total_online_secs))}
-                        ${mkRow(I18N?.web_agent_downtime || 'Downtime', formatDuration(avail.total_downtime_secs), 'text-red-600 dark:text-red-400')}
-                        ${mkRow(I18N?.web_nodes_monitor_internet_downtime || 'Internet downtime', formatDuration(avail.internet_downtime_secs), 'text-amber-600 dark:text-amber-400')}
-                        ${mkRow(I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime', formatDuration(avail.physical_downtime_secs), 'text-violet-600 dark:text-violet-400')}
+                        ${mkRow(window.I18N?.web_agent_uptime_os || 'Current OS Uptime', data.stats.boot_time ? formatUptime(data.stats.boot_time) : '—')}
+                        ${mkRow(window.I18N?.web_nodes_monitor_last_outage || 'Last outage', fmtDt(avail.last_downtime_at))}
+                        ${mkRow(window.I18N?.web_nodes_monitor_last_reboot || 'Last reboot', fmtDt(avail.last_reboot_at))}
+                        ${mkRow(window.I18N?.web_nodes_monitor_total_uptime || 'Total uptime', formatDuration(avail.total_online_secs))}
+                        ${mkRow(window.I18N?.web_agent_downtime || 'Downtime', formatDuration(avail.total_downtime_secs), 'text-red-600 dark:text-red-400')}
+                        ${mkRow(window.I18N?.web_nodes_monitor_internet_downtime || 'Internet downtime', formatDuration(avail.internet_downtime_secs), 'text-amber-600 dark:text-amber-400')}
+                        ${mkRow(window.I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime', formatDuration(avail.physical_downtime_secs), 'text-violet-600 dark:text-violet-400')}
                     </div>
                     <div class="mt-3 flex justify-end">
                         <button data-action="reset-agent-uptime" class="text-xs font-bold text-blue-600 hover:text-blue-500 bg-blue-100/50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 px-3 py-1 rounded transition-colors hidden" id="agentHintResetBtn">
-                            ${escapeHtml(I18N?.web_reset_uptime || 'Reset Uptime')}
+                            ${escapeHtml(window.I18N?.web_reset_uptime || 'Reset Uptime')}
                         </button>
                     </div>`);
 
                 // Handle reset button visibility based on whether we are at system defaults
                 const isDefault = (avail.total_downtime_secs || 0) === 0;
-                if (!isDefault && typeof USER_ROLE !== 'undefined' && USER_ROLE === 'admins') {
+                if (!isDefault && typeof window.USER_ROLE !== 'undefined' && window.USER_ROLE === 'admins') {
                     document.getElementById('agentHintResetBtn')?.classList.remove('hidden');
                 }
             }
 
-            const ipEl = document.getElementById('agentIp');
-            if (ipEl && data.stats.ip) {
-                const ip = decryptData(data.stats.ip);
-                const copyBtn = document.getElementById('agentIpCopyBtn');
-                if (copyBtn) copyBtn.setAttribute('data-ip', ip);
-                if (typeof window.animateDecryption === 'function') {
-                    window.animateDecryption(ipEl, ip, 800, 'agent_ip');
-                } else {
-                    ipEl.innerText = ip;
-                }
+            if (data.stats.ip) {
+                const ipv4 = window.decryptData(data.stats.ip);
+                const ipv6 = agentAddressData?.ipv6?.primary || '';
+                window.updateIpBadge(document.getElementById('agentIpBadge'), window.ipBadgeState(ipv4, ipv6, 'agent'));
             }
 
             const pingEl = document.getElementById('agentPing');
             if (pingEl) {
                 if (data.stats.ping) {
-                    const pingValue = decryptData(data.stats.ping);
+                    const pingValue = window.decryptData(data.stats.ping);
                     let pingText = pingValue || 'n/a';
                     if (pingValue && !isNaN(pingValue)) {
-                        const unit = (typeof I18N !== 'undefined' && I18N.web_agent_ping_unit) ? I18N.web_agent_ping_unit : 'ms';
+                        const unit = (typeof window.I18N !== 'undefined' && window.I18N.web_agent_ping_unit) ? window.I18N.web_agent_ping_unit : 'ms';
                         pingText = pingValue + ' ' + unit;
                     }
                     if (typeof window.animateDecryption === 'function') {
@@ -1096,16 +1084,16 @@ function renderAgentUptimePills(avail) {
     const isEn = typeof document !== 'undefined' && document.documentElement?.lang === 'en';
     if (onlineLabel) {
         const defaultOnline = isEn ? 'Online' : 'В сети';
-        onlineLabel.innerText = (I18N?.web_nodes_monitor_total_uptime || defaultOnline) + ': ' + formatDuration(onlineSecs);
+        onlineLabel.innerText = (window.I18N?.web_nodes_monitor_total_uptime || defaultOnline) + ': ' + formatDuration(onlineSecs);
     }
     if (downtimeLabel) {
         const defaultDown = isEn ? 'Downtime' : 'Простой';
-        downtimeLabel.innerText = (I18N?.web_agent_downtime || defaultDown) + ': ' + formatDuration(downSecs);
+        downtimeLabel.innerText = (window.I18N?.web_agent_downtime || defaultDown) + ': ' + formatDuration(downSecs);
     }
     if (pctLabel) {
         const rollingPct = avail.rolling_uptime_pct !== undefined ? avail.rolling_uptime_pct : 100;
         const defaultAvail = isEn ? 'Availability' : 'Доступность';
-        pctLabel.innerText = `${rollingPct}% ${I18N?.web_availability || I18N?.web_uptime || defaultAvail}`;
+        pctLabel.innerText = `${rollingPct}% ${window.I18N?.web_availability || window.I18N?.web_uptime || defaultAvail}`;
     }
 
     const uptimeOnlineBar = document.getElementById('uptimeBarOnline');
@@ -1211,16 +1199,16 @@ function showPillTooltip(pill, idx) {
     const rect = pill.getBoundingClientRect();
 
     let dotClass = 'dot-green';
-    let titleText = I18N?.web_uptime_operational || 'Доступен';
+    let titleText = window.I18N?.web_uptime_operational || 'Доступен';
     if (p.status === 'nodata') {
         dotClass = 'dot-grey';
-        titleText = I18N?.web_uptime_no_data || 'Нет информации';
+        titleText = window.I18N?.web_uptime_no_data || 'Нет информации';
     } else if (p.status === 'physical') {
         dotClass = 'dot-red';
-        titleText = I18N?.web_uptime_physical_outage || 'Физический простой';
+        titleText = window.I18N?.web_uptime_physical_outage || 'Физический простой';
     } else if (p.status === 'internet') {
         dotClass = 'dot-yellow';
-        titleText = I18N?.web_uptime_internet_outage || 'Сбой сети';
+        titleText = window.I18N?.web_uptime_internet_outage || 'Сбой сети';
     }
 
     const pctStr = p.uptime_pct !== null && p.uptime_pct !== undefined ? ` (${p.uptime_pct}%)` : '';
@@ -1234,19 +1222,19 @@ function showPillTooltip(pill, idx) {
 
     let detailsHtml = '';
     if (p.status === 'nodata') {
-        detailsHtml = `<div class="text-[10px] text-gray-400 dark:text-gray-500">${I18N?.web_uptime_no_data_desc || 'Мониторинг еще не велся'}</div>`;
+        detailsHtml = `<div class="text-[10px] text-gray-400 dark:text-gray-500">${window.I18N?.web_uptime_no_data_desc || 'Мониторинг еще не велся'}</div>`;
     } else if (p.phys_seconds > 0 || p.net_seconds > 0) {
         if (p.net_seconds > 0) {
-            detailsHtml += `<div class="uptime-tooltip-row"><span>${I18N?.web_uptime_net_downtime || 'Простой сети'}:</span><span class="font-mono text-amber-500 font-bold">${formatDuration(p.net_seconds)}</span></div>`;
+            detailsHtml += `<div class="uptime-tooltip-row"><span>${window.I18N?.web_uptime_net_downtime || 'Простой сети'}:</span><span class="font-mono text-amber-500 font-bold">${formatDuration(p.net_seconds)}</span></div>`;
         }
         if (p.phys_seconds > 0) {
-            detailsHtml += `<div class="uptime-tooltip-row"><span>${I18N?.web_uptime_phys_downtime || 'Физический простой'}:</span><span class="font-mono text-red-500 font-bold">${formatDuration(p.phys_seconds)}</span></div>`;
+            detailsHtml += `<div class="uptime-tooltip-row"><span>${window.I18N?.web_uptime_phys_downtime || 'Физический простой'}:</span><span class="font-mono text-red-500 font-bold">${formatDuration(p.phys_seconds)}</span></div>`;
         }
     } else {
-        detailsHtml = `<div class="text-[10px] text-emerald-500 font-medium">${I18N?.web_uptime_no_outages || 'Без сбоев (100%)'}</div>`;
+        detailsHtml = `<div class="text-[10px] text-emerald-500 font-medium">${window.I18N?.web_uptime_no_outages || 'Без сбоев (100%)'}</div>`;
     }
 
-    tooltip.innerHTML = DOMPurify.sanitize(`
+    tooltip.innerHTML = window.DOMPurify.sanitize(`
         <div class="uptime-tooltip-header">
             <span class="uptime-tooltip-dot ${dotClass}"></span>
             <span>${escapeHtml(titleText)}${escapeHtml(pctStr)}</span>
@@ -1300,8 +1288,8 @@ function pushQuickStatHistory(key, value) {
 function getQuickStatColor(key, defaultRgb) {
     const hist = quickStatsHistory[key];
     const val = hist && hist.length ? hist[hist.length - 1] : 0;
-    if (typeof SYS_CONFIG !== 'undefined') {
-        const threshold = (key === 'cpu' ? SYS_CONFIG.cpu_threshold : key === 'ram' ? SYS_CONFIG.ram_threshold : SYS_CONFIG.disk_threshold) || 90;
+    if (typeof window.SYS_CONFIG !== 'undefined') {
+        const threshold = (key === 'cpu' ? window.SYS_CONFIG.cpu_threshold : key === 'ram' ? window.SYS_CONFIG.ram_threshold : window.SYS_CONFIG.disk_threshold) || 90;
         const isPeak = val >= Math.max(threshold, 95) || val >= threshold + 5;
         const isWarn = val >= threshold;
         if (isPeak) return 'rgb(239, 68, 68)';
@@ -1345,7 +1333,7 @@ function renderQuickStatChart(canvasId, existingChart, colorRgb, historyKey) {
     }
 
     const ctx = canvas.getContext('2d');
-    return new Chart(ctx, {
+    return new window.Chart(ctx, {
         type: 'line',
         data: {
             labels: data.map(() => ''),
@@ -1502,19 +1490,19 @@ function renderAgentChart(series, animate = true) {
         const rxGrad = getGradient(ctx, 'rgb(34, 197, 94)');
         const txGrad = getGradient(ctx, 'rgb(59, 130, 246)');
 
-        agentChart = new Chart(ctx, {
+        agentChart = new window.Chart(ctx, {
             type: 'line',
             data: {
                 labels,
                 datasets: [{
-                    label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ',
+                    label: (typeof window.I18N !== 'undefined' && window.I18N.web_label_rx) ? window.I18N.web_label_rx : 'ВХ',
                     data: netRx, yAxisID: 'y',
                     borderColor: '#22c55e',
                     borderWidth: 2,
                     backgroundColor: rxGrad,
                     fill: true
                 }, {
-                    label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ',
+                    label: (typeof window.I18N !== 'undefined' && window.I18N.web_label_tx) ? window.I18N.web_label_tx : 'ИСХ',
                     data: netTx, yAxisID: 'y',
                     borderColor: '#3b82f6',
                     borderWidth: 2,
@@ -1530,21 +1518,21 @@ function renderAgentChart(series, animate = true) {
 }
 
 function formatSpeed(v) {
-    const sKbps = (typeof I18N !== 'undefined' && I18N.unit_kbps) ? I18N.unit_kbps : 'Kbps';
-    const sMbps = (typeof I18N !== 'undefined' && I18N.unit_mbps) ? I18N.unit_mbps : 'Mbps';
-    const sGbps = (typeof I18N !== 'undefined' && I18N.unit_gbps) ? I18N.unit_gbps : 'Gbps';
+    const sKbps = (typeof window.I18N !== 'undefined' && window.I18N.unit_kbps) ? window.I18N.unit_kbps : 'Kbps';
+    const sMbps = (typeof window.I18N !== 'undefined' && window.I18N.unit_mbps) ? window.I18N.unit_mbps : 'Mbps';
+    const sGbps = (typeof window.I18N !== 'undefined' && window.I18N.unit_gbps) ? window.I18N.unit_gbps : 'Gbps';
     if (v === null || v === undefined) return '0 ' + sKbps;
     return v >= 1024 * 1024 ? (v / 1048576).toFixed(2) + ' ' + sGbps : (v >= 1024 ? (v / 1024).toFixed(2) + ' ' + sMbps : v.toFixed(2) + ' ' + sKbps);
 }
 
 function formatBytes(b) {
     const s = [
-        (typeof I18N !== 'undefined' && I18N.unit_bytes) ? I18N.unit_bytes : 'B',
-        (typeof I18N !== 'undefined' && I18N.unit_kb) ? I18N.unit_kb : 'KB',
-        (typeof I18N !== 'undefined' && I18N.unit_mb) ? I18N.unit_mb : 'MB',
-        (typeof I18N !== 'undefined' && I18N.unit_gb) ? I18N.unit_gb : 'GB',
-        (typeof I18N !== 'undefined' && I18N.unit_tb) ? I18N.unit_tb : 'TB',
-        (typeof I18N !== 'undefined' && I18N.unit_pb) ? I18N.unit_pb : 'PB'
+        (typeof window.I18N !== 'undefined' && window.I18N.unit_bytes) ? window.I18N.unit_bytes : 'B',
+        (typeof window.I18N !== 'undefined' && window.I18N.unit_kb) ? window.I18N.unit_kb : 'KB',
+        (typeof window.I18N !== 'undefined' && window.I18N.unit_mb) ? window.I18N.unit_mb : 'MB',
+        (typeof window.I18N !== 'undefined' && window.I18N.unit_gb) ? window.I18N.unit_gb : 'GB',
+        (typeof window.I18N !== 'undefined' && window.I18N.unit_tb) ? window.I18N.unit_tb : 'TB',
+        (typeof window.I18N !== 'undefined' && window.I18N.unit_pb) ? window.I18N.unit_pb : 'PB'
     ];
     if (!+b) return '0 ' + s[0];
     const i = Math.floor(Math.log(b) / Math.log(1024));
@@ -1565,9 +1553,9 @@ function formatUptime(bt) {
     const h = Math.floor((seconds % 86400) / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const isEn = typeof document !== 'undefined' && document.documentElement?.lang === 'en';
-    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : (isEn ? 'd' : 'д');
-    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : (isEn ? 'h' : 'ч');
-    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : (isEn ? 'm' : 'м');
+    const unitD = (typeof window.I18N !== 'undefined' && window.I18N.web_time_d) ? window.I18N.web_time_d : (isEn ? 'd' : 'д');
+    const unitH = (typeof window.I18N !== 'undefined' && window.I18N.web_time_h) ? window.I18N.web_time_h : (isEn ? 'h' : 'ч');
+    const unitM = (typeof window.I18N !== 'undefined' && window.I18N.web_time_m) ? window.I18N.web_time_m : (isEn ? 'm' : 'м');
     if (d > 0) return `${d}${unitD} ${h}${unitH}`;
     if (h > 0) return `${h}${unitH} ${m}${unitM}`;
     return `${m}${unitM}`;
@@ -1575,9 +1563,9 @@ function formatUptime(bt) {
 
 function formatDuration(seconds) {
     const isEn = typeof document !== 'undefined' && document.documentElement?.lang === 'en';
-    const unitD = (typeof I18N !== 'undefined' && I18N.web_time_d) ? I18N.web_time_d : (isEn ? 'd' : 'д');
-    const unitH = (typeof I18N !== 'undefined' && I18N.web_time_h) ? I18N.web_time_h : (isEn ? 'h' : 'ч');
-    const unitM = (typeof I18N !== 'undefined' && I18N.web_time_m) ? I18N.web_time_m : (isEn ? 'm' : 'м');
+    const unitD = (typeof window.I18N !== 'undefined' && window.I18N.web_time_d) ? window.I18N.web_time_d : (isEn ? 'd' : 'д');
+    const unitH = (typeof window.I18N !== 'undefined' && window.I18N.web_time_h) ? window.I18N.web_time_h : (isEn ? 'h' : 'ч');
+    const unitM = (typeof window.I18N !== 'undefined' && window.I18N.web_time_m) ? window.I18N.web_time_m : (isEn ? 'm' : 'м');
     if (!seconds) return `0${unitM}`;
     const s = Math.floor(seconds);
     const d = Math.floor(s / 86400);
@@ -1594,7 +1582,7 @@ function setLogLoading() {
     container.classList.add('overflow-hidden');
     if (!container.classList.contains('relative')) container.classList.add('relative');
 
-    const loadingText = (typeof I18N !== 'undefined' && I18N.web_log_connecting) ? I18N.web_log_connecting : "Connecting...";
+    const loadingText = (typeof window.I18N !== 'undefined' && window.I18N.web_log_connecting) ? window.I18N.web_log_connecting : "Connecting...";
     const existing = document.getElementById('log-loader');
     if (existing) existing.remove();
 
@@ -1602,7 +1590,7 @@ function setLogLoading() {
     loader.id = 'log-loader';
     loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm transition-opacity duration-300 opacity-0';
 
-    loader.innerHTML = DOMPurify.sanitize(`
+    loader.innerHTML = window.DOMPurify.sanitize(`
         <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -1637,8 +1625,8 @@ function updateLogEmptyState() {
     }
     if (emptyState) return;
 
-    const emptyTitle = (typeof I18N !== 'undefined' && I18N.web_logs_empty_title) ? I18N.web_logs_empty_title : "Logs are empty";
-    const emptyDesc = (typeof I18N !== 'undefined' && I18N.web_logs_empty_desc) ? I18N.web_logs_empty_desc : "No new entries found";
+    const emptyTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_logs_empty_title) ? window.I18N.web_logs_empty_title : "Logs are empty";
+    const emptyDesc = (typeof window.I18N !== 'undefined' && window.I18N.web_logs_empty_desc) ? window.I18N.web_logs_empty_desc : "No new entries found";
 
     const emptyHtml = `
     <div id="empty-logs-state" class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400 dark:text-gray-600 animate-fade-in-up select-none opacity-80">
@@ -1712,7 +1700,7 @@ function selectServiceLog(service) {
     selectedServiceLog = service;
     persistTrackedServiceLogs();
     renderServiceLogsTab();
-    switchLogType('service', service.name, service.type);
+    window.switchLogType('service', service.name, service.type);
 }
 
 function buildServiceRow(service, { onSelect, onRemove = null, active = false } = {}) {
@@ -1745,7 +1733,7 @@ function buildServiceRow(service, { onSelect, onRemove = null, active = false } 
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'shrink-0 p-2 mr-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition';
-        remove.title = I18N.web_logs_close_service || 'Remove';
+        remove.title = window.I18N.web_logs_close_service || 'Remove';
         remove.setAttribute('aria-label', remove.title);
         remove.innerHTML = '<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
         remove.addEventListener('click', event => {
@@ -1764,7 +1752,7 @@ function renderServiceLogsTrackedList() {
     if (!trackedServiceLogs.length) {
         const empty = document.createElement('div');
         empty.className = 'text-xs text-gray-500 dark:text-gray-400 px-1';
-        empty.textContent = I18N.web_logs_no_tracked || 'No services selected yet';
+        empty.textContent = window.I18N.web_logs_no_tracked || 'No services selected yet';
         list.appendChild(empty);
         return;
     }
@@ -1773,7 +1761,7 @@ function renderServiceLogsTrackedList() {
             active: isSameService(service, selectedServiceLog) && activeLogSourceType === 'service',
             onSelect: () => {
                 selectServiceLog(service);
-                closeServiceLogsModal();
+                window.closeServiceLogsModal();
             },
             onRemove: () => removeTrackedServiceLog(service)
         }));
@@ -1856,8 +1844,8 @@ function renderServiceLogsAvailableList({ availableServices = null, loading = fa
         }
         const message = document.createElement('span');
         message.textContent = loading
-            ? (I18N.web_logs_loading_services || 'Loading services…')
-            : (I18N.web_logs_services_error || 'Unable to load services');
+            ? (window.I18N.web_logs_loading_services || 'Loading services…')
+            : (window.I18N.web_logs_services_error || 'Unable to load services');
         state.appendChild(message);
         list.appendChild(state);
         return;
@@ -1894,15 +1882,15 @@ function renderServiceLogsAvailableList({ availableServices = null, loading = fa
         const empty = document.createElement('div');
         empty.className = 'px-1 text-xs text-gray-500 dark:text-gray-400';
         empty.textContent = query
-            ? (I18N.web_logs_search_empty || 'Nothing found')
-            : (I18N.web_logs_no_running || 'No running services. Use search to find stopped ones.');
+            ? (window.I18N.web_logs_search_empty || 'Nothing found')
+            : (window.I18N.web_logs_no_running || 'No running services. Use search to find stopped ones.');
         list.appendChild(empty);
         return;
     }
     if (isSuggestion) {
         const hint = document.createElement('div');
         hint.className = 'px-1 text-xs text-gray-500 dark:text-gray-400';
-        hint.textContent = I18N.web_logs_did_you_mean || 'Did you mean:';
+        hint.textContent = window.I18N.web_logs_did_you_mean || 'Did you mean:';
         list.appendChild(hint);
     }
     candidates.forEach(service => {
@@ -1910,7 +1898,7 @@ function renderServiceLogsAvailableList({ availableServices = null, loading = fa
             onSelect: () => {
                 trackedServiceLogs.push({ name: service.name, type: service.type });
                 selectServiceLog(trackedServiceLogs[trackedServiceLogs.length - 1]);
-                closeServiceLogsModal();
+                window.closeServiceLogsModal();
             }
         }));
     });
@@ -1940,8 +1928,8 @@ function renderServiceLogsTab() {
     actionButton.setAttribute(
         'aria-label',
         hasMultiple
-            ? (I18N.web_logs_select_service || 'Select service')
-            : (I18N.web_logs_close_service || 'Close service logs')
+            ? (window.I18N.web_logs_select_service || 'Select service')
+            : (window.I18N.web_logs_close_service || 'Close service logs')
     );
     actionButton.title = actionButton.getAttribute('aria-label');
 }
@@ -1955,9 +1943,9 @@ function removeTrackedServiceLog(removedService) {
         persistTrackedServiceLogs();
         if (wasViewingService) {
             if (selectedServiceLog) {
-                switchLogType('service', selectedServiceLog.name, selectedServiceLog.type);
+                window.switchLogType('service', selectedServiceLog.name, selectedServiceLog.type);
             } else {
-                switchLogType('bot');
+                window.switchLogType('bot');
             }
         }
     } else {
@@ -2011,7 +1999,7 @@ function renderServiceLogsDropdown() {
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'shrink-0 p-2 text-gray-400 hover:text-red-500 transition-colors';
-        remove.title = I18N.web_logs_close_service || 'Remove';
+        remove.title = window.I18N.web_logs_close_service || 'Remove';
         remove.setAttribute('aria-label', remove.title);
         remove.innerHTML = '<svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
         remove.addEventListener('click', event => {
@@ -2092,7 +2080,7 @@ async function loadAvailableServicesIntoModal() {
     }
 
     try {
-        const services = await sseRequest('/api/services/available?search=1', 'available_services');
+        const services = await window.sseRequest('/api/services/available?search=1', 'available_services');
         const list = Array.isArray(services) ? services : [];
         writeAvailableServicesCache(list);
         if (requestId !== serviceLogsRequestId) return;
@@ -2145,6 +2133,35 @@ document.addEventListener('click', function (e) {
     }
 });
 
+function generateDummyLogs() {
+    const lines = [
+        "INFO:system:Starting background service monitoring...",
+        "DEBUG:core.utils:Connection established with remote node",
+        "INFO:modules.traffic:Traffic metrics updated successfully",
+        "WARNING:network:Latency spike detected (150ms)",
+        "INFO:auth:User session verified securely",
+        "DEBUG:database:Query executed in 0.02s",
+        "INFO:system:System resources check passed",
+        "INFO:bot:Webhook set successfully",
+        "DEBUG:asyncio:Event loop running...",
+        "INFO:server:Web server listening on port 8080"
+    ];
+    let dummyHtml = '';
+    const getRandomVal = () => {
+        if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+            const arr = new Uint32Array(1);
+            window.crypto.getRandomValues(arr);
+            return arr[0] / 4294967296;
+        }
+        return Math.random();
+    };
+    for (let i = 0; i < 30; i++) {
+        const line = lines[Math.floor(getRandomVal() * lines.length)];
+        dummyHtml += `<div class="text-gray-400 dark:text-gray-600 select-none filter blur-[3px] opacity-50">${line}</div>`;
+    }
+    return dummyHtml;
+}
+
 window.switchLogType = function (
     type,
     serviceName = selectedServiceLog?.name,
@@ -2174,7 +2191,7 @@ function startLogStream(type, serviceName, serviceType, key) {
     closeServiceLogsDropdown();
     renderServiceLogsTab();
     // Reset log level filter to ALL
-    selectLogFilter('ALL');
+    window.selectLogFilter('ALL');
     ['btnLogBot', 'btnLogSys', 'btnLogService'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -2193,16 +2210,16 @@ function startLogStream(type, serviceName, serviceType, key) {
 
     const container = document.getElementById('logsContainer');
     const overlay = document.getElementById('logsOverlay');
-    if (typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'admins') {
+    if (typeof window.USER_ROLE !== 'undefined' && window.USER_ROLE !== 'admins') {
         if (overlay) overlay.classList.remove('hidden');
         if (!container.innerHTML.includes('blur')) {
-            container.innerHTML = DOMPurify.sanitize(generateDummyLogs());
+            container.innerHTML = window.DOMPurify.sanitize(generateDummyLogs());
             container.scrollTop = 0;
         }
         return;
     }
     container.style.minHeight = container.offsetHeight + 'px';
-    container.innerHTML = DOMPurify.sanitize('');
+    container.innerHTML = window.DOMPurify.sanitize('');
 
     const oldEmpty = document.getElementById('empty-logs-state');
     if (oldEmpty) oldEmpty.remove();
@@ -2293,7 +2310,7 @@ function setModalLoading() {
         const el = document.getElementById(id);
         if (el) el.innerText = '...';
     });
-    renderNodeModalTitle(document.getElementById('modalNodeName'), '...');
+    window.renderNodeModalTitle(document.getElementById('modalNodeName'), '...');
     const lastSeen = document.getElementById('modalNodeLastSeen');
     if (lastSeen) {
         lastSeen.innerText = '...';
@@ -2305,12 +2322,12 @@ function setModalLoading() {
     const existing = document.getElementById('node-modal-loader');
     if (existing) existing.remove();
 
-    const loadingText = (typeof I18N !== 'undefined' && I18N.web_node_modal_loading) ? I18N.web_node_modal_loading : "Loading node data...";
+    const loadingText = (typeof window.I18N !== 'undefined' && window.I18N.web_node_modal_loading) ? window.I18N.web_node_modal_loading : "Loading node data...";
 
     const loader = document.createElement('div');
     loader.id = 'node-modal-loader';
     loader.className = 'absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 dark:bg-gray-900/60 backdrop-blur-md rounded-2xl transition-opacity duration-300 opacity-0';
-    loader.innerHTML = DOMPurify.sanitize(`
+    loader.innerHTML = window.DOMPurify.sanitize(`
         <svg class="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -2395,9 +2412,9 @@ function initDashboardUptimeTooltip() {
 function getDashboardAvailabilityNote(availability) {
     if (!availability || !availability.has_ongoing_outage) return '';
     if (availability.ongoing_outage_kind === 'physical') {
-        return `${I18N?.web_nodes_monitor_outage_rebooting || 'Current outage is caused by a reboot'}: ${availability.current_downtime}`;
+        return `${window.I18N?.web_nodes_monitor_outage_rebooting || 'Current outage is caused by a reboot'}: ${availability.current_downtime}`;
     }
-    return `${I18N?.web_nodes_monitor_outage_pending || 'The reason will be determined after the node reconnects'}: ${availability.current_downtime}`;
+    return `${window.I18N?.web_nodes_monitor_outage_pending || 'The reason will be determined after the node reconnects'}: ${availability.current_downtime}`;
 }
 
 function removeModalLoading() {
@@ -2415,9 +2432,9 @@ async function openNodeDetails(nodeId, color) {
     const modal = document.getElementById('nodeModal');
     if (modal) {
         setModalLoading();
-        animateModalOpen(modal);
-        currentNodeId = nodeId;
-        cancelNodeRename();
+        window.animateModalOpen(modal);
+        window.currentNodeId = nodeId;
+        window.cancelNodeRename();
     }
 
     if (chartRes) chartRes.destroy();
@@ -2457,7 +2474,7 @@ function updateNodeDetailsUI(data) {
     removeModalLoading();
     const inputContainer = document.getElementById('nodeNameInputContainer');
     if (inputContainer && inputContainer.classList.contains('hidden')) {
-        renderNodeModalTitle(document.getElementById('modalNodeName'), decryptData(data.name));
+        window.renderNodeModalTitle(document.getElementById('modalNodeName'), window.decryptData(data.name));
 
         const nameContainer = document.getElementById('nodeNameContainer');
         if (nameContainer) {
@@ -2471,7 +2488,7 @@ function updateNodeDetailsUI(data) {
             if (isSet || data.next_payment_date) {
                 const daysLeft = window.calculateDaysLeft ? window.calculateDaysLeft(data.next_payment_date) : null;
                 const billingIconColor = daysLeft === null ? 'text-gray-400' : daysLeft < 0 ? 'text-red-500 dark:text-red-400' : daysLeft <= 6 ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400';
-                badgeEl.innerHTML = DOMPurify.sanitize(`
+                badgeEl.innerHTML = window.DOMPurify.sanitize(`
                     <button class="flex items-center justify-center h-6 px-1.5 sm:px-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-600 dark:text-gray-400 font-medium text-[10px] sm:text-xs gap-1 whitespace-nowrap group ml-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ${billingIconColor} transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
@@ -2483,7 +2500,7 @@ function updateNodeDetailsUI(data) {
                 if (badgeBtn) {
                     badgeBtn.onclick = () => {
                         window.showBillingModal(
-                            decryptData(data.name),
+                            window.decryptData(data.name),
                             data.billing_amount !== null && data.billing_amount !== undefined ? data.billing_amount : null,
                             data.currency || '$',
                             data.next_payment_date || null,
@@ -2498,16 +2515,8 @@ function updateNodeDetailsUI(data) {
         }
     }
 
-    const newIp = decryptData(data.ip);
-    const ipEl = document.getElementById('modalNodeIp');
-    if (ipEl && ipEl.innerText !== newIp) {
-        ipEl.innerText = newIp;
-        const container = document.getElementById('modalNodeIpContainer');
-        if (container) container.setAttribute('data-copy-ip', newIp);
-        const copyBtn = document.getElementById('modalNodeIpCopyBtn');
-        if (copyBtn) copyBtn.setAttribute('data-ip', newIp);
-    }
-    
+    window.updateIpBadge(document.getElementById('modalNodeIpContainer'), window.nodeIpBadgeState(data));
+
     const nodeIdEl = document.getElementById('modalNodeId');
     if (nodeIdEl) {
         nodeIdEl.textContent = String(data.id ?? '-');
@@ -2535,13 +2544,13 @@ function updateNodeDetailsUI(data) {
     lastNodeDetailsData = data;
     renderNodeModalTraffic(data);
 
-    document.getElementById('dashboardAvailabilityLabelCurrentUptime').innerText = I18N?.web_nodes_monitor_current_uptime || 'Current uptime';
-    document.getElementById('dashboardAvailabilityLabelLastOutage').innerText = I18N?.web_nodes_monitor_last_outage || 'Last outage';
-    document.getElementById('dashboardAvailabilityLabelLastReboot').innerText = I18N?.web_nodes_monitor_last_reboot || 'Last reboot';
-    document.getElementById('dashboardAvailabilityLabelTotalUptime').innerText = I18N?.web_nodes_monitor_total_uptime || 'Total uptime';
-    document.getElementById('dashboardAvailabilityLabelTotalDowntime').innerText = I18N?.web_nodes_monitor_total_downtime || 'Total downtime';
-    document.getElementById('dashboardAvailabilityLabelInternetDowntime').innerText = I18N?.web_nodes_monitor_internet_downtime || 'Internet downtime';
-    document.getElementById('dashboardAvailabilityLabelPhysicalDowntime').innerText = I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime';
+    document.getElementById('dashboardAvailabilityLabelCurrentUptime').innerText = window.I18N?.web_nodes_monitor_current_uptime || 'Current uptime';
+    document.getElementById('dashboardAvailabilityLabelLastOutage').innerText = window.I18N?.web_nodes_monitor_last_outage || 'Last outage';
+    document.getElementById('dashboardAvailabilityLabelLastReboot').innerText = window.I18N?.web_nodes_monitor_last_reboot || 'Last reboot';
+    document.getElementById('dashboardAvailabilityLabelTotalUptime').innerText = window.I18N?.web_nodes_monitor_total_uptime || 'Total uptime';
+    document.getElementById('dashboardAvailabilityLabelTotalDowntime').innerText = window.I18N?.web_nodes_monitor_total_downtime || 'Total downtime';
+    document.getElementById('dashboardAvailabilityLabelInternetDowntime').innerText = window.I18N?.web_nodes_monitor_internet_downtime || 'Internet downtime';
+    document.getElementById('dashboardAvailabilityLabelPhysicalDowntime').innerText = window.I18N?.web_nodes_monitor_physical_downtime || 'Physical downtime';
 
     document.getElementById('dashboardAvailabilityCurrentUptime').innerText = availability.current_uptime || '-';
     document.getElementById('dashboardAvailabilityLastOutage').innerText = availability.last_downtime || '-';
@@ -2565,8 +2574,8 @@ function updateNodeDetailsUI(data) {
     const diff = now - lastSeen;
     const lsEl = document.getElementById('modalNodeLastSeen');
 
-    const statusOnline = (typeof I18N !== 'undefined' && I18N.web_node_status_online) ? I18N.web_node_status_online : "Online";
-    const statusLastSeen = (typeof I18N !== 'undefined' && I18N.web_node_last_seen) ? I18N.web_node_last_seen : "Last seen: ";
+    const statusOnline = (typeof window.I18N !== 'undefined' && window.I18N.web_node_status_online) ? window.I18N.web_node_status_online : "Online";
+    const statusLastSeen = (typeof window.I18N !== 'undefined' && window.I18N.web_node_last_seen) ? window.I18N.web_node_last_seen : "Last seen: ";
 
     if (lsEl) {
         lsEl.innerText = diff < 60 ? statusOnline : `${statusLastSeen}${new Date(lastSeen * 1000).toLocaleString()}`;
@@ -2625,7 +2634,7 @@ function closeNodeModal() {
     if (typeof window.collapseChartModal === 'function') window.collapseChartModal();
     const modal = document.getElementById('nodeModal');
     if (modal) {
-        animateModalClose(modal);
+        window.animateModalClose(modal);
     }
     removeModalLoading();
     stopNodeChartRanges();
@@ -2672,9 +2681,9 @@ window.cancelNodeRename = function (token) {
 window.saveNodeRename = async function () {
     const nameInput = document.getElementById('modalNodeNameInput');
     const newName = nameInput.value.trim();
-    if (!newName || !currentNodeId) return;
-    renderNodeModalTitle(document.getElementById('modalNodeName'), newName);
-    cancelNodeRename();
+    if (!newName || !window.currentNodeId) return;
+    window.renderNodeModalTitle(document.getElementById('modalNodeName'), newName);
+    window.cancelNodeRename();
 
     try {
         const res = await fetch('/api/nodes/rename', {
@@ -2683,34 +2692,34 @@ window.saveNodeRename = async function () {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                node_id: currentNodeId,
+                node_id: window.currentNodeId,
                 name: newName
             })
         });
 
         if (res.ok) {
             if (window.showToast) {
-                const msg = (typeof I18N !== 'undefined' && I18N.web_node_rename_success) ? I18N.web_node_rename_success : "Name updated";
+                const msg = (typeof window.I18N !== 'undefined' && window.I18N.web_node_rename_success) ? window.I18N.web_node_rename_success : "Name updated";
                 window.showToast(msg);
             }
         } else {
             const data = await res.json();
-            const errorMsg = (typeof I18N !== 'undefined' && I18N.web_node_rename_error) ? I18N.web_node_rename_error : "Error updating name";
-            const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            const errorMsg = (typeof window.I18N !== 'undefined' && window.I18N.web_node_rename_error) ? window.I18N.web_node_rename_error : "Error updating name";
+            const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
             if (window.showModalAlert) await window.showModalAlert(data.error || errorMsg, errTitle);
         }
     } catch (e) {
         console.error(e);
-        const errTitle = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
         if (window.showModalAlert) await window.showModalAlert(String(e), errTitle);
     }
 };
 
 window.handleRenameKeydown = function (event) {
     if (event.key === 'Enter') {
-        saveNodeRename();
+        window.saveNodeRename();
     } else if (event.key === 'Escape') {
-        cancelNodeRename();
+        window.cancelNodeRename();
     }
 };
 
@@ -2793,8 +2802,8 @@ function renderNodeResChart(series, animate = true) {
     const cpuData = series.cpu;
     const ramData = series.ram;
     const commonOptions = buildNodeChartOptions(series);
-    const lblCpu = (typeof I18N !== 'undefined' && I18N.web_label_cpu) ? I18N.web_label_cpu : "CPU";
-    const lblRam = (typeof I18N !== 'undefined' && I18N.web_label_ram) ? I18N.web_label_ram : "RAM";
+    const lblCpu = (typeof window.I18N !== 'undefined' && window.I18N.web_label_cpu) ? window.I18N.web_label_cpu : "CPU";
+    const lblRam = (typeof window.I18N !== 'undefined' && window.I18N.web_label_ram) ? window.I18N.web_label_ram : "RAM";
 
     if (chartRes) {
         const applyResChartData = () => {
@@ -2814,7 +2823,7 @@ function renderNodeResChart(series, animate = true) {
     } else {
         const cpuGrad = getGradient(ctxRes, 'rgb(59, 130, 246)');
         const ramGrad = getGradient(ctxRes, 'rgb(168, 85, 247)');
-        chartRes = new Chart(ctxRes, {
+        chartRes = new window.Chart(ctxRes, {
             type: 'line',
             data: {
                 labels,
@@ -2913,19 +2922,19 @@ function renderNodeNetChart(series, animate = true) {
         };
         const rxGrad = getGradient(ctxNet, 'rgb(34, 197, 94)');
         const txGrad = getGradient(ctxNet, 'rgb(59, 130, 246)');
-        chartNet = new Chart(ctxNet, {
+        chartNet = new window.Chart(ctxNet, {
             type: 'line',
             data: {
                 labels,
                 datasets: [{
-                    label: (typeof I18N !== 'undefined' && I18N.web_label_rx) ? I18N.web_label_rx : 'ВХ',
+                    label: (typeof window.I18N !== 'undefined' && window.I18N.web_label_rx) ? window.I18N.web_label_rx : 'ВХ',
                     data: netRx, yAxisID: 'y',
                     borderColor: '#22c55e',
                     borderWidth: 2,
                     backgroundColor: rxGrad,
                     fill: true
                 }, {
-                    label: (typeof I18N !== 'undefined' && I18N.web_label_tx) ? I18N.web_label_tx : 'ИСХ',
+                    label: (typeof window.I18N !== 'undefined' && window.I18N.web_label_tx) ? window.I18N.web_label_tx : 'ИСХ',
                     data: netTx, yAxisID: 'y',
                     borderColor: '#3b82f6',
                     borderWidth: 2,
@@ -2943,7 +2952,7 @@ function renderNodeNetChart(series, animate = true) {
 }
 
 window.resetTrafficDashboard = async function () {
-    if (!await window.showModalConfirm(I18N.web_traffic_reset_confirm, I18N.modal_title_confirm)) return;
+    if (!await window.showModalConfirm(window.I18N.web_traffic_reset_confirm, window.I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/traffic/reset', {
@@ -2953,14 +2962,14 @@ window.resetTrafficDashboard = async function () {
             }
         });
         if (res.ok) {
-            if (window.showToast) window.showToast(I18N.traffic_reset_done);
+            if (window.showToast) window.showToast(window.I18N.traffic_reset_done);
         } else {
             const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            const errorShort = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
             await window.showModalAlert(data.error || "Failed", errorShort);
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_conn_error_short) ? I18N.web_conn_error_short : "Conn Error";
+        const errorShort = (typeof window.I18N !== 'undefined' && window.I18N.web_conn_error_short) ? window.I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(String(e), errorShort);
     }
 };
@@ -2972,9 +2981,9 @@ window.openAddNodeModal = function () {
         const i = document.getElementById('newNodeNameDash');
         if (i) {
             i.value = '';
-            if (typeof validateNodeInput === 'function') validateNodeInput();
+            if (typeof window.validateNodeInput === 'function') window.validateNodeInput();
         }
-        animateModalOpen(m, true);
+        window.animateModalOpen(m, true);
         if (i) {
             setTimeout(() => {
                 i.focus({ preventScroll: true });
@@ -3010,9 +3019,9 @@ function initServicesSSE() {
 
             // Decrypt each service
             const services = encryptedServices.map(svc => ({
-                name: decryptData(svc.name),
-                type: decryptData(svc.type),
-                status: decryptData(svc.status)
+                name: window.decryptData(svc.name),
+                type: window.decryptData(svc.type),
+                status: window.decryptData(svc.status)
             }));
 
             renderServices(services);
@@ -3056,11 +3065,11 @@ function loadServices() {
     if (servicesLoadContainer === container && servicesLoadRequest) return servicesLoadRequest;
     servicesLoadContainer = container;
 
-    const request = sseRequest('/api/services', 'services_list')
+    const request = window.sseRequest('/api/services', 'services_list')
         .then(data => {
             if (document.getElementById('services-container') !== container) return;
             if (!data) {
-                container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
+                container.innerHTML = window.DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
                 return;
             }
             if (data.error) {
@@ -3074,7 +3083,7 @@ function loadServices() {
         .catch(err => {
             if (document.getElementById('services-container') !== container) return;
             console.error('Error loading services:', err);
-            container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
+            container.innerHTML = window.DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-400 py-4">${window.i18n.services_empty || 'Services not available'}</div>`);
         })
         .finally(() => {
             if (servicesLoadRequest === request) {
@@ -3112,7 +3121,7 @@ function renderServices(services, forceRender = false) {
         return;
     }
 
-    container.innerHTML = DOMPurify.sanitize('');
+    container.innerHTML = window.DOMPurify.sanitize('');
 
     // Store services for filtering
     window._servicesData = services;
@@ -3123,7 +3132,7 @@ function renderServices(services, forceRender = false) {
     }
 
     if (services.length === 0) {
-        container.innerHTML = DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-500 py-4">${window.i18n.services_empty}</div>`);
+        container.innerHTML = window.DOMPurify.sanitize(`<div class="col-span-full text-center text-gray-500 py-4">${window.i18n.services_empty}</div>`);
         return;
     }
 
@@ -3177,7 +3186,7 @@ function renderServices(services, forceRender = false) {
             }
         };
 
-        card.innerHTML = DOMPurify.sanitize(`
+        card.innerHTML = window.DOMPurify.sanitize(`
             <div class="flex items-center gap-3 min-w-0">
                 <div class="w-2.5 h-2.5 rounded-full bg-${colorClass}-500 shadow-[0_0_6px_rgba(var(--color-${colorClass}-500),0.6)] flex-shrink-0"></div>
                 <div class="min-w-0">
@@ -3192,8 +3201,8 @@ function renderServices(services, forceRender = false) {
         container.appendChild(card);
     });
     
-    if (typeof parsePageEmojis === 'function') {
-        setTimeout(() => parsePageEmojis(container), 850);
+    if (typeof window.parsePageEmojis === 'function') {
+        setTimeout(() => window.parsePageEmojis(container), 850);
     }
 }
 
@@ -3258,12 +3267,12 @@ function filterServices(query) {
         if (!loadingEl) {
             loadingEl = document.createElement('div');
             loadingEl.className = 'search-loading col-span-full flex items-center justify-center gap-2 py-4 text-gray-400';
-            loadingEl.innerHTML = DOMPurify.sanitize(`
+            loadingEl.innerHTML = window.DOMPurify.sanitize(`
                 <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span>${I18N.web_searching || 'Searching...'}</span>
+                <span>${window.I18N.web_searching || 'Searching...'}</span>
             `);
             container.appendChild(loadingEl);
         }
@@ -3292,7 +3301,7 @@ function filterServices(query) {
             });
 
             if (convertedCount > 0) {
-                const suggestionText = I18N.web_did_you_mean || 'Did you mean';
+                const suggestionText = window.I18N.web_did_you_mean || 'Did you mean';
                 suggestionHtml = `
                     <div class="layout-suggestion-main text-center py-2 col-span-full">
                         <span class="text-gray-400">${suggestionText}: </span>
@@ -3308,7 +3317,7 @@ function filterServices(query) {
 
         const msg = document.createElement('div');
         msg.className = 'no-search-results col-span-full text-center text-gray-400 py-4';
-        msg.textContent = I18N.web_services_none_found || 'No services found';
+        msg.textContent = window.I18N.web_services_none_found || 'No services found';
         container.appendChild(msg);
     }
 }
@@ -3340,7 +3349,7 @@ async function searchGlobalServices(query, managedMatchCount) {
         // Use cache or fetch (with search=1 param for read-only access)
         if (!_globalServicesCache) {
             try {
-                _globalServicesCache = await sseRequest('/api/services/available?search=1', 'available_services');
+                _globalServicesCache = await window.sseRequest('/api/services/available?search=1', 'available_services');
             } catch (_err) {
                 return;
             }
@@ -3371,7 +3380,7 @@ async function searchGlobalServices(query, managedMatchCount) {
                 if (!existingNoResults) {
                     const msg = document.createElement('div');
                     msg.className = 'no-search-results col-span-full text-center text-gray-400 py-4';
-                    msg.textContent = I18N.web_services_none_found || 'No services found';
+                    msg.textContent = window.I18N.web_services_none_found || 'No services found';
                     container.appendChild(msg);
                 }
             }
@@ -3405,7 +3414,7 @@ async function searchGlobalServices(query, managedMatchCount) {
                 addButtonHtml = `
                     <button data-action="add-service-search" data-name="${item.name}" data-type="${item.type}" 
                             class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/20 hover:bg-green-600 transition-all duration-200 hover:scale-110 active:scale-95"
-                            title="${I18N.web_services_btn_add || 'Add'}">
+                            title="${window.I18N.web_services_btn_add || 'Add'}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                         </svg>
@@ -3413,7 +3422,7 @@ async function searchGlobalServices(query, managedMatchCount) {
                 `;
             }
 
-            card.innerHTML = DOMPurify.sanitize(`
+            card.innerHTML = window.DOMPurify.sanitize(`
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="w-2.5 h-2.5 rounded-full bg-${colorClass}-500 shadow-[0_0_6px_rgba(var(--color-${colorClass}-500),0.6)] flex-shrink-0"></div>
                     <div class="min-w-0">
@@ -3461,11 +3470,11 @@ async function addServiceFromSearch(name, type) {
             loadServices();
         } else {
             const data = await res.json();
-            window.showModalAlert((I18N.web_services_error || 'Error') + ': ' + (data.error || 'Unknown'), I18N.modal_title_error);
+            window.showModalAlert((window.I18N.web_services_error || 'Error') + ': ' + (data.error || 'Unknown'), window.I18N.modal_title_error);
         }
     } catch (err) {
         console.error('Error adding service:', err);
-        window.showModalAlert(I18N.web_services_request_failed || 'Request failed', I18N.modal_title_error);
+        window.showModalAlert(window.I18N.web_services_request_failed || 'Request failed', window.I18N.modal_title_error);
     }
 }
 
@@ -3480,17 +3489,17 @@ function openServiceInfoModal(name, type) {
     if (title) title.innerText = name;
 
     // Show loading
-    content.innerHTML = DOMPurify.sanitize(`<div class="text-center py-4 text-gray-400">
+    content.innerHTML = window.DOMPurify.sanitize(`<div class="text-center py-4 text-gray-400">
         <svg class="animate-spin h-6 w-6 mx-auto mb-2 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        ${I18N.web_services_info_loading || 'Loading...'}
+        ${window.I18N.web_services_info_loading || 'Loading...'}
     </div>`);
 
     // Open modal with animation
-    if (typeof animateModalOpen === 'function') {
-        animateModalOpen(modal, false);
+    if (typeof window.animateModalOpen === 'function') {
+        window.animateModalOpen(modal, false);
     } else {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -3498,20 +3507,20 @@ function openServiceInfoModal(name, type) {
     }
 
     // Fetch service info
-    sseRequest(`/api/services/info/${encodeURIComponent(name)}?type=${type}`, 'service_info')
+    window.sseRequest(`/api/services/info/${encodeURIComponent(name)}?type=${type}`, 'service_info')
         .then(info => {
             renderServiceInfo(info);
         })
         .catch(err => {
             console.error('Error fetching service info:', err);
-            content.innerHTML = DOMPurify.sanitize(`<div class="text-center py-4 text-red-500">${err.message}</div>`);
+            content.innerHTML = window.DOMPurify.sanitize(`<div class="text-center py-4 text-red-500">${err.message}</div>`);
         });
 }
 
 function closeServiceInfoModal() {
     const modal = document.getElementById('serviceInfoModal');
-    if (typeof animateModalClose === 'function') {
-        animateModalClose(modal);
+    if (typeof window.animateModalClose === 'function') {
+        window.animateModalClose(modal);
     } else {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
@@ -3524,14 +3533,14 @@ function renderServiceInfo(info) {
 
     const statusColor = info.status === 'running' ? 'green' : info.status === 'stopped' ? 'red' : 'gray';
     const statusText = info.status === 'running'
-        ? (I18N.web_services_status_running || 'Running')
+        ? (window.I18N.web_services_status_running || 'Running')
         : info.status === 'stopped'
-            ? (I18N.web_services_status_stopped || 'Stopped')
-            : (I18N.web_services_status_unknown || 'Unknown');
+            ? (window.I18N.web_services_status_stopped || 'Stopped')
+            : (window.I18N.web_services_status_unknown || 'Unknown');
 
     const typeIcon = info.type === 'docker' ? '<i class="icon icon-docker icon-sm text-blue-500 mr-1"></i>' : '<i class="icon icon-gear icon-sm text-gray-500 mr-1"></i>';
     const typeLabel = info.type === 'docker' ? 'Docker' : 'Systemd';
-    const description = info.description || (I18N.web_services_info_no_desc || 'No description');
+    const description = info.description || (window.I18N.web_services_info_no_desc || 'No description');
 
     // Build info items
     let infoItems = [];
@@ -3590,7 +3599,7 @@ function renderServiceInfo(info) {
         </div>`);
     }
 
-    content.innerHTML = DOMPurify.sanitize(`
+    content.innerHTML = window.DOMPurify.sanitize(`
         <div class="space-y-3">
             <!-- Status row -->
             <div class="flex items-center justify-between">
@@ -3616,9 +3625,9 @@ async function controlService(name, type, action) {
     pendingServiceControls.add(key);
     try {
         const confirmKey = 'web_services_confirm_' + action;
-        const confirmMsg = (I18N[confirmKey] || 'Are you sure you want to {action} {name}?').replace('{name}', name).replace('{action}', action);
+        const confirmMsg = (window.I18N[confirmKey] || 'Are you sure you want to {action} {name}?').replace('{name}', name).replace('{action}', action);
 
-        if (!await window.showModalConfirm(confirmMsg, I18N.modal_title_confirm)) return;
+        if (!await window.showModalConfirm(confirmMsg, window.I18N.modal_title_confirm)) return;
 
         const res = await fetch('/api/services/' + action, {
             method: 'POST',
@@ -3631,11 +3640,11 @@ async function controlService(name, type, action) {
         if (data.status === 'ok') {
             loadServices(); // refresh
         } else {
-            window.showModalAlert((I18N.web_services_error || 'Error') + ': ' + (data.error || 'Unknown error'), I18N.modal_title_error || 'Error');
+            window.showModalAlert((window.I18N.web_services_error || 'Error') + ': ' + (data.error || 'Unknown error'), window.I18N.modal_title_error || 'Error');
         }
     } catch (err) {
         console.error('Error:', err);
-        window.showModalAlert(I18N.web_services_request_failed || 'Request failed', I18N.modal_title_error || 'Error');
+        window.showModalAlert(window.I18N.web_services_request_failed || 'Request failed', window.I18N.modal_title_error || 'Error');
     } finally {
         pendingServiceControls.delete(key);
     }
@@ -3665,22 +3674,22 @@ function closeServicesEditModal() {
 
 async function loadAvailableServices() {
     const container = document.getElementById('servicesEditList');
-    container.innerHTML = DOMPurify.sanitize(`
+    container.innerHTML = window.DOMPurify.sanitize(`
         <div class="flex items-center justify-center gap-2 py-8 text-gray-400">
             <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span>${I18N.web_loading || 'Loading...'}</span>
+            <span>${window.I18N.web_loading || 'Loading...'}</span>
         </div>`);
 
     try {
-        const data = await sseRequest('/api/services/available', 'available_services');
+        const data = await window.sseRequest('/api/services/available', 'available_services');
 
         renderServicesEditList(data);
     } catch (err) {
         console.error('Error loading available services:', err);
-        container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-8 text-red-500">${err.message}</div>`);
+        container.innerHTML = window.DOMPurify.sanitize(`<div class="text-center py-8 text-red-500">${err.message}</div>`);
     }
 }
 
@@ -3688,7 +3697,7 @@ function renderServicesEditList(services) {
     const container = document.getElementById('servicesEditList');
 
     if (!services || services.length === 0) {
-        container.innerHTML = DOMPurify.sanitize(`<div class="text-center py-8 text-gray-400">${I18N.web_services_none_found || 'No services found'}</div>`);
+        container.innerHTML = window.DOMPurify.sanitize(`<div class="text-center py-8 text-gray-400">${window.I18N.web_services_none_found || 'No services found'}</div>`);
         return;
     }
 
@@ -3718,7 +3727,7 @@ function renderServicesEditList(services) {
                         data-type="${s.type}"
                         data-action="toggle-service-managed" data-name="${s.name}" data-type="${s.type}" data-managed="${isManaged}" 
                         class="srv-manage-btn px-2 py-1 rounded-lg text-xs font-medium transition min-w-[60px] flex items-center justify-center gap-1 flex-shrink-0 ${buttonClasses}">
-                    <span class="btn-text">${isManaged ? (I18N.web_services_btn_remove || 'Remove') : (I18N.web_services_btn_add || 'Add')}</span>
+                    <span class="btn-text">${isManaged ? (window.I18N.web_services_btn_remove || 'Remove') : (window.I18N.web_services_btn_add || 'Add')}</span>
                     <svg class="btn-spinner hidden animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -3729,7 +3738,7 @@ function renderServicesEditList(services) {
     }
 
     html += '</div>';
-    container.innerHTML = DOMPurify.sanitize(html);
+    container.innerHTML = window.DOMPurify.sanitize(html);
 }
 
 // Filter services in Edit modal
@@ -3774,7 +3783,7 @@ function filterServicesEditList(query) {
             });
 
             if (convertedCount > 0) {
-                const suggestionText = I18N.web_did_you_mean || 'Did you mean';
+                const suggestionText = window.I18N.web_did_you_mean || 'Did you mean';
                 suggestionHtml = `
                     <div class="layout-suggestion text-center py-2">
                         <span class="text-gray-400">${suggestionText}: </span>
@@ -3782,7 +3791,7 @@ function filterServicesEditList(query) {
                                 class="text-blue-500 hover:text-blue-400 font-medium hover:underline">
                             "${layoutCheck.converted}"
                         </button>
-                        <span class="text-gray-500 text-xs ml-2">(${convertedCount} ${I18N.web_results || 'results'})</span>
+                        <span class="text-gray-500 text-xs ml-2">(${convertedCount} ${window.I18N.web_results || 'results'})</span>
                     </div>
                 `;
             }
@@ -3790,9 +3799,9 @@ function filterServicesEditList(query) {
 
         const msg = document.createElement('div');
         msg.className = 'no-search-results-edit text-center text-gray-400 py-4';
-        msg.innerHTML = DOMPurify.sanitize(`
+        msg.innerHTML = window.DOMPurify.sanitize(`
             ${suggestionHtml}
-            <div class="mt-1">${I18N.web_services_none_found || 'No services found'}</div>
+            <div class="mt-1">${window.I18N.web_services_none_found || 'No services found'}</div>
         `);
         grid.parentElement.appendChild(msg);
     }
@@ -3817,17 +3826,22 @@ function applyLayoutSuggestion(suggestion) {
     }
 }
 
+function agentHasAdditionalAddresses(addresses) {
+    return Number(addresses?.ipv4?.count || 0) >= 2 || Number(addresses?.ipv6?.count || 0) >= 2;
+}
+
 async function openAgentIpsModal() {
+    if (!agentHasAdditionalAddresses(agentAddressData)) return;
     const m = document.getElementById('agentIpsModal');
     if (!m) return;
-    animateModalOpen(m, false);
+    window.animateModalOpen(m, false);
     await loadAgentIpv4();
 }
 
 function closeAgentIpsModal() {
     const m = document.getElementById('agentIpsModal');
     if (!m) return;
-    animateModalClose(m);
+    window.animateModalClose(m);
 }
 
 async function loadAgentIpv4() {
@@ -3838,16 +3852,13 @@ async function loadAgentIpv4() {
     const elError = document.getElementById('agentIpsError');
     elError?.classList.add('hidden');
     elEmpty?.classList.add('hidden');
-    if (elList) elList.innerHTML = DOMPurify.sanitize('');
+    if (elList) elList.innerHTML = window.DOMPurify.sanitize('');
     if (elLoading) elLoading.classList.remove('hidden');
 
     try {
-        const r = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.json();
-
-        const primary = data.primary || data.source_ip || data.agent_ip || '-';
-        const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
+        const addresses = await fetchAgentAddressPair();
+        const primary = window.ipBadgeState(addresses.ipv4.primary, addresses.ipv6.primary, 'agent').ip;
+        const ips = [...(addresses.ipv4.ips || []), ...(addresses.ipv6.ips || [])];
 
         if (elPrimary) {
             elPrimary.textContent = primary;
@@ -3865,14 +3876,14 @@ async function loadAgentIpv4() {
             const rawHtml = secondary.map(ip => `
         <li class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-mono text-xs select-all flex items-center justify-between group/ip ip-copy-container" data-copy-ip="${escapeHtml(ip)}">
           <span class="ip-copy-text">${escapeHtml(ip)}</span>
-          <button type="button" class="ip-copy-btn p-1 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(ip)}" title="${(typeof I18N !== 'undefined' && I18N.web_copy_ip) ? I18N.web_copy_ip : 'Copy IP'}">
+          <button type="button" class="ip-copy-btn p-1 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 rounded transition opacity-70 group-hover/ip:opacity-100 flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(ip)}" title="${(typeof window.I18N !== 'undefined' && window.I18N.web_copy_ip) ? window.I18N.web_copy_ip : 'Copy IP'}">
             <svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </button>
         </li>
       `).join('');
-            const safeHtml = DOMPurify.sanitize('<ul>' + rawHtml + '</ul>');
+            const safeHtml = window.DOMPurify.sanitize('<ul>' + rawHtml + '</ul>');
             elList.innerHTML = safeHtml.replace(/<\/?ul[^>]*>/ig, '');
         }
     } catch (e) {
@@ -3883,50 +3894,32 @@ async function loadAgentIpv4() {
     }
 }
 
+async function fetchAgentAddressPair() {
+    if (agentIpRequest) return agentIpRequest;
+    const request = Promise.all([4, 6].map(async version => {
+        const response = await window.secureFetch('/api/agent/ipv' + version, { credentials: 'same-origin', cache: 'no-store' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+    })).then(([ipv4, ipv6]) => {
+        agentAddressData = { ipv4, ipv6 };
+        return agentAddressData;
+    }).finally(() => { if (agentIpRequest === request) agentIpRequest = null; });
+    agentIpRequest = request;
+    return request;
+}
+
 async function initAgentIpBadge() {
     const badge = document.getElementById('agentIpBadge');
     if (!badge) return;
-
-    // Check if there are additional IPs before making badge interactive
     try {
-        const response = await fetch('/api/agent/ipv4', { credentials: 'same-origin' });
-        if (response.ok) {
-            const data = await response.json();
-            const primary = data.primary || data.source_ip || data.agent_ip || '-';
-            const ips = Array.isArray(data.ips) ? data.ips : Array.isArray(data.ipv4) ? data.ipv4 : [];
-            const secondary = ips.filter(ip => ip && ip !== primary);
-
-            // If no additional IPs, make badge non-interactive
-            if (secondary.length === 0) {
-                badge.removeAttribute('role');
-                badge.removeAttribute('tabindex');
-                badge.removeAttribute('onclick');
-                badge.removeAttribute('onkeydown');
-                badge.classList.remove('cursor-pointer', 'hover:bg-gray-200/70', 'dark:hover:bg-white/10');
-                // Remove the info icon
-                const icon = document.getElementById('agentIpInfoIcon');
-                if (icon) icon.remove();
-                return; // Don't add click handlers
-            }
-        }
-    } catch (e) {
-        console.error('Error checking additional IPs:', e);
+        const addresses = await fetchAgentAddressPair();
+        if (document.getElementById('agentIpBadge') !== badge) return;
+        window.updateIpBadge(badge, window.ipBadgeState(addresses.ipv4.primary, addresses.ipv6.primary, 'agent'));
+        const details = document.getElementById('agentIpInfoIcon');
+        if (details) details.classList.toggle('hidden', !agentHasAdditionalAddresses(addresses));
+    } catch (error) {
+        console.error('Could not load agent addresses:', error);
     }
-
-    // Add click handlers only if there are additional IPs
-    const handler = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        await openAgentIpsModal();
-    };
-
-    badge.addEventListener('click', handler);
-    badge.addEventListener('keydown', (e) => {
-        if (e.target === badge && (e.key === 'Enter' || e.key === ' ')) {
-            e.preventDefault();
-            handler(e);
-        }
-    });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -3963,12 +3956,12 @@ async function toggleServiceManaged(name, type, isCurrentlyManaged, btnElement) 
         } else {
             // Restore button state on error
             restoreButtonState(btnElement, isCurrentlyManaged);
-            window.showModalAlert(data.error || 'Error', I18N.modal_title_error || 'Error');
+            window.showModalAlert(data.error || 'Error', window.I18N.modal_title_error || 'Error');
         }
     } catch (err) {
         console.error('Error toggling service:', err);
         restoreButtonState(btnElement, isCurrentlyManaged);
-        window.showModalAlert(I18N.web_services_request_failed || 'Request failed', I18N.modal_title_error || 'Error');
+        window.showModalAlert(window.I18N.web_services_request_failed || 'Request failed', window.I18N.modal_title_error || 'Error');
     }
 }
 
@@ -3998,8 +3991,8 @@ function updateServiceItemState(name, isNowManaged) {
     if (textEl) {
         textEl.classList.remove('hidden');
         textEl.textContent = isNowManaged
-            ? (I18N.web_services_btn_remove || 'Remove')
-            : (I18N.web_services_btn_add || 'Add');
+            ? (window.I18N.web_services_btn_remove || 'Remove')
+            : (window.I18N.web_services_btn_add || 'Add');
     }
     if (spinnerEl) spinnerEl.classList.add('hidden');
 
@@ -4017,43 +4010,43 @@ function updateServiceItemState(name, isNowManaged) {
 }
 
 window.resetAgentUptime = async function() {
-    if (!await window.showModalConfirm(I18N.web_reset_uptime_confirm, I18N.modal_title_confirm)) return;
+    if (!await window.showModalConfirm(window.I18N.web_reset_uptime_confirm, window.I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/system/reset-uptime', { method: 'POST' });
         if (res.ok) {
-            if (window.showToast) window.showToast(I18N.uptime_reset_success);
+            if (window.showToast) window.showToast(window.I18N.uptime_reset_success);
         } else {
             const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            const errorShort = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
             await window.showModalAlert(data.error || "Failed", errorShort);
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        const errorShort = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
         await window.showModalAlert(String(e), errorShort);
     }
 };
 
 window.resetNodeUptime = async function() {
-    if (!currentNodeId) return;
-    if (!await window.showModalConfirm(I18N.web_reset_uptime_confirm, I18N.modal_title_confirm)) return;
+    if (!window.currentNodeId) return;
+    if (!await window.showModalConfirm(window.I18N.web_reset_uptime_confirm, window.I18N.modal_title_confirm)) return;
 
     try {
         const res = await fetch('/api/nodes/reset-uptime', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ node_id: currentNodeId })
+            body: JSON.stringify({ node_id: window.currentNodeId })
         });
         if (res.ok) {
-            if (window.showToast) window.showToast(I18N.uptime_reset_success);
+            if (window.showToast) window.showToast(window.I18N.uptime_reset_success);
             if (typeof window.hideDashboardAvailabilityPopover === 'function') window.hideDashboardAvailabilityPopover();
         } else {
             const data = await res.json();
-            const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+            const errorShort = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
             await window.showModalAlert(data.error || "Failed", errorShort);
         }
     } catch (e) {
-        const errorShort = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : "Error";
+        const errorShort = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
         await window.showModalAlert(String(e), errorShort);
     }
 };
@@ -4068,7 +4061,7 @@ document.addEventListener('app:action:open-node-details', e => {
     openNodeDetails(e.detail.target.getAttribute('data-token'), e.detail.target.getAttribute('data-color'));
 });
 document.addEventListener('app:action:reset-agent-uptime', e => {
-    resetAgentUptime();
+    window.resetAgentUptime();
 });
 document.addEventListener('app:action:control-service', e => {
     e.detail.originalEvent.stopPropagation();
@@ -4156,11 +4149,11 @@ function initDashboardEditOverlays() {
                 <div class="flex gap-2">
                     <button onclick="showSizePickerOverlay(event, this)" class="size-btn-desktop hidden sm:inline-flex bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition items-center gap-1 shadow-lg">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-                        ${(typeof I18N !== 'undefined' && I18N.web_widget_size) ? I18N.web_widget_size : 'Размер'}
+                        ${(typeof window.I18N !== 'undefined' && window.I18N.web_widget_size) ? window.I18N.web_widget_size : 'Размер'}
                     </button>
                     <button onclick="hideDashboardBlock(event, this)" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 shadow-lg">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                        ${(typeof I18N !== 'undefined' && I18N.web_widget_hide) ? I18N.web_widget_hide : 'Скрыть'}
+                        ${(typeof window.I18N !== 'undefined' && window.I18N.web_widget_hide) ? window.I18N.web_widget_hide : 'Скрыть'}
                     </button>
                 </div>
             `;
@@ -4265,7 +4258,7 @@ function toggleDashboardEditMode() {
         btn.classList.remove('bg-blue-500/10', 'text-blue-600', 'dark:text-blue-400');
         
         if (!dashboardSortable) {
-            dashboardSortable = Sortable.create(container, {
+            dashboardSortable = window.Sortable.create(container, {
                 animation: 300,
                 easing: "cubic-bezier(0.25, 1, 0.5, 1)",
                 handle: '.edit-overlay',
@@ -4306,7 +4299,7 @@ function showSizePickerOverlay(e, btn) {
     document.querySelectorAll('.size-picker').forEach(p => p.remove());
 
     const currentSize = block.getAttribute('data-current-size') || 'standard';
-    const lblSize = (typeof I18N !== 'undefined' && I18N.web_widget_size) ? I18N.web_widget_size : 'Размер';
+    const lblSize = (typeof window.I18N !== 'undefined' && window.I18N.web_widget_size) ? window.I18N.web_widget_size : 'Размер';
 
     const sizeLabels = { small: 'S', medium: 'M', standard: 'STD', wide: 'W', large: 'L' };
     const sizeFractions = { small: '3/12', medium: '4/12', standard: '6/12', wide: '8/12', large: '12/12' };
@@ -4482,7 +4475,7 @@ function updateHiddenBlocksPanel() {
         emptyMsg.className = 'text-xs text-gray-400 italic text-center py-2';
         list.appendChild(emptyMsg);
     }
-    emptyMsg.innerText = (typeof I18N !== 'undefined' && I18N.web_hidden_widgets_empty) ? I18N.web_hidden_widgets_empty : 'Нет скрытых виджетов';
+    emptyMsg.innerText = (typeof window.I18N !== 'undefined' && window.I18N.web_hidden_widgets_empty) ? window.I18N.web_hidden_widgets_empty : 'Нет скрытых виджетов';
     
     if (hiddenBlocks.length === 0) {
         emptyMsg.style.display = 'block';
@@ -4491,15 +4484,15 @@ function updateHiddenBlocksPanel() {
         hiddenBlocks.forEach(block => {
             const blockId = block.getAttribute('data-block-id');
             const namesMap = {
-                'quick_stats_uptime': (typeof I18N !== 'undefined' && I18N.web_uptime) ? I18N.web_uptime : 'Аптайм',
+                'quick_stats_uptime': (typeof window.I18N !== 'undefined' && window.I18N.web_uptime) ? window.I18N.web_uptime : 'Аптайм',
                 'quick_stats_cpu': 'CPU',
                 'quick_stats_ram': 'RAM',
                 'quick_stats_disk': 'SSD',
-                'agent_stats': (typeof I18N !== 'undefined' && I18N.web_agent_stats_title) ? I18N.web_agent_stats_title : 'График Агента',
-                'traffic_stats': (typeof I18N !== 'undefined' && I18N.web_traffic_total) ? I18N.web_traffic_total : 'Трафик',
-                'services_manager': (typeof I18N !== 'undefined' && I18N.web_services_title) ? I18N.web_services_title : 'Менеджер сервисов',
-                'nodes_manager': (typeof I18N !== 'undefined' && I18N.web_node_mgmt_title) ? I18N.web_node_mgmt_title : 'Менеджер Нод',
-                'system_logs': (typeof I18N !== 'undefined' && I18N.web_system_logs_title) ? I18N.web_system_logs_title : 'Системные логи'
+                'agent_stats': (typeof window.I18N !== 'undefined' && window.I18N.web_agent_stats_title) ? window.I18N.web_agent_stats_title : 'График Агента',
+                'traffic_stats': (typeof window.I18N !== 'undefined' && window.I18N.web_traffic_total) ? window.I18N.web_traffic_total : 'Трафик',
+                'services_manager': (typeof window.I18N !== 'undefined' && window.I18N.web_services_title) ? window.I18N.web_services_title : 'Менеджер сервисов',
+                'nodes_manager': (typeof window.I18N !== 'undefined' && window.I18N.web_node_mgmt_title) ? window.I18N.web_node_mgmt_title : 'Менеджер Нод',
+                'system_logs': (typeof window.I18N !== 'undefined' && window.I18N.web_system_logs_title) ? window.I18N.web_system_logs_title : 'Системные логи'
             };
             const blockName = namesMap[blockId] || blockId;
             
@@ -4512,7 +4505,7 @@ function updateHiddenBlocksPanel() {
 
             const restoreBtn = document.createElement('button');
             restoreBtn.className = 'p-1.5 bg-green-500/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-500 hover:text-white transition';
-            restoreBtn.title = (typeof I18N !== 'undefined' && I18N.web_widget_restore) ? I18N.web_widget_restore : 'Восстановить';
+            restoreBtn.title = (typeof window.I18N !== 'undefined' && window.I18N.web_widget_restore) ? window.I18N.web_widget_restore : 'Восстановить';
             restoreBtn.addEventListener('click', () => restoreDashboardBlock(blockId));
             restoreBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>';
 

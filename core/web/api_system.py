@@ -1,4 +1,4 @@
-﻿"""
+"""
 REST API controllers for system settings.
 Handles panel configuration changes, session management, and authentication.
 """
@@ -10,7 +10,6 @@ import logging
 import os
 import time
 from collections import deque
-from typing import Any
 
 from aiohttp import web
 
