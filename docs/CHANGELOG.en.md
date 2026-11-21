@@ -10,6 +10,12 @@
     <img src="https://img.shields.io/badge/status-stable-green?style=for-the-badge" alt="Status Stable"/>
 </p>
 
+## [Unreleased]
+
+### 🔄 Changed
+
+* **Telegram polling:** Long polling now uses a 20-second timeout and retry delays that grow from 2 to 30 seconds with jitter. Brief network interruptions and recovery are logged at `INFO`, with individual retries available at `DEBUG`. Ongoing outages produce summaries at most once per minute: `WARNING` after one minute and `ERROR` after five minutes. Token, access, and instance conflict errors remain visible; the main bot and alert bot maintain independent outage state.
+
 ## [1.28.0] - 2026-11-19
 
 ### 🚀 Major Highlights
