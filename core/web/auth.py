@@ -140,6 +140,9 @@ def _get_public_base_url() -> str | None:
         or parsed.fragment
     ):
         return None
+    if parsed.port == 443:
+        # Keep nonstandard public ports, but omit the default HTTPS port in links.
+        return parsed._replace(netloc=parsed.netloc.rsplit(":", 1)[0], path="").geturl()
     return candidate.rstrip("/")
 
 
@@ -306,8 +309,8 @@ def get_current_user(request: web.Request) -> dict[str, Any] | None:
     return {
         "id": user_id,
         "role": role,
-        "first_name": USER_NAMES.get(str(user_id), f"ID: {user_id}"),
-        "photo_url": session.get("photo_url", AGENT_FLAG),
+        "first_name": USER_NAMES.get(str(user_id)) or f"ID: {user_id}",
+        "photo_url": session.get("photo_url") or AGENT_FLAG,
     }
 
 

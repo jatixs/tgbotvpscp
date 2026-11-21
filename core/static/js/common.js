@@ -926,7 +926,7 @@ function parsePageEmojis(element) {
                     const char2 = String.fromCharCode(code2 - 0x1f1e6 + 97);
                     return 'https://flagcdn.com/' + char1 + char2 + '.svg';
                 }
-                return ''.concat(options.base, options.folder, '/', icon, options.ext);
+                return ''.concat(options.base, options.size, '/', icon, options.ext);
             },
             attributes: function(icon, variant) {
                 if (icon.length === 11 && /^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {

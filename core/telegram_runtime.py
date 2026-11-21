@@ -3,11 +3,70 @@
 import asyncio
 import logging
 import signal
+import time
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from typing import Any
 
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter, TelegramServerError
+from aiogram.utils.backoff import BackoffConfig
+
+
+POLLING_TIMEOUT = 20
+POLLING_BACKOFF = BackoffConfig(min_delay=2.0, max_delay=30.0, factor=1.6, jitter=0.5)
+_polling_log_context: ContextVar[Any] = ContextVar("telegram_polling_log_context", default=None)
+
+
+class PollingLogFilter(logging.Filter):
+    """Summarize transient polling outages without hiding permanent API errors."""
+
+    def __init__(self, bot_id: int):
+        super().__init__()
+        self.bot_id = bot_id
+        self.started = None
+        self.last_report = None
+        self.failures = 0
+        self.transient = False
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if _polling_log_context.get() is not self:
+            return True
+        if record.msg == "Failed to fetch updates - %s: %s":
+            self.transient = bool(record.args and record.args[0] in {
+                "TelegramNetworkError", "TelegramServerError",
+            })
+            if not self.transient:
+                return True
+            now = time.monotonic()
+            first = self.started is None
+            if first:
+                self.started = now
+            self.failures += 1
+            duration = now - self.started
+            report = first or now - self.last_report >= 60
+            level = logging.INFO if first else logging.DEBUG
+            if report and not first:
+                level = logging.ERROR if duration >= 300 else logging.WARNING
+            if report:
+                self.last_report = now
+            error_type, error = record.args
+            record.msg = "Telegram polling reconnecting (bot id=%s, failures=%d, outage=%.0fs): %s: %s"
+            record.args = (self.bot_id, self.failures, duration, error_type, error)
+        elif record.msg == "Sleep for %f seconds and try again... (tryings = %d, bot id = %d)" and self.transient:
+            level = logging.DEBUG
+        elif record.msg == "Connection established (tryings = %d, bot id = %d)" and self.started is not None:
+            record.msg = "Telegram polling restored (bot id=%s, retries=%d, outage=%.1fs)"
+            record.args = (self.bot_id, self.failures, time.monotonic() - self.started)
+            self.started = self.last_report = None
+            self.failures = 0
+            self.transient = False
+            level = logging.INFO
+        else:
+            return True
+        record.levelno = level
+        record.levelname = logging.getLevelName(level)
+        return logging.getLogger(record.name).isEnabledFor(level)
 
 
 async def _retry_startup(
@@ -84,9 +143,20 @@ async def run_polling(bot: Bot, dispatcher: Dispatcher, *, allowed_updates: list
     stop_polling can stop its internal tasks and run shutdown callbacks first.
     """
     await prepare_bot(bot)
-    polling = asyncio.create_task(dispatcher.start_polling(
-        bot, allowed_updates=allowed_updates, handle_signals=False, close_bot_session=False,
-    ))
+    logger = logging.getLogger("aiogram.dispatcher")
+    log_filter = PollingLogFilter(bot.id)
+    logger.addFilter(log_filter)
+    token = _polling_log_context.set(log_filter)
+    try:
+        polling = asyncio.create_task(dispatcher.start_polling(
+            bot, allowed_updates=allowed_updates, handle_signals=False, close_bot_session=False,
+            polling_timeout=POLLING_TIMEOUT, backoff_config=POLLING_BACKOFF,
+        ))
+    except Exception:
+        logger.removeFilter(log_filter)
+        raise
+    finally:
+        _polling_log_context.reset(token)
     try:
         await asyncio.shield(polling)
     except asyncio.CancelledError:
@@ -108,6 +178,8 @@ async def run_polling(bot: Bot, dispatcher: Dispatcher, *, allowed_updates: list
                 await asyncio.gather(stop, return_exceptions=True)
         await asyncio.gather(polling, return_exceptions=True)
         raise
+    finally:
+        logger.removeFilter(log_filter)
 
 
 def _install_shutdown_signal_handlers(loop: asyncio.AbstractEventLoop, main_task: asyncio.Task) -> None:
