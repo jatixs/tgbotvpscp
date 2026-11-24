@@ -27,6 +27,7 @@ def load_runtime():
         "aiogram.exceptions": SimpleNamespace(
             TelegramNetworkError=NetworkError, TelegramRetryAfter=RetryAfter, TelegramServerError=NetworkError,
         ),
+        "aiogram.utils.backoff": SimpleNamespace(BackoffConfig=lambda **kwargs: SimpleNamespace(**kwargs)),
     }):
         spec.loader.exec_module(module)
     return module
@@ -35,7 +36,7 @@ def load_runtime():
 class TelegramStartupTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.subject = load_runtime()
-        self.bot = SimpleNamespace(delete_webhook=AsyncMock(return_value=True), me=AsyncMock())
+        self.bot = SimpleNamespace(id=12345, delete_webhook=AsyncMock(return_value=True), me=AsyncMock())
 
     async def test_retries_each_startup_operation_independently(self):
         self.bot.delete_webhook.side_effect = [NetworkError(), True]
@@ -132,6 +133,7 @@ class TelegramStartupTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(finalized.is_set())
         dispatcher.start_polling.assert_awaited_once_with(
             self.bot, allowed_updates=["message"], handle_signals=False, close_bot_session=False,
+            polling_timeout=self.subject.POLLING_TIMEOUT, backoff_config=self.subject.POLLING_BACKOFF,
         )
         dispatcher.stop_polling.assert_awaited_once()
 
@@ -140,6 +142,16 @@ class TelegramStartupTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(NetworkError):
             await self.subject.run_polling(self.bot, dispatcher, allowed_updates=[])
         dispatcher.start_polling.assert_awaited_once()
+
+    async def test_task_creation_failure_removes_filter_and_context(self):
+        import logging
+        logger = logging.getLogger("aiogram.dispatcher")
+        original_filters = list(logger.filters)
+        dispatcher = SimpleNamespace(start_polling=Mock(side_effect=ValueError("invalid startup")))
+        with self.assertRaises(ValueError):
+            await self.subject.run_polling(self.bot, dispatcher, allowed_updates=[])
+        self.assertEqual(logger.filters, original_filters)
+        self.assertIsNone(self.subject._polling_log_context.get())
 
     def test_signal_cancels_startup_once_even_before_polling(self):
         # Exercise the production function directly without evaluating AST or importing bot.py.
@@ -150,6 +162,76 @@ class TelegramStartupTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(sig, (self.subject.signal.SIGINT, self.subject.signal.SIGTERM))
             callback(arg)
         main_task.cancel.assert_called_once()
+
+
+
+class TelegramPollingLogTests(unittest.TestCase):
+    def setUp(self):
+        import logging
+        self.logging = logging
+        self.subject = load_runtime()
+        self.subject_logger = logging.getLogger('aiogram.dispatcher')
+        self.old_level = self.subject_logger.level
+        self.subject_logger.setLevel(logging.INFO)
+        self.addCleanup(self.subject_logger.setLevel, self.old_level)
+        self.policy = self.subject.PollingLogFilter(12345)
+        token = self.subject._polling_log_context.set(self.policy)
+        self.addCleanup(self.subject._polling_log_context.reset, token)
+
+    def record(self, message, *args):
+        return self.logging.LogRecord('aiogram.dispatcher', self.logging.ERROR, '', 1, message, args, None)
+
+    def failure(self, now, kind='TelegramNetworkError'):
+        record = self.record('Failed to fetch updates - %s: %s', kind, 'offline')
+        with patch.object(self.subject.time, 'monotonic', return_value=now):
+            accepted = self.policy.filter(record)
+        return accepted, record
+
+    def test_brief_failure_is_info_and_repeated_attempts_are_suppressed(self):
+        accepted, record = self.failure(0)
+        self.assertTrue(accepted)
+        self.assertEqual(record.levelno, self.logging.INFO)
+        self.assertFalse(self.failure(2)[0])
+        sleep = self.record('Sleep for %f seconds and try again... (tryings = %d, bot id = %d)', 2, 1, 12345)
+        self.assertFalse(self.policy.filter(sleep))
+
+    def test_persistent_outage_reports_once_per_minute_and_escalates(self):
+        self.failure(0)
+        accepted, record = self.failure(60)
+        self.assertTrue(accepted)
+        self.assertEqual(record.levelno, self.logging.WARNING)
+        self.assertFalse(self.failure(61)[0])
+        accepted, record = self.failure(300, 'TelegramServerError')
+        self.assertTrue(accepted)
+        self.assertEqual(record.levelno, self.logging.ERROR)
+
+    def test_recovery_summarizes_duration_and_resets_the_outage(self):
+        self.failure(10)
+        self.failure(12)
+        record = self.record('Connection established (tryings = %d, bot id = %d)', 2, 12345)
+        with patch.object(self.subject.time, 'monotonic', return_value=20):
+            self.assertTrue(self.policy.filter(record))
+        self.assertEqual(record.args, (12345, 2, 10))
+        self.assertIsNone(self.policy.started)
+        self.assertEqual(self.failure(21)[1].levelno, self.logging.INFO)
+
+    def test_conflict_access_and_other_bot_errors_keep_their_original_severity(self):
+        for kind in ('TelegramConflictError', 'TelegramUnauthorizedError', 'TelegramForbiddenError', 'ValueError'):
+            accepted, record = self.failure(0, kind)
+            self.assertTrue(accepted)
+            self.assertEqual(record.levelno, self.logging.ERROR)
+        other = self.subject.PollingLogFilter(99999)
+        record = self.record('Failed to fetch updates - %s: %s', 'TelegramNetworkError', 'offline')
+        self.assertTrue(other.filter(record))
+        self.assertEqual(record.levelno, self.logging.ERROR)
+        self.assertIsNone(other.started)
+
+    def test_debug_logging_keeps_retry_diagnostics(self):
+        self.subject_logger.setLevel(self.logging.DEBUG)
+        self.failure(0)
+        accepted, record = self.failure(2)
+        self.assertTrue(accepted)
+        self.assertEqual(record.levelno, self.logging.DEBUG)
 
 
 if __name__ == "__main__":

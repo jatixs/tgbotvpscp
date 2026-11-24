@@ -30,6 +30,36 @@ def _int_to_b64(val: int) -> str:
 
 
 class TelegramAuthTests(unittest.IsolatedAsyncioTestCase):
+    def test_magic_link_session_uses_fallback_name_and_avatar(self):
+        from core.web import auth
+        request = MagicMock()
+        request.cookies = {auth.COOKIE_NAME: "magic-session"}
+        with patch.dict(auth.SERVER_SESSIONS, {"magic-session": {"id": 12345, "expires": time.time() + 60, "photo_url": None}}, clear=True), patch.dict(auth.ALLOWED_USERS, {12345: "admins"}, clear=True), patch.dict(auth.USER_NAMES, {"12345": None}, clear=True):
+            user = auth.get_current_user(request)
+        self.assertEqual(user["first_name"], "ID: 12345")
+        self.assertEqual(user["photo_url"], auth.AGENT_FLAG)
+
+    def test_public_login_urls_omit_only_the_default_https_port(self):
+        from core.web import auth
+        for configured, expected in (
+            ("https://panel.example:443/", "https://panel.example"),
+            ("https://panel.example/", "https://panel.example"),
+            ("https://panel.example:8443/", "https://panel.example:8443"),
+            ("https://[::1]:443/", "https://[::1]"),
+            ("https://[::1]:8443/", "https://[::1]:8443"),
+            ("https://user:password@panel.example:443", None),
+            ("https://panel.example:invalid", None),
+        ):
+            with self.subTest(configured=configured), patch.object(auth, "WEB_PUBLIC_URL", configured):
+                self.assertEqual(auth._get_public_base_url(), expected)
+
+    def test_missing_avatar_never_renders_none_as_text(self):
+        from core.web.avatar import get_avatar_html
+        for user in ({}, {"photo_url": None}, {"photo_url": ""}):
+            avatar = get_avatar_html(user)
+            self.assertNotIn("None", avatar)
+            self.assertIn("🏳️", avatar)
+
     @classmethod
     def setUpClass(cls):
         # Generate RSA test key pair

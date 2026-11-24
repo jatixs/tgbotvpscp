@@ -23,13 +23,15 @@ class AiogramLifecycleTests(unittest.TestCase):
 
 async def scenario():
     from collections import Counter
-    from unittest.mock import patch
+    import logging
+    from unittest.mock import AsyncMock, patch
 
     from aiogram import Bot, Dispatcher
     from aiogram.client.session.base import BaseSession
     from aiogram.exceptions import TelegramNetworkError, TelegramServerError
     from aiogram.methods import DeleteWebhook, GetMe, GetUpdates
     from aiogram.types import User
+    from aiogram.utils.backoff import Backoff
 
     from core import telegram_runtime
 
@@ -54,6 +56,13 @@ async def scenario():
                     raise TelegramServerError(method=method, message="temporary outage")
                 return User(id=123456, is_bot=True, first_name="Test", username="test_bot")
             if isinstance(method, GetUpdates):
+                assert method.timeout == telegram_runtime.POLLING_TIMEOUT
+                if self.calls[GetUpdates] == 1:
+                    raise TelegramNetworkError(method=method, message="connection reset")
+                if self.calls[GetUpdates] == 2:
+                    raise TelegramServerError(method=method, message="Bad Gateway")
+                if self.calls[GetUpdates] == 3:
+                    return []
                 self.started.set()
                 await asyncio.Event().wait()
             raise AssertionError(type(method))
@@ -80,7 +89,9 @@ async def scenario():
         dispatcher.startup.register(startup)
         dispatcher.shutdown.register(shutdown)
         prepare = telegram_runtime.prepare_bot
-        with patch.object(telegram_runtime, "prepare_bot", lambda bot: prepare(bot, initial_delay=0)):
+        logger = logging.getLogger("aiogram.dispatcher")
+        original_filters = list(logger.filters)
+        with patch.object(telegram_runtime, "prepare_bot", lambda bot: prepare(bot, initial_delay=0)), patch.object(Backoff, "asleep", new_callable=AsyncMock) as backoff_sleep, unittest.TestCase().assertLogs("aiogram.dispatcher", level="INFO") as logs:
             task = asyncio.create_task(telegram_runtime.run_polling(bot, dispatcher, allowed_updates=["message"]))
             await asyncio.wait_for(session.started.wait(), timeout=5)
             task.cancel()
@@ -90,6 +101,12 @@ async def scenario():
                 pass
             else:
                 raise AssertionError("Cancellation was swallowed")
+            assert backoff_sleep.await_count == 2
+        assert logger.filters == original_filters
+        assert session.calls[GetUpdates] == 4
+        assert any("polling reconnecting" in record.getMessage() for record in logs.records)
+        assert any("polling restored" in record.getMessage() for record in logs.records)
+        assert not [record for record in logs.records if record.levelno >= logging.WARNING]
         assert lifecycle == ["startup", "shutdown"], lifecycle
         assert session.calls[DeleteWebhook] == 2, session.calls
         assert session.calls[GetMe] == 2, session.calls  # Dispatcher uses the warmed cache.
