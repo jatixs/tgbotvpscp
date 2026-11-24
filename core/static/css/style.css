@@ -246,9 +246,15 @@ input[type="checkbox"].peer + div::after,
 
 input[type="checkbox"].peer.is-control-pressed + div::after,
 .screenshot-toggle.is-control-pressed .screenshot-toggle-track::after,
-.screenshot-toggle:active .screenshot-toggle-track::after,
-.screenshot-toggle-track:active::after {
+.screenshot-toggle-track.is-control-pressed::after {
 	scale: 1.15;
+}
+
+@media (pointer: coarse), (hover: none) {
+	.screenshot-toggle:active .screenshot-toggle-track::after,
+	.screenshot-toggle-track:active::after {
+		scale: 1.15;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -261,8 +267,15 @@ input[type="checkbox"].peer.is-control-pressed + div::after,
 	}
 
 	input[type="checkbox"].peer + div::after,
-.screenshot-toggle-track::after {
+	.screenshot-toggle-track::after {
 		transition: none;
+	}
+
+	.screenshot-toggle.is-control-pressed .screenshot-toggle-track::after,
+	.screenshot-toggle-track.is-control-pressed::after,
+	.screenshot-toggle:active .screenshot-toggle-track::after,
+	.screenshot-toggle-track:active::after {
+		scale: none;
 	}
 }
 
@@ -636,7 +649,8 @@ html.perf-mode .holiday-btn-active .icon {
 #genericHintModal>div,
 #nodeModal>div,
 #filterModal>div,
-#nodeDetailModal>div {
+#nodeDetailModal>div,
+#nodeUpdatesModal>div {
 	transition: opacity 0.2s ease-out, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -859,8 +873,59 @@ main {
 #keyboardModal,
 #sessionsModal,
 #genericHintModal,
-#nodeModal {
+#nodeModal,
+#nodeUpdatesModal {
 	z-index: 9999 !important;
+}
+
+/* Node update modal cards */
+.node-update-item {
+	transition: all 0.2s ease-in-out;
+}
+
+.node-update-item.is-updated {
+	background-color: rgba(239, 246, 255, 0.6);
+	border: 1px solid #93c5fd !important;
+}
+html.dark .node-update-item.is-updated,
+body.dark .node-update-item.is-updated,
+.dark .node-update-item.is-updated {
+	background-color: rgba(30, 58, 138, 0.15) !important;
+	border: 1px solid rgba(59, 130, 246, 0.45) !important;
+}
+html.amoled .node-update-item.is-updated {
+	background-color: rgba(30, 58, 138, 0.12) !important;
+	border: 1px solid rgba(59, 130, 246, 0.5) !important;
+}
+
+.node-update-item.is-pending {
+	background-color: rgba(254, 252, 232, 0.6);
+	border: 1px solid #fde047 !important;
+}
+html.dark .node-update-item.is-pending,
+body.dark .node-update-item.is-pending,
+.dark .node-update-item.is-pending {
+	background-color: rgba(113, 63, 18, 0.15) !important;
+	border: 1px solid rgba(234, 179, 8, 0.45) !important;
+}
+html.amoled .node-update-item.is-pending {
+	background-color: rgba(113, 63, 18, 0.12) !important;
+	border: 1px solid rgba(234, 179, 8, 0.5) !important;
+}
+
+.node-update-item.is-failed {
+	background-color: rgba(254, 242, 242, 0.6);
+	border: 1px solid #fca5a5 !important;
+}
+html.dark .node-update-item.is-failed,
+body.dark .node-update-item.is-failed,
+.dark .node-update-item.is-failed {
+	background-color: rgba(127, 29, 29, 0.15) !important;
+	border: 1px solid rgba(239, 68, 68, 0.45) !important;
+}
+html.amoled .node-update-item.is-failed {
+	background-color: rgba(127, 29, 29, 0.12) !important;
+	border: 1px solid rgba(239, 68, 68, 0.5) !important;
 }
 
 /* Node card reboot button */

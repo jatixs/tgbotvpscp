@@ -17,6 +17,7 @@ class ClientUpdater:
     def __init__(self, root: str):
         self.root = Path(root)
         self.commit = ""
+        self.version = self._read_version()
         self.supported = False
         self.failed = None
         self.worker = None
@@ -48,9 +49,22 @@ class ClientUpdater:
             shell=False, capture_output=True, timeout=30, check=True,
         ).stdout
 
+    def _read_version(self) -> str:
+        try:
+            for p in (self.root / "CHANGELOG.md", self.root / "docs" / "CHANGELOG.md"):
+                if p.is_file():
+                    content = p.read_text(encoding="utf-8")
+                    m = re.search(r"## \[(\d+\.\d+\.\d+)\]", content)
+                    if m:
+                        return f"v{m.group(1)}"
+        except Exception:
+            pass
+        return ""
+
     def report(self):
         return {
             "commit": self.commit,
+            "version": self.version,
             "supported": self.supported,
             "failed": self.failed,
             "busy": self.restarting or bool(self.worker and self.worker.is_alive()),

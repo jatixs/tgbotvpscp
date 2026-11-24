@@ -2091,27 +2091,18 @@ update_bot() {
             run_integrity_cmd check --branch "$GIT_BRANCH"
             echo ""
             echo "  1) Create automatic backup in .backups/ and proceed (Recommended)"
-            echo "  2) Show Git diff"
+            echo "  2) Update without backup (overwrite local changes)"
             echo "  3) Cancel update"
             read -p "$(echo -e "${C_BOLD}Your choice [1/2/3]: ${C_RESET}")" mod_choice
             case $mod_choice in
                 2)
-                    git diff "origin/${GIT_BRANCH}" | less -R
-                    read -p "Proceed with update and backup? (y/n): " c_after_diff
-                    if [[ ! "$c_after_diff" =~ ^[Yy]$ ]]; then
-                        msg_info "Update cancelled."
-                        return 0
-                    fi
-                    if ! run_integrity_cmd backup --branch "$GIT_BRANCH"; then
-                        msg_error "Backup failed; update cancelled."
-                        return 1
-                    fi
+                    msg_warning "Proceeding with update without backup..."
                     ;;
                 3)
                     msg_info "Update cancelled by user."
                     return 0
                     ;;
-                *)
+                1|*)
                     if ! run_integrity_cmd backup --branch "$GIT_BRANCH"; then
                         msg_error "Backup failed; update cancelled."
                         return 1

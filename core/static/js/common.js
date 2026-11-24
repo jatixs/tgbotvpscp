@@ -1059,6 +1059,7 @@ function splitNodeFlag(rawName) {
     const rest = (text.slice(0, m.index) + ' ' + text.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
     return { code, name: rest || code.toUpperCase() };
 }
+window.splitNodeFlag = splitNodeFlag;
 
 function setNodeIconFlag(iconBox, code) {
     if (!iconBox) return;

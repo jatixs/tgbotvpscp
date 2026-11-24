@@ -385,6 +385,8 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
     stats = data.get("stats", {})
     client_report = node_updates.normalize_report(data.get("client_update"))
     stats["client_update"] = client_report
+    if client_report.get("version"):
+        stats["client_version"] = client_report["version"]
     results = data.get("results", [])
     if isinstance(data.get("agent_https"), bool):
         await nodes_db.update_node_extra(token, "agent_https", data["agent_https"])

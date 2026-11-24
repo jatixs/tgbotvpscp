@@ -46,10 +46,15 @@
         html.dark .screenshot-toggle[aria-checked="true"] .screenshot-toggle-track,
         .dark .screenshot-toggle[aria-checked="true"] .screenshot-toggle-track { background-color:#22c55e; }
         .screenshot-toggle[aria-checked="true"] .screenshot-toggle-track::after { transform:translateX(20px); border-color:#ffffff; }
-        .screenshot-toggle:active .screenshot-toggle-track::after,
         .screenshot-toggle.is-control-pressed .screenshot-toggle-track::after,
-        .screenshot-toggle-track:active::after {
+        .screenshot-toggle-track.is-control-pressed::after {
             scale: 1.15;
+        }
+        @media (pointer: coarse), (hover: none) {
+            .screenshot-toggle:active .screenshot-toggle-track::after,
+            .screenshot-toggle-track:active::after {
+                scale: 1.15;
+            }
         }
         .screenshot-toggle-icon { flex-shrink:0; transition:color 150ms cubic-bezier(0.4, 0, 0.2, 1); }
         .screenshot-toggle[aria-checked="true"] .screenshot-toggle-icon { color:#22c55e; }
@@ -57,8 +62,9 @@
             .screenshot-toggle-track, .screenshot-toggle-track::after, .screenshot-toggle-icon {
                 transition:none;
             }
-            .screenshot-toggle:active .screenshot-toggle-track::after,
             .screenshot-toggle.is-control-pressed .screenshot-toggle-track::after,
+            .screenshot-toggle-track.is-control-pressed::after,
+            .screenshot-toggle:active .screenshot-toggle-track::after,
             .screenshot-toggle-track:active::after {
                 scale:none;
             }

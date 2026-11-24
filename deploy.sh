@@ -2089,27 +2089,18 @@ update_bot() {
             run_integrity_cmd check --branch "$GIT_BRANCH"
             echo ""
             echo "  1) Создать автоматический бэкап в .backups/ и продолжить (Рекомендуется)"
-            echo "  2) Показать Git diff"
+            echo "  2) Обновить без бэкапа (стереть локальные изменения)"
             echo "  3) Отменить обновление"
             read -p "$(echo -e "${C_BOLD}Ваш выбор [1/2/3]: ${C_RESET}")" mod_choice
             case $mod_choice in
                 2)
-                    git diff "origin/${GIT_BRANCH}" | less -R
-                    read -p "Продолжить обновление с созданием бэкапа? (y/n): " c_after_diff
-                    if [[ ! "$c_after_diff" =~ ^[Yy]$ ]]; then
-                        msg_info "Обновление отменено."
-                        return 0
-                    fi
-                    if ! run_integrity_cmd backup --branch "$GIT_BRANCH"; then
-                        msg_error "Не удалось создать бэкап; обновление отменено."
-                        return 1
-                    fi
+                    msg_warning "Продолжение обновления без создания бэкапа..."
                     ;;
                 3)
                     msg_info "Обновление отменено пользователем."
                     return 0
                     ;;
-                *)
+                1|*)
                     if ! run_integrity_cmd backup --branch "$GIT_BRANCH"; then
                         msg_error "Не удалось создать бэкап; обновление отменено."
                         return 1
