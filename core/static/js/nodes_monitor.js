@@ -10,7 +10,7 @@ let currentCpuFilter = 'all';
 let currentSort = 'name';
 let searchQuery = '';
 let selectedNodes = new Set();
-let currentNodeId = null;
+window.currentNodeId = null;
 let modalResChart = null;
 let modalNetChart = null;
 let modalResRangeCtl = null;
@@ -24,7 +24,7 @@ let _lastServicesCache = null; // cached services for stable DOM updates
 function getI18n() {
     return (typeof window !== 'undefined' && window.I18N)
         ? window.I18N
-        : ((typeof I18N !== 'undefined' && typeof I18N === 'object') ? I18N : {});
+        : ((typeof window.I18N !== 'undefined' && typeof window.I18N === 'object') ? window.I18N : {});
 }
 
 function t(key, fallbackRu, fallbackEn) {
@@ -37,9 +37,9 @@ function t(key, fallbackRu, fallbackEn) {
 }
 
 function normalizeNode(node) {
-    const decryptedName = decryptData(node.name) || 'Unknown';
-    const decryptedIp = decryptData(node.ip) || '-';
-    const decryptedPing = decryptData(node.ping);
+    const decryptedName = window.decryptData(node.name) || 'Unknown';
+    const decryptedIp = window.decryptData(node.ip) || '-';
+    const decryptedPing = window.decryptData(node.ping);
 
     return {
         ...node,
@@ -212,7 +212,7 @@ function initNodesMonitor() {
     currentSort = 'name';
     searchQuery = '';
     selectedNodes.clear();
-    currentNodeId = null;
+    window.currentNodeId = null;
     
     // Destroy charts if they exist
     if (modalResChart) {
@@ -235,13 +235,13 @@ function initNodesMonitor() {
     connectNodesMonitorStream();
     
     // Setup theme
-    const curTheme = (typeof getResolvedTheme === 'function')
-        ? getResolvedTheme()
+    const curTheme = (typeof window.getResolvedTheme === 'function')
+        ? window.getResolvedTheme()
         : ((!localStorage.getItem('theme') || localStorage.getItem('theme') === 'system')
             ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
             : localStorage.getItem('theme'));
-    if (typeof applyThemeUI === 'function') {
-        applyThemeUI(curTheme);
+    if (typeof window.applyThemeUI === 'function') {
+        window.applyThemeUI(curTheme);
     } else if (typeof updateThemeIcons === 'function') {
         updateThemeIcons();
     }
@@ -365,7 +365,7 @@ function renderNodes() {
     
     if (filtered.length === 0) {
         container.classList.add('nodes-grid-empty');
-        setSafeHTML(container, `
+        window.setSafeHTML(container, `
             <div class="nodes-empty-state text-center text-gray-500 dark:text-gray-400">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -377,19 +377,19 @@ function renderNodes() {
     }
     container.classList.remove('nodes-grid-empty');
     
-    const newHtml = filtered.map(node => createNodeCard(node)).join('');
+    const newHtml = filtered.map(node => createNodeCardHtml(node)).join('');
     
     // Try to update in-place to prevent flicker
     const tempContainer = container.cloneNode(false);
-    setSafeHTML(tempContainer, newHtml);
+    window.setSafeHTML(tempContainer, newHtml);
     
-    if (!updateDOM(container, tempContainer)) {
+    if (!window.updateDOM(container, tempContainer)) {
         // Fallback if structural changes occurred
-        setSafeHTML(container, newHtml);
+        window.setSafeHTML(container, newHtml);
     }
     
-    if (typeof parsePageEmojis === 'function') {
-        parsePageEmojis(container);
+    if (typeof window.parsePageEmojis === 'function') {
+        window.parsePageEmojis(container);
     }
 }
 
@@ -402,22 +402,22 @@ function getPingBadgeClass(ping) {
 }
 
 // Create node card HTML
-function createNodeCard(node) {
+function createNodeCardHtml(node) {
     const isOnline = node.status === 'online';
     const isRestarting = node.status === 'restarting';
     
-    let statusClass, statusIcon, statusText;
+    let statusClass, statusIconHtml, statusText;
     if (isRestarting) {
         statusClass = 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400';
-        statusIcon = '<i class="icon icon-dot icon-dot-blue icon-xs mr-1"></i>';
+        statusIconHtml = '<i class="icon icon-dot icon-dot-blue icon-xs mr-1"></i>';
         statusText = t('web_node_status_restarting', 'Перезагрузка', 'Restarting');
     } else if (isOnline) {
         statusClass = 'bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400';
-        statusIcon = '<i class="icon icon-dot icon-dot-green icon-xs mr-1"></i>';
+        statusIconHtml = '<i class="icon icon-dot icon-dot-green icon-xs mr-1"></i>';
         statusText = t('web_node_status_online', 'В сети', 'Online');
     } else {
         statusClass = 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400';
-        statusIcon = '<i class="icon icon-dot icon-dot-red icon-xs mr-1"></i>';
+        statusIconHtml = '<i class="icon icon-dot icon-dot-red icon-xs mr-1"></i>';
         statusText = t('web_node_status_offline', 'Не в сети', 'Offline');
     }
     
@@ -440,25 +440,21 @@ function createNodeCard(node) {
             <!-- Header -->
             <div class="p-4 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    ${(typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') ? `
+                    ${(typeof window.USER_ROLE !== 'undefined' && window.USER_ROLE !== 'users') ? `
                     <input type="checkbox" class="node-checkbox rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" 
                            ${isSelected ? 'checked' : ''} 
                            data-action="toggle-node-selection" data-token="${nodeId}">
                     ` : ''}
                     <div>
-                        <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof replaceEmojisWithFlagsHTML === 'function' ? replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
+                        <h3 class="font-bold text-gray-900 dark:text-white text-sm">${typeof window.replaceEmojisWithFlagsHTML === 'function' ? window.replaceEmojisWithFlagsHTML(escapeHtml(node.name)) : escapeHtml(node.name)}</h3>
                         <div class="flex items-center gap-1.5">
-                            <div class="ip-copy-container inline-flex items-center gap-1 group/ip" data-copy-ip="${escapeHtml(node.ip || '')}">
-                                <span class="ip-copy-text text-xs text-gray-500 dark:text-gray-400 font-mono select-all" title="${t('web_copy_ip', 'Скопировать IP', 'Copy IP')}">${escapeHtml(node.ip || '-')}</span>
-                                ${node.ip && node.ip !== '-' ? `
-                                ${renderCopyIpButton(node.ip)}` : ''}
-                            </div>
+                            ${window.renderNodeIpBadge(node)}
                             ${node.ping != null ? (node.ping === 'n/a' ? `<span onclick="window.showPingErrorModal(event)" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer hover:opacity-80 transition-opacity ${getPingBadgeClass(node.ping)}" title="Click for details">n/a</span>` : `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${getPingBadgeClass(node.ping)}">${parseFloat(node.ping)}ms</span>`) : ''}
                         </div>
                     </div>
                 </div>
                 <span class="px-2 py-1 rounded-lg text-xs font-bold ${statusClass}">
-                    ${statusIcon} ${statusText}
+                    ${statusIconHtml} ${statusText}
                 </span>
             </div>
             
@@ -534,7 +530,7 @@ function createNodeCard(node) {
                 <button data-action="open-node-detail" data-token="${nodeId}" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-200 dark:hover:bg-blue-500/30 transition">
                     ${t('web_node_details', 'Подробнее', 'Node Details')}
                 </button>
-                ${(typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') ? `
+                ${(typeof window.USER_ROLE !== 'undefined' && window.USER_ROLE !== 'users') ? `
                 <button data-action="quick-reboot" data-token="${nodeId}" class="node-reboot-btn px-3 py-2 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-200 transition" title="Reboot">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -562,8 +558,8 @@ window.openFilterModal = function() {
     tempFilterSort = currentSort;
     updateFilterModalUI();
     const modal = document.getElementById('filterModal');
-    if (typeof animateModalOpen === 'function') {
-        animateModalOpen(modal, false);
+    if (typeof window.animateModalOpen === 'function') {
+        window.animateModalOpen(modal, false);
     } else {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -572,8 +568,8 @@ window.openFilterModal = function() {
 
 window.closeFilterModal = function() {
     const modal = document.getElementById('filterModal');
-    if (typeof animateModalClose === 'function') {
-        animateModalClose(modal);
+    if (typeof window.animateModalClose === 'function') {
+        window.animateModalClose(modal);
     } else {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
@@ -637,7 +633,7 @@ window.applyFilters = function() {
     currentSort = tempFilterSort;
     updateFilterBadge();
     renderNodes();
-    closeFilterModal();
+    window.closeFilterModal();
 }
 
 function updateFilterBadge() {
@@ -716,15 +712,15 @@ window.massCommand = async function(cmd) {
 }
 
 // Quick actions
-window.quickReboot = async function(token) {
-    const node = allNodesData.find(n => String(n.id) === token);
+window.quickReboot = async function(nodeId) {
+    const node = allNodesData.find(n => String(n.id) === nodeId);
     const name = node ? node.name : 'Node';
     
     showConfirm(
         t('modal_title_confirm', 'Подтверждение', 'Confirm'),
         t('web_reboot_node_confirm', `Перезагрузить ${name}?`, `Reboot ${name}?`).replace('{name}', name),
         async () => {
-            await sendNodeCommand(token, 'reboot');
+            await sendNodeCommand(nodeId, 'reboot');
             showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_reboot_sent', 'Команда перезагрузки отправлена', 'Reboot command sent'));
             connectNodesMonitorStream();
         }
@@ -733,11 +729,11 @@ window.quickReboot = async function(token) {
 
 // Node detail modal
 window.openNodeDetail = async function(token) {
-    currentNodeId = token;
+    window.currentNodeId = token;
     const modal = document.getElementById('nodeDetailModal');
     
-    if (typeof animateModalOpen === 'function') {
-        animateModalOpen(modal, false);
+    if (typeof window.animateModalOpen === 'function') {
+        window.animateModalOpen(modal, false);
     } else {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -752,7 +748,7 @@ function startModalChartRanges() {
     if (typeof window.createChartRangeController !== 'function') return;
     if (modalResRangeCtl) modalResRangeCtl.destroy();
     if (modalNetRangeCtl) modalNetRangeCtl.destroy();
-    function getSource() { return currentNodeId ? { source: 'node', node_id: currentNodeId } : null; }
+    function getSource() { return window.currentNodeId ? { source: 'node', node_id: window.currentNodeId } : null; }
     modalResRangeCtl = window.createChartRangeController({
         key: 'modalResChart',
         mount: '[data-chart-range="modalResChart"]',
@@ -780,13 +776,13 @@ function stopModalChartRanges() {
 window.closeNodeDetailModal = function() {
     if (typeof window.collapseChartModal === 'function') window.collapseChartModal();
     const modal = document.getElementById('nodeDetailModal');
-    if (typeof animateModalClose === 'function') {
-        animateModalClose(modal);
+    if (typeof window.animateModalClose === 'function') {
+        window.animateModalClose(modal);
     } else {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
     }
-    currentNodeId = null;
+    window.currentNodeId = null;
     _lastServicesCache = null; // reset so next node gets a fresh render
 
     if (typeof window.hideAvailabilityPopover === 'function') window.hideAvailabilityPopover();
@@ -841,7 +837,7 @@ function connectNodeDetailStream(token) {
 
 function updateNodeModal(data) {
     const modalTitleEl = document.getElementById('modalNodeTitle');
-    renderNodeModalTitle(modalTitleEl, decryptData(data.name) || 'Unknown');
+    window.renderNodeModalTitle(modalTitleEl, window.decryptData(data.name) || 'Unknown');
 
     const nameContainer = modalTitleEl.parentElement;
     if (nameContainer) {
@@ -851,7 +847,7 @@ function updateNodeModal(data) {
             if (isSet || data.next_payment_date) {
                 const daysLeft = window.calculateDaysLeft ? window.calculateDaysLeft(data.next_payment_date) : null;
                 const billingIconColor = daysLeft === null ? 'text-gray-400' : daysLeft < 0 ? 'text-red-500 dark:text-red-400' : daysLeft <= 6 ? 'text-yellow-500 dark:text-yellow-400' : 'text-green-500 dark:text-green-400';
-                const fragment = DOMPurify.sanitize(`
+                const fragment = window.DOMPurify.sanitize(`
                     <button class="flex items-center h-5 px-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition text-gray-500 dark:text-gray-400 text-[10px] gap-1 whitespace-nowrap group">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 ${billingIconColor} transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
@@ -865,7 +861,7 @@ function updateNodeModal(data) {
                 if (badgeBtn) {
                     badgeBtn.onclick = () => {
                         window.showBillingModal(
-                            decryptData(data.name) || 'Unknown',
+                            window.decryptData(data.name) || 'Unknown',
                             data.billing_amount !== null && data.billing_amount !== undefined ? data.billing_amount : null,
                             data.currency || '$',
                             data.next_payment_date || null,
@@ -880,15 +876,7 @@ function updateNodeModal(data) {
         }
     }
     
-    const newIp = decryptData(data.ip) || '-';
-    const ipEl = document.getElementById('modalNodeIp');
-    if (ipEl && ipEl.textContent !== newIp) {
-        ipEl.textContent = newIp;
-        const container = document.getElementById('modalNodeIpContainer');
-        if (container) container.setAttribute('data-copy-ip', newIp);
-        const copyBtn = document.getElementById('modalNodeIpCopyBtn');
-        if (copyBtn) copyBtn.setAttribute('data-ip', newIp);
-    }
+    window.updateIpBadge(document.getElementById('modalNodeIpContainer'), window.nodeIpBadgeState(data));
 
     const nodeIdEl = document.getElementById('modalNodeId');
     if (nodeIdEl) nodeIdEl.textContent = String(data.id ?? '-');
@@ -896,7 +884,7 @@ function updateNodeModal(data) {
     // Update ping badge in modal
     const pingBadge = document.getElementById('modalNodePingBadge');
     const stats = data.stats || {};
-    const pingValue = decryptData(stats.ping);
+    const pingValue = window.decryptData(stats.ping);
     if (pingValue !== '' && pingValue != null) {
         if (pingValue === 'n/a') {
             pingBadge.className = `inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer hover:opacity-80 transition-opacity ${getPingBadgeClass(pingValue)}`;
@@ -962,9 +950,51 @@ function updateNodeModal(data) {
     const isDefault = (availability.total_downtime_secs || 0) === 0;
     const resetBtn = document.getElementById('modalAvailabilityResetBtn');
     if (resetBtn) {
-        if (!isDefault && typeof USER_ROLE !== 'undefined' && USER_ROLE !== 'users') resetBtn.classList.remove('hidden');
+        if (!isDefault && typeof window.USER_ROLE !== 'undefined' && window.USER_ROLE !== 'users') resetBtn.classList.remove('hidden');
         else resetBtn.classList.add('hidden');
     }
+}
+
+function getModalGradient(ctx, color) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ', 0.5)'));
+    gradient.addColorStop(1, color.replace('rgb', 'rgba').replace(')', ', 0.0)'));
+    return gradient;
+}
+
+function applyModalResChartData() {
+    if (!modalResChart || !modalResChart.__modalState) return;
+    const { labels, cpuData, ramData, series, resCtx, tickColor, gridColor } = modalResChart.__modalState;
+    modalResChart.data.labels = labels;
+    modalResChart.data.datasets[0].data = cpuData;
+    modalResChart.data.datasets[1].data = ramData;
+    modalResChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
+
+    modalResChart.data.datasets[0].backgroundColor = getModalGradient(resCtx, 'rgb(59, 130, 246)');
+    modalResChart.data.datasets[1].backgroundColor = getModalGradient(resCtx, 'rgb(168, 85, 247)');
+
+    modalResChart.options.scales.x.ticks.color = tickColor;
+    modalResChart.options.scales.y.grid.color = gridColor;
+    modalResChart.options.scales.y.ticks.color = tickColor;
+    modalResChart.options.plugins.legend.labels.color = tickColor;
+}
+
+function applyModalNetChartData() {
+    if (!modalNetChart || !modalNetChart.__modalState) return;
+    const { labels, rxData, txData, series, netCtx, tickColor, gridColor } = modalNetChart.__modalState;
+    modalNetChart.data.labels = labels;
+    modalNetChart.data.datasets[0].data = rxData;
+    modalNetChart.data.datasets[1].data = txData;
+    modalNetChart.data.datasets[2].data = series.ping;
+    modalNetChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
+
+    modalNetChart.data.datasets[0].backgroundColor = getModalGradient(netCtx, 'rgb(34, 197, 94)');
+    modalNetChart.data.datasets[1].backgroundColor = getModalGradient(netCtx, 'rgb(59, 130, 246)');
+
+    modalNetChart.options.scales.x.ticks.color = tickColor;
+    modalNetChart.options.scales.y.grid.color = gridColor;
+    modalNetChart.options.scales.y.ticks.color = tickColor;
+    modalNetChart.options.scales.ping.ticks.color = tickColor;
 }
 
 function updateModalCharts(series, which, animate = true) {
@@ -991,13 +1021,6 @@ function updateModalCharts(series, which, animate = true) {
     const tickColor = isDark ? '#9ca3af' : '#6b7280';
     const isMobile = window.innerWidth < 640;
 
-    function getGradient(ctx, color) {
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ', 0.5)'));
-        gradient.addColorStop(1, color.replace('rgb', 'rgba').replace(')', ', 0.0)'));
-        return gradient;
-    }
-
     const resCtx = canvas.getContext('2d');
     const netCtx = resCtx;
 
@@ -1006,21 +1029,7 @@ function updateModalCharts(series, which, animate = true) {
     if (which !== 'res') {
         // handled by the network branch below
     } else if (modalResChart) {
-        function applyModalResChartData() {
-            modalResChart.data.labels = labels;
-            modalResChart.data.datasets[0].data = cpuData;
-            modalResChart.data.datasets[1].data = ramData;
-            modalResChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
-
-            modalResChart.data.datasets[0].backgroundColor = getGradient(resCtx, 'rgb(59, 130, 246)');
-            modalResChart.data.datasets[1].backgroundColor = getGradient(resCtx, 'rgb(168, 85, 247)');
-
-            modalResChart.options.scales.x.ticks.color = tickColor;
-            modalResChart.options.scales.y.grid.color = gridColor;
-            modalResChart.options.scales.y.ticks.color = tickColor;
-            modalResChart.options.plugins.legend.labels.color = tickColor;
-        };
-
+        modalResChart.__modalState = { labels, cpuData, ramData, series, resCtx, tickColor, gridColor };
         if (window.updateChartWithLiveData) {
             window.updateChartWithLiveData(modalResChart, applyModalResChartData, 'modalResChart', animate);
         } else {
@@ -1029,13 +1038,13 @@ function updateModalCharts(series, which, animate = true) {
             if (window.attachChartInteractions) window.attachChartInteractions(modalResChart, 'modalResChart');
         }
     } else {
-        modalResChart = new Chart(resCtx, {
+        modalResChart = new window.Chart(resCtx, {
             type: 'line',
             data: {
                 labels,
                 datasets: [
-                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: getGradient(resCtx, 'rgb(59, 130, 246)'), fill: true },
-                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: getGradient(resCtx, 'rgb(168, 85, 247)'), fill: true }
+                    { label: 'CPU (%)', data: cpuData, borderColor: '#3b82f6', borderWidth: 2, backgroundColor: getModalGradient(resCtx, 'rgb(59, 130, 246)'), fill: true },
+                    { label: 'RAM (%)', data: ramData, borderColor: '#a855f7', borderWidth: 2, backgroundColor: getModalGradient(resCtx, 'rgb(168, 85, 247)'), fill: true }
                 ]
             },
             options: {
@@ -1076,24 +1085,7 @@ function updateModalCharts(series, which, animate = true) {
     if (which !== 'net') return;
 
     if (modalNetChart) {
-        function applyModalNetChartData() {
-            modalNetChart.data.labels = labels;
-            modalNetChart.data.datasets[0].data = rxData;
-            modalNetChart.data.datasets[1].data = txData;
-            modalNetChart.data.datasets[2].data = series.ping;
-            modalNetChart.__chartTimeWindow = { min: series.minIndex, max: series.maxIndex };
-
-            modalNetChart.data.datasets[0].backgroundColor = getGradient(netCtx, 'rgb(34, 197, 94)');
-            modalNetChart.data.datasets[1].backgroundColor = getGradient(netCtx, 'rgb(59, 130, 246)');
-
-            modalNetChart.options.scales.x.ticks.color = tickColor;
-            modalNetChart.options.scales.y.grid.color = gridColor;
-            modalNetChart.options.scales.y.ticks.color = tickColor;
-            modalNetChart.options.scales.ping.ticks.color = tickColor;
-            modalNetChart.options.scales.ping.title.color = tickColor;
-            modalNetChart.options.plugins.legend.labels.color = tickColor;
-        };
-
+        modalNetChart.__modalState = { labels, rxData, txData, series, netCtx, tickColor, gridColor };
         if (window.updateChartWithLiveData) {
             window.updateChartWithLiveData(modalNetChart, applyModalNetChartData, 'modalNetChart', animate);
         } else {
@@ -1102,13 +1094,13 @@ function updateModalCharts(series, which, animate = true) {
             if (window.attachChartInteractions) window.attachChartInteractions(modalNetChart, 'modalNetChart');
         }
     } else {
-        modalNetChart = new Chart(netCtx, {
+        modalNetChart = new window.Chart(netCtx, {
             type: 'line',
             data: {
                 labels,
                 datasets: [
-                    { label: t('web_label_rx', 'ВХ', 'RX'), data: rxData, yAxisID: 'y', borderColor: '#22c55e', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
-                    { label: t('web_label_tx', 'ИСХ', 'TX'), data: txData, yAxisID: 'y', borderColor: '#3b82f6', borderWidth: 2, backgroundColor: getGradient(netCtx, 'rgb(59, 130, 246)'), fill: true },
+                    { label: t('web_label_rx', 'ВХ', 'RX'), data: rxData, yAxisID: 'y', borderColor: '#22c55e', borderWidth: 2, backgroundColor: getModalGradient(netCtx, 'rgb(34, 197, 94)'), fill: true },
+                    { label: t('web_label_tx', 'ИСХ', 'TX'), data: txData, yAxisID: 'y', borderColor: '#3b82f6', borderWidth: 2, backgroundColor: getModalGradient(netCtx, 'rgb(59, 130, 246)'), fill: true },
                     window.createPingDataset(series.ping)
                 ]
             },
@@ -1166,7 +1158,7 @@ function connectNodeServicesStream(token) {
 
     const container = document.getElementById('modalServicesContainer');
     if (container) {
-        setSafeHTML(container, `<div class="text-center py-4 text-gray-400">${t('web_services_loading', 'Загрузка сервисов...', 'Loading services...')}</div>`);
+        window.setSafeHTML(container, `<div class="text-center py-4 text-gray-400">${t('web_services_loading', 'Загрузка сервисов...', 'Loading services...')}</div>`);
         _lastServicesCache = null; // force full re-render on next data event
     }
 
@@ -1176,9 +1168,9 @@ function connectNodeServicesStream(token) {
         try {
             const data = JSON.parse(event.data);
             const services = (data.services || []).map((service) => ({
-                name: decryptData(service.name),
-                type: decryptData(service.type) || 'systemd',
-                status: decryptData(service.status),
+                name: window.decryptData(service.name),
+                type: window.decryptData(service.type) || 'systemd',
+                status: window.decryptData(service.status),
             }));
             renderNodeServices(token, services);
         } catch (error) {
@@ -1210,7 +1202,7 @@ function renderNodeServices(token, services) {
 
     if (services.length === 0) {
         _lastServicesCache = null;
-        setSafeHTML(container, `<div class="col-span-full text-center py-4 text-gray-400">${t('web_services_empty', 'Нет сервисов', 'No services')}</div>`);
+        window.setSafeHTML(container, `<div class="col-span-full text-center py-4 text-gray-400">${t('web_services_empty', 'Нет сервисов', 'No services')}</div>`);
         if (btnContainer) btnContainer.classList.add('hidden');
         return;
     }
@@ -1246,17 +1238,24 @@ function renderNodeServices(token, services) {
                 const newTitle = isRunning
                     ? t('web_service_stop', 'Остановить', 'Stop')
                     : t('web_service_start', 'Запустить', 'Start');
-                // Hardcoded SVG paths — no user input, safe to set without DOMPurify
-                // (DOMPurify strips SVG stroke-* attributes in HTML context)
-                const iconStop = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />';
-                const iconStart = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />';
+                const iconPaths = isRunning
+                    ? ['M21 12a9 9 0 11-18 0 9 9 0 0118 0z', 'M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z']
+                    : ['M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z', 'M21 12a9 9 0 11-18 0 9 9 0 0118 0z'];
 
                 toggleBtn.dataset.cmd = newCmd;
                 toggleBtn.title = newTitle;
                 toggleBtn.className = `p-1 ${isRunning ? 'text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20'} rounded`;
                 const svg = toggleBtn.querySelector('svg');
-                // Direct innerHTML assignment — safe for hardcoded SVG paths
-                if (svg) svg.innerHTML = isRunning ? iconStop : iconStart;
+                if (svg) {
+                    svg.replaceChildren(...iconPaths.map(data => {
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        path.setAttribute('stroke-linecap', 'round');
+                        path.setAttribute('stroke-linejoin', 'round');
+                        path.setAttribute('stroke-width', '2');
+                        path.setAttribute('d', data);
+                        return path;
+                    }));
+                }
             }
         });
 
@@ -1268,7 +1267,7 @@ function renderNodeServices(token, services) {
     // Structure changed (new services, count changed, or showAll toggled) — full re-render
     _lastServicesCache = { structureKey, showAll, statuses: displayServices.map(s => s.status) };
 
-    setSafeHTML(container, displayServices.map(svc => `
+    window.setSafeHTML(container, displayServices.map(svc => `
             <div class="flex items-center justify-between bg-white/50 dark:bg-black/30 p-2 rounded-lg" data-svc-name="${escapeHtml(svc.name)}">
                 <div class="flex items-center gap-2">
                     <span data-svc-dot="true" class="${svc.status === 'running' ? 'text-green-500' : 'text-red-500'}">●</span>
@@ -1306,11 +1305,11 @@ function renderNodeServices(token, services) {
                 if (showAll) {
                     btn.classList.add('expanded');
                     if (blurOverlay) blurOverlay.style.display = 'none';
-                    setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${t('web_show_less', 'Скрыть', 'Show Less')}`);
+                    window.setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${t('web_show_less', 'Скрыть', 'Show Less')}`);
                 } else {
                     btn.classList.remove('expanded');
                     if (blurOverlay) blurOverlay.style.display = '';
-                    setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${t('web_show_more', 'Показать ещё', 'Show More')} (${services.length - INITIAL_SHOW})`);
+                    window.setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg> ${t('web_show_more', 'Показать ещё', 'Show More')} (${services.length - INITIAL_SHOW})`);
                 }
             }
         } else {
@@ -1323,22 +1322,22 @@ function toggleServicesDisplay() {
     const container = document.getElementById('modalServicesContainer');
     const isShowingAll = container.dataset.showAll === 'true';
     container.dataset.showAll = !isShowingAll;
-    if (currentNodeId) {
-        connectNodeServicesStream(currentNodeId);
+    if (window.currentNodeId) {
+        connectNodeServicesStream(window.currentNodeId);
     }
 }
 
 window.refreshNodeServices = function() {
-    if (currentNodeId) {
-        connectNodeServicesStream(currentNodeId);
+    if (window.currentNodeId) {
+        connectNodeServicesStream(window.currentNodeId);
     }
 }
 
 // Node commands from modal
 window.nodeCommand = function(cmd) {
-    if (!currentNodeId) return;
+    if (!window.currentNodeId) return;
     
-    const node = allNodesData.find(n => String(n.id) === currentNodeId);
+    const node = allNodesData.find(n => String(n.id) === window.currentNodeId);
     const name = node ? node.name : 'Node';
     
     if (cmd === 'reboot') {
@@ -1346,14 +1345,14 @@ window.nodeCommand = function(cmd) {
             t('modal_title_confirm', 'Подтверждение', 'Confirm'),
             t('web_reboot_node_confirm', 'Перезагрузить {name}?', 'Reboot {name}?').replace('{name}', name),
             async () => {
-                await sendNodeCommand(currentNodeId, cmd);
+                await sendNodeCommand(window.currentNodeId, cmd);
                 showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_command_sent', 'Команда отправлена', 'Command sent'));
-                closeNodeDetailModal();
+                window.closeNodeDetailModal();
                 connectNodesMonitorStream();
             }
         );
     } else {
-        sendNodeCommand(currentNodeId, cmd).then(() => {
+        sendNodeCommand(window.currentNodeId, cmd).then(() => {
             showAlert(t('modal_title_alert', 'Внимание', 'Alert'), t('web_command_sent', 'Команда отправлена', 'Command sent'));
         });
     }
@@ -1456,8 +1455,8 @@ function showAlert(title, message) {
     document.getElementById('sysModalMessage').textContent = resolveLocalizedMessage(message);
     document.getElementById('sysModalCancel').classList.add('hidden');
     document.getElementById('sysModalOk').onclick = () => closeSystemModal(null);
-    if (typeof animateModalOpen === 'function') {
-        animateModalOpen(modal, false);
+    if (typeof window.animateModalOpen === 'function') {
+        window.animateModalOpen(modal, false);
     } else {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -1474,8 +1473,8 @@ function showConfirm(title, message, onConfirm) {
         closeSystemModal(null);
         if (onConfirm) onConfirm();
     };
-    if (typeof animateModalOpen === 'function') {
-        animateModalOpen(modal, false);
+    if (typeof window.animateModalOpen === 'function') {
+        window.animateModalOpen(modal, false);
     } else {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -1484,8 +1483,8 @@ function showConfirm(title, message, onConfirm) {
 
 function closeSystemModal() {
     const modal = document.getElementById('systemModal');
-    if (typeof animateModalClose === 'function') {
-        animateModalClose(modal);
+    if (typeof window.animateModalClose === 'function') {
+        window.animateModalClose(modal);
     } else {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
@@ -1493,7 +1492,7 @@ function closeSystemModal() {
 }
 
 // Theme toggle (if not defined in common.js)
-if (typeof toggleTheme === 'undefined') {
+if (typeof window.toggleTheme === 'undefined') {
     window.toggleTheme = function() {
         const html = document.documentElement;
         const current = html.classList.contains('dark') ? 'dark' : 'light';
@@ -1511,14 +1510,14 @@ if (typeof toggleTheme === 'undefined') {
 }
 
 function updateThemeIcons() {
-    const theme = (typeof getResolvedTheme === 'function')
-        ? getResolvedTheme()
+    const theme = (typeof window.getResolvedTheme === 'function')
+        ? window.getResolvedTheme()
         : ((!localStorage.getItem('theme') || localStorage.getItem('theme') === 'system')
             ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
             : localStorage.getItem('theme'));
 
-    if (typeof applyThemeUI === 'function') {
-        applyThemeUI(theme);
+    if (typeof window.applyThemeUI === 'function') {
+        window.applyThemeUI(theme);
         return;
     }
     const isDark = theme === 'dark' || theme === 'amoled';
@@ -1529,13 +1528,13 @@ function updateThemeIcons() {
 }
 // Global CustomEvent delegation for nodes_monitor.js
 document.addEventListener('app:change:toggle-node-selection', e => {
-    toggleNodeSelection(e.detail.target.getAttribute('data-token'), e.detail.target);
+    window.toggleNodeSelection(e.detail.target.getAttribute('data-token'), e.detail.target);
 });
 document.addEventListener('app:action:open-node-detail', e => {
-    openNodeDetail(e.detail.target.getAttribute('data-token'));
+    window.openNodeDetail(e.detail.target.getAttribute('data-token'));
 });
 document.addEventListener('app:action:quick-reboot', e => {
-    quickReboot(e.detail.target.getAttribute('data-token'));
+    window.quickReboot(e.detail.target.getAttribute('data-token'));
 });
 // node-service-action is handled by the listener at the top of this file (with confirmation dialog)
 
@@ -1577,7 +1576,9 @@ window.showPingErrorModal = function(event) {
     }
 };
 
-window.closeSystemModal = closeSystemModal;
+// Keep the node monitor's private modal closer inside this module.
+// common.js owns the global window.closeSystemModal handler because it resolves
+// showModalConfirm() promises used by notification clearing and other API actions.
 window.showAlert = showAlert;
 window.showConfirm = showConfirm;
 })();

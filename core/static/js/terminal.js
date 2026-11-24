@@ -3,16 +3,16 @@
     const I18N = window.I18N || {};
 
     if (window.visualViewport) {
-        function updateViewport() {
+        const updateViewport = function updateViewport() {
             document.body.style.height = window.visualViewport.height + 'px';
             window.scrollTo(0, 0);
-        }
+        };
         window.visualViewport.addEventListener('resize', updateViewport);
         window.visualViewport.addEventListener('scroll', updateViewport);
         updateViewport();
     }
 
-    const term = new Terminal({
+    const term = new window.Terminal({
         cursorBlink: true,
         theme: {
             background: '#09090b',
@@ -41,9 +41,9 @@
         rendererType: 'canvas'
     });
 
-    const fitAddon = new FitAddon.FitAddon();
+    const fitAddon = new window.FitAddon.FitAddon();
     term.loadAddon(fitAddon);
-    term.loadAddon(new WebLinksAddon.WebLinksAddon());
+    term.loadAddon(new window.WebLinksAddon.WebLinksAddon());
 
     const termDiv = document.getElementById('termDiv');
     if (termDiv) {

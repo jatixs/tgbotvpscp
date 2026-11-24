@@ -16,13 +16,13 @@ if (window.Chart) {
     const legendDatasetFadePlugin = {
         id: 'legend-dataset-fade',
         beforeDatasetDraw(chart, args) {
-            const fade = chart.$legendDatasetFades?.[args.index];
+            const fade = chart.$legendDatasetFades?.get(args.index);
             if (!fade) return;
             chart.ctx.save();
             chart.ctx.globalAlpha *= fade.opacity;
         },
         afterDatasetDraw(chart, args) {
-            if (chart.$legendDatasetFades?.[args.index]) chart.ctx.restore();
+            if (chart.$legendDatasetFades?.get(args.index)) chart.ctx.restore();
         }
     };
     // The built-in filler draws area fills in its own beforeDatasetDraw hook; it must run
@@ -35,7 +35,7 @@ if (window.Chart) {
     window.Chart.defaults.plugins.legend.onClick = (event, item, legend) => {
         const chart = legend.chart;
         const datasetIndex = item.datasetIndex;
-        if (!Number.isInteger(datasetIndex) || chart.$legendDatasetFades?.[datasetIndex]) return;
+        if (!Number.isInteger(datasetIndex) || chart.$legendDatasetFades?.has(datasetIndex)) return;
 
         const wasVisible = chart.isDatasetVisible(datasetIndex);
         if (document.documentElement.classList.contains('perf-mode')) {
@@ -45,16 +45,16 @@ if (window.Chart) {
         }
 
         if (!wasVisible) chart.setDatasetVisibility(datasetIndex, true);
-        chart.$legendDatasetFades = chart.$legendDatasetFades || {};
-        chart.$legendDatasetFades[datasetIndex] = { opacity: wasVisible ? 1 : 0 };
-        const fade = chart.$legendDatasetFades[datasetIndex];
+        chart.$legendDatasetFades = chart.$legendDatasetFades || new Map();
+        chart.$legendDatasetFades.set(datasetIndex, { opacity: wasVisible ? 1 : 0 });
+        const fade = chart.$legendDatasetFades.get(datasetIndex);
         if (!wasVisible) chart.update('none');
 
         const startedAt = performance.now();
         const duration = 700;
         function animateFade(now) {
             if (!chart.canvas) {
-                delete chart.$legendDatasetFades[datasetIndex];
+                chart.$legendDatasetFades.delete(datasetIndex);
                 return;
             }
             const progress = Math.min(1, (now - startedAt) / duration);
@@ -69,7 +69,7 @@ if (window.Chart) {
                 return;
             }
 
-            delete chart.$legendDatasetFades[datasetIndex];
+            chart.$legendDatasetFades.delete(datasetIndex);
             if (wasVisible) chart.setDatasetVisibility(datasetIndex, false);
             chart.update('none');
         };
@@ -125,19 +125,33 @@ document.addEventListener('keydown', e => {
 
 
 function escapeHtml(text) {
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return String(text).replace(/[&<>"']/g, m => map[m]);
+    const entities = new Map([
+        ['&', '&amp;'], ['<', '&lt;'], ['>', '&gt;'], ['\"', '&quot;'], ["'", '&#039;']
+    ]);
+    return String(text).replace(/[&<>"']/g, character => entities.get(character));
 }
 
 function setSafeText(element, text) {
     if (!element) return;
     element.textContent = text;
+}
+
+function randomInteger(limit) {
+    const UINT32_RANGE = 2 ** 32;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > UINT32_RANGE) {
+        throw new RangeError('Random integer limit must be between 1 and 2^32');
+    }
+    const values = new Uint32Array(1);
+    const cutoff = UINT32_RANGE - (UINT32_RANGE % limit);
+    do {
+        globalThis.crypto.getRandomValues(values);
+    } while (values[0] >= cutoff);
+    return values[0] % limit;
+}
+
+function randomAnimationFraction() {
+    const UINT32_RANGE = 2 ** 32;
+    return randomInteger(UINT32_RANGE) / UINT32_RANGE;
 }
 
 window.startScrambleAnimation = function(element) {
@@ -154,27 +168,27 @@ window.startScrambleAnimation = function(element) {
     element.scrambleInterval = setInterval(() => {
         let currentText = '';
         for (let i = 0; i < len; i++) {
-            currentText += chars[Math.floor(Math.random() * chars.length)];
+            currentText += chars.charAt(randomInteger(chars.length));
         }
         element.innerText = currentText;
     }, 50);
 };
 
-window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId = null) {
+window.animateDecryption = function(element, decryptedContent, duration = 800, uniqueId = null) {
     if (!element) return;
     
     window._animatedDecryptions = window._animatedDecryptions || new Set();
     
     if ((uniqueId && window._animatedDecryptions.has(uniqueId)) || 
-        element.dataset.decryptedValue === finalHtml) {
-        setSafeHTML(element, finalHtml);
+        element.dataset.decryptedValue === decryptedContent) {
+        window.setSafeHTML(element, decryptedContent);
         if (uniqueId) window._animatedDecryptions.add(uniqueId);
-        element.dataset.decryptedValue = finalHtml;
+        element.dataset.decryptedValue = decryptedContent;
         return;
     }
     
     if (uniqueId) window._animatedDecryptions.add(uniqueId);
-    element.dataset.decryptedValue = finalHtml;
+    element.dataset.decryptedValue = decryptedContent;
     
     if (element.scrambleInterval) {
         clearInterval(element.scrambleInterval);
@@ -187,11 +201,11 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
     }
     
     const tempDiv = document.createElement('div');
-    setSafeHTML(tempDiv, finalHtml);
+    window.setSafeHTML(tempDiv, decryptedContent);
     const finalText = tempDiv.textContent || '';
     
     if (!finalText) {
-        setSafeHTML(element, finalHtml);
+        window.setSafeHTML(element, decryptedContent);
         return;
     }
     
@@ -206,7 +220,7 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
             if (i < (iterations / maxIterations) * finalText.length) {
                 currentText += finalText[i];
             } else {
-                currentText += chars[Math.floor(Math.random() * chars.length)];
+                currentText += chars.charAt(randomInteger(chars.length));
             }
         }
         element.innerText = currentText;
@@ -215,14 +229,14 @@ window.animateDecryption = function(element, finalHtml, duration = 800, uniqueId
         if (iterations > maxIterations) {
             clearInterval(element.decryptionInterval);
             element.decryptionInterval = null;
-            setSafeHTML(element, finalHtml);
+            window.setSafeHTML(element, decryptedContent);
         }
     }, frameTime);
 };
 
 function encryptRequestPayload(dataObj) {
-    if (typeof WEB_KEY === 'undefined' || !WEB_KEY) return dataObj;
-    return { d: encryptData(JSON.stringify(dataObj)) };
+    if (typeof window.WEB_KEY === 'undefined' || !window.WEB_KEY) return dataObj;
+    return { d: window.encryptData(JSON.stringify(dataObj)) };
 }
 
 function decryptApiResponse(dataObj) {
@@ -230,7 +244,7 @@ function decryptApiResponse(dataObj) {
         if (typeof dataObj.d !== 'string' || !dataObj.d.startsWith('fw1:')) {
             throw new Error('Invalid encrypted API response');
         }
-        return JSON.parse(decryptData(dataObj.d));
+        return JSON.parse(window.decryptData(dataObj.d));
     }
     return dataObj;
 }
@@ -299,7 +313,7 @@ function sseRequest(url, eventName) {
 window.__chartRegistry = window.__chartRegistry || {};
 
 function ensureChartZoomRegistered() {
-    if (typeof Chart === 'undefined' || window.__chartZoomRegistered) return;
+    if (typeof window.Chart === 'undefined' || window.__chartZoomRegistered) return;
 
     const candidates = [
         window.ChartZoom,
@@ -311,18 +325,18 @@ function ensureChartZoomRegistered() {
     for (const plugin of candidates) {
         if (!plugin) continue;
         try {
-            Chart.register(plugin);
+            window.Chart.register(plugin);
             window.__chartZoomRegistered = true;
             break;
-        } catch {
-            console.debug('Chart zoom plugin registration skipped:', e);
+        } catch (error) {
+            console.debug('Chart zoom plugin registration skipped:', error);
         }
     }
 }
 
 function getChartResetLabel() {
-    if (typeof I18N !== 'undefined') {
-        return I18N.web_nodes_monitor_filter_reset || I18N.web_traffic_reset_no_emoji || 'Сбросить';
+    if (typeof window.I18N !== 'undefined') {
+        return window.I18N.web_nodes_monitor_filter_reset || window.I18N.web_traffic_reset_no_emoji || 'Сбросить';
     }
     return 'Сбросить';
 }
@@ -624,7 +638,7 @@ window.attachChartInteractions = attachChartInteractions;
 
             if (url && url.origin === window.location.origin && url.pathname.startsWith('/api/')) {
                 const headers = new Headers(options.headers || (resource instanceof Request ? resource.headers : undefined));
-                const csrfToken = getCsrfToken();
+                const csrfToken = window.getCsrfToken();
                 if (csrfToken && !headers.has('X-CSRF-Token')) {
                     headers.set('X-CSRF-Token', csrfToken);
                 }
@@ -661,7 +675,7 @@ window.attachChartInteractions = attachChartInteractions;
             return decryptApiResponse(data);
         } catch (e) {
             if (e instanceof SyntaxError && e.message.includes("Unexpected token")) {
-                const friendlyMessage = (typeof I18N !== 'undefined' && I18N.web_json_parse_error) ? I18N.web_json_parse_error : "Ошибка сервера: неверный формат ответа (возможно, сессия истекла или сервер недоступен).";
+                const friendlyMessage = (typeof window.I18N !== 'undefined' && window.I18N.web_json_parse_error) ? window.I18N.web_json_parse_error : "Ошибка сервера: неверный формат ответа (возможно, сессия истекла или сервер недоступен).";
                 const err = new Error(friendlyMessage);
                 err.original = e;
                 throw err;
@@ -859,7 +873,7 @@ function initHapticsToggle() {
 function toggleHaptics() {
     if (typeof navigator.vibrate !== 'function') {
         updateHapticsUI();
-        if (window.showToast) window.showToast(I18N.web_haptics_unsupported);
+        if (window.showToast) window.showToast(window.I18N.web_haptics_unsupported);
         return;
     }
     const currentState = localStorage.getItem('haptics_enabled') !== 'false';
@@ -867,10 +881,10 @@ function toggleHaptics() {
     updateHapticsUI();
     if (!currentState) {
         playHaptic();
-        const msgOn = (typeof I18N !== 'undefined' && I18N.web_haptics_on) ? I18N.web_haptics_on : "Haptics: ON";
+        const msgOn = (typeof window.I18N !== 'undefined' && window.I18N.web_haptics_on) ? window.I18N.web_haptics_on : "Haptics: ON";
         if (window.showToast) window.showToast(msgOn);
     } else {
-        const msgOff = (typeof I18N !== 'undefined' && I18N.web_haptics_off) ? I18N.web_haptics_off : "Haptics: OFF";
+        const msgOff = (typeof window.I18N !== 'undefined' && window.I18N.web_haptics_off) ? window.I18N.web_haptics_off : "Haptics: OFF";
         if (window.showToast) window.showToast(msgOff);
     }
 }
@@ -891,7 +905,7 @@ function updateHapticsUI() {
         row.querySelector('label').style.cursor = 'inherit';
         const status = row.querySelector('[data-haptics-unsupported]');
         status.hidden = isSupported;
-        status.textContent = I18N.web_haptics_unsupported;
+        status.textContent = window.I18N.web_haptics_unsupported;
     });
     
     const track = document.getElementById('mHapticsTrack');
@@ -910,41 +924,67 @@ function updateHapticsUI() {
 
     const statusText = document.getElementById('mobileHapticsStatus');
     if (statusText) {
-        statusText.innerText = !isSupported ? I18N.web_haptics_unsupported : isEnabled ? (I18N?.web_on || 'Вкл') : (I18N?.web_off || 'Выкл');
+        statusText.innerText = !isSupported ? window.I18N.web_haptics_unsupported : isEnabled ? (window.I18N?.web_on || 'Вкл') : (window.I18N?.web_off || 'Выкл');
         statusText.className = isEnabled ? 'text-xs font-bold uppercase text-green-500' : 'text-xs font-bold uppercase text-gray-500';
     }
 }
 
+function styleGradientClouds(root) {
+    if (!root || typeof root === 'string') return;
+    const titles = Array.from(root.querySelectorAll?.('.bg-clip-text') || []);
+    if (root.matches?.('.bg-clip-text')) titles.unshift(root);
+    function wrapCloud(node) {
+        if (node.nodeType === 3) {
+            if (!node.textContent.includes('☁')) return;
+            const fragment = document.createDocumentFragment();
+            node.textContent.split(/(\u2601[\uFE0E\uFE0F]?)/u).forEach(part => {
+                if (!part) return;
+                if (part.startsWith('☁')) {
+                    const cloud = document.createElement('span');
+                    cloud.className = 'gradient-cloud';
+                    cloud.textContent = '\u2601\uFE0E';
+                    fragment.appendChild(cloud);
+                } else {
+                    fragment.appendChild(document.createTextNode(part));
+                }
+            });
+            node.replaceWith(fragment);
+        } else if (node.nodeType === 1 && !node.classList.contains('gradient-cloud')) {
+            Array.from(node.childNodes).forEach(wrapCloud);
+        }
+    }
+    titles.forEach(title => {
+        Array.from(title.childNodes).forEach(wrapCloud);
+    });
+}
+
 function parsePageEmojis(element) {
+    const root = element || document.body;
     if (window.twemoji) {
-        window.twemoji.parse(element || document.body, {
-            callback: function(icon, options, variant) {
-                if (icon.length === 11 && /^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {
+        window.twemoji.parse(root, {
+            callback: function(icon) {
+                if (/^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {
                     const code1 = parseInt(icon.substring(0, 5), 16);
                     const code2 = parseInt(icon.substring(6, 11), 16);
                     const char1 = String.fromCharCode(code1 - 0x1f1e6 + 97);
                     const char2 = String.fromCharCode(code2 - 0x1f1e6 + 97);
                     return 'https://flagcdn.com/' + char1 + char2 + '.svg';
                 }
-                return ''.concat(options.base, options.size, '/', icon, options.ext);
+                // Leave native emoji glyphs intact; only country flags need a fallback.
+                return false;
             },
-            attributes: function(icon, variant) {
-                if (icon.length === 11 && /^1f1[e-f][0-9a-f]-1f1[e-f][0-9a-f]$/.test(icon)) {
-                    return {
-                        class: 'emoji flagcdn',
-                        // -0.15em centers a 1em-high flag on the cap height of bold text
-                        style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
-                    };
-                }
-            },
-            folder: 'svg',
-            ext: '.svg',
-            base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/'
+            className: 'emoji flagcdn',
+            attributes: function() {
+                return {
+                    style: 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)'
+                };
+            }
         });
     }
+    styleGradientClouds(root);
 }
 
-function replaceEmojisWithFlagsHTML(text) {
+function replaceEmojisWithFlagsAsHtml(text) {
     if (!text) return text;
     const regex = /([\uD83C][\uDDE6-\uDDFF]){2}/g;
     return text.replace(regex, function(match) {
@@ -954,6 +994,10 @@ function replaceEmojisWithFlagsHTML(text) {
         const char2 = String.fromCharCode(code2 - 0x1F1E6 + 97);
         return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
     });
+}
+
+function replaceEmojisWithFlagsHTML(text) {
+    return replaceEmojisWithFlagsAsHtml(text);
 }
 
 // --- Node detail modals: flag-as-icon, fluid font scale, fit-to-width text, chart fonts ---
@@ -993,10 +1037,10 @@ function setNodeIconFlag(iconBox, code) {
 function renderNodeModalTitle(titleEl, rawName) {
     if (!titleEl) return;
     const { code, name } = splitNodeFlag(rawName);
-    const html = replaceEmojisWithFlagsHTML(escapeHtml(name));
+    const formattedTitle = replaceEmojisWithFlagsHTML(escapeHtml(name));
     const temp = titleEl.cloneNode(false);
-    setSafeHTML(temp, html);
-    if (!updateDOM(titleEl, temp)) setSafeHTML(titleEl, html);
+    window.setSafeHTML(temp, formattedTitle);
+    if (!updateDOM(titleEl, temp)) window.setSafeHTML(titleEl, formattedTitle);
     if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
     titleEl.dataset.rawName = String(rawName || '');
     titleEl.title = name;
@@ -1057,8 +1101,8 @@ function initNodeModalScaling() {
 }
 document.addEventListener('DOMContentLoaded', initNodeModalScaling);
 
-if (typeof Chart !== 'undefined') {
-    Chart.register({
+if (typeof window.Chart !== 'undefined') {
+    window.Chart.register({
         id: 'nodeModalChartFonts',
         beforeUpdate(chart) {
             if (!chart.canvas || !chart.canvas.closest('#nodeModal, #nodeDetailModal')) return;
@@ -1077,8 +1121,8 @@ if (typeof Chart !== 'undefined') {
                 });
                 const legendLabels = opts.plugins?.legend?.labels;
                 if (legendLabels) legendLabels.font = { size };
-            } catch {
-                console.debug('nodeModalChartFonts skipped:', e);
+            } catch (error) {
+                console.debug('nodeModalChartFonts skipped:', error);
             }
         }
     });
@@ -1135,8 +1179,8 @@ async function setLanguage(lang) {
             })
         });
         window.location.reload();
-    } catch {
-        console.error(e);
+    } catch (error) {
+        console.error(error);
     }
 }
 window.setLanguage = setLanguage;
@@ -1168,7 +1212,7 @@ function copyTextToClipboard(text) {
 window.copyTextToClipboard = copyTextToClipboard;
 
 function showCopyFeedback() {
-    if (window.showToast) window.showToast((typeof I18N !== 'undefined' && I18N.web_copied) ? I18N.web_copied : "Copied!");
+    if (window.showToast) window.showToast((typeof window.I18N !== 'undefined' && window.I18N.web_copied) ? window.I18N.web_copied : "Copied!");
 }
 window.copyToken = copyToken;
 
@@ -1217,6 +1261,99 @@ function isTouchDeviceOrEvent(e) {
     return false;
 }
 
+const ipFamilySelections = new Map();
+
+function readIpFamily(key) {
+    try {
+        const saved = sessionStorage.getItem('ip-family:' + key);
+        if (saved === '4' || saved === '6') return saved;
+    } catch {}
+    return ipFamilySelections.get(key) || '4';
+}
+
+function ipBadgeState(ipv4, ipv6, key) {
+    const family = readIpFamily(key) === '6' && ipv6 ? '6' : (ipv4 || !ipv6 ? '4' : '6');
+    return { ipv4: ipv4 || '', ipv6: ipv6 || '', key, family, ip: (family === '6' ? ipv6 : ipv4) || '-' };
+}
+
+function resolveBadgeAddress(value) {
+    return value ? String(window.decryptData(value) || '') : '';
+}
+
+function nodeIpBadgeState(node) {
+    const stats = node.stats || {};
+    const primary = resolveBadgeAddress(node.ip);
+    const ipv4 = resolveBadgeAddress(node.ipv4 || stats.ipv4 || stats.external_ip) || (primary.includes('.') && !primary.includes(':') ? primary : '');
+    const ipv6 = resolveBadgeAddress(node.ipv6 || stats.ipv6) || (primary.includes(':') ? primary : '');
+    return ipBadgeState(ipv4, ipv6, 'node:' + node.id);
+}
+
+function updateIpBadge(container, state) {
+    if (!container) return;
+    Object.assign(container.dataset, { ipv4: state.ipv4, ipv6: state.ipv6, ipKey: state.key, ipFamily: state.family, ipSwitch: String(Boolean(state.ipv4 && state.ipv6)) });
+    container.setAttribute('data-copy-ip', state.ip);
+    container.classList.add('ip-address-toggle', 'ip-copy-container');
+    const text = container.querySelector('.ip-copy-text');
+    if (text) {
+        if (text.decryptionInterval) clearInterval(text.decryptionInterval);
+        if (text.scrambleInterval) clearInterval(text.scrambleInterval);
+        text.decryptionInterval = null;
+        text.scrambleInterval = null;
+        text.dataset.isScrambling = 'false';
+        text.classList.remove('decrypt-on-load');
+        text.textContent = state.ip;
+        text.title = state.ip;
+    }
+    const label = container.querySelector('.ip-family-label');
+    if (label) label.textContent = 'IPv' + state.family;
+    const copy = container.querySelector('.ip-copy-btn');
+    if (copy) copy.setAttribute('data-ip', state.ip === '-' ? '' : state.ip);
+    if (state.ipv4 && state.ipv6) {
+        container.setAttribute('role', 'button');
+        container.setAttribute('tabindex', '0');
+        container.setAttribute('aria-label', 'IPv' + state.family + ': ' + state.ip + ' — IPv4 / IPv6');
+    } else {
+        container.removeAttribute('role');
+        container.removeAttribute('tabindex');
+        container.removeAttribute('aria-label');
+    }
+}
+
+function toggleIpBadge(container) {
+    if (!container.dataset.ipv4 || !container.dataset.ipv6) return;
+    const family = container.dataset.ipFamily === '6' ? '4' : '6';
+    const key = container.dataset.ipKey;
+    ipFamilySelections.set(key, family);
+    try { sessionStorage.setItem('ip-family:' + key, family); } catch {}
+    document.querySelectorAll('[data-ip-key]').forEach(badge => {
+        if (badge.dataset.ipKey === key) updateIpBadge(badge, ipBadgeState(badge.dataset.ipv4, badge.dataset.ipv6, key));
+    });
+}
+
+function renderNodeIpBadge(node) {
+    const state = nodeIpBadgeState(node);
+    const dual = Boolean(state.ipv4 && state.ipv6);
+    const copyLabel = escapeHtml(window.I18N?.web_copy_ip || 'Copy IP');
+    return `<div class="ip-copy-container ip-address-toggle inline-flex items-center gap-1 min-w-0 max-w-full" data-ip-key="${escapeHtml(state.key)}" data-ipv4="${escapeHtml(state.ipv4)}" data-ipv6="${escapeHtml(state.ipv6)}" data-ip-family="${state.family}" data-ip-switch="${dual}" data-copy-ip="${escapeHtml(state.ip)}" ${dual ? 'role="button" tabindex="0"' : ''}>
+        <span class="ip-family-label text-[9px] text-gray-400">IPv${state.family}</span>
+        <span data-ref="ip" class="ip-copy-text font-mono text-xs text-gray-500 dark:text-gray-400 select-all" title="${escapeHtml(state.ip)}">${escapeHtml(state.ip)}</span>
+        <button type="button" class="ip-copy-btn p-0.5 text-gray-400 hover:text-blue-500 rounded flex-shrink-0" data-action="copy-ip" data-ip="${escapeHtml(state.ip === '-' ? '' : state.ip)}" aria-label="${copyLabel}" title="${copyLabel}"><svg class="w-3.5 h-3.5 ip-copy-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+    </div>`;
+}
+window.renderNodeIpBadge = renderNodeIpBadge;
+
+document.addEventListener('keydown', event => {
+    const badge = event.target.closest?.('[data-ip-switch="true"]');
+    if (badge && event.target === badge && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        toggleIpBadge(badge);
+    }
+}, true);
+
+document.addEventListener('app:action:agent-ip-details', () => window.openAgentIpsModal?.());
+
+
 // Global Capture delegation for Copying IP (works across desktop click and touchscreen tap)
 document.addEventListener('click', e => {
     // 1. Explicit Copy Button Click
@@ -1233,6 +1370,15 @@ document.addEventListener('click', e => {
         if (ip) {
             copyIpWithFeedback(ip, btn, e);
         }
+        return;
+    }
+
+    if (e.target.closest('[data-action="agent-ip-details"]')) return;
+    const familyBadge = e.target.closest('[data-ip-switch="true"]');
+    if (familyBadge) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        toggleIpBadge(familyBadge);
         return;
     }
 
@@ -1277,7 +1423,7 @@ function getToastContainer() {
     return toastContainer;
 }
 
-function formatNotificationText(text) {
+function formatNotificationHtml(text) {
     return escapeHtml(text).replace(/&lt;b&gt;/gi, '<b>').replace(/&lt;\/b&gt;/gi, '</b>')
         .replace(/\n/g, '<br>');
 }
@@ -1288,7 +1434,7 @@ function showToast(message) {
     toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
     const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
     const closeBtn = `<button data-action="close-toast" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
-    setSafeHTML(toast, `${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${formatNotificationText(message)}</p></div>${closeBtn}`);
+    window.setSafeHTML(toast, `${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${formatNotificationHtml(message)}</p></div>${closeBtn}`);
     container.appendChild(toast);
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -1345,17 +1491,17 @@ function launchBrandEasterEgg(originEl) {
         particle.textContent = glyphs[index % glyphs.length];
         particle.style.left = `${originX}px`;
         particle.style.top = `${originY}px`;
-        particle.style.fontSize = `${14 + Math.random() * 14}px`;
+        particle.style.fontSize = `${14 + randomAnimationFraction() * 14}px`;
 
-        const angle = (Math.PI * 2 * index) / particleCount + Math.random() * 0.5;
-        const distance = burstRadius * (0.5 + Math.random() * 0.7);
+        const angle = (Math.PI * 2 * index) / particleCount + randomAnimationFraction() * 0.5;
+        const distance = burstRadius * (0.5 + randomAnimationFraction() * 0.7);
         const tx = Math.cos(angle) * distance;
         const ty = Math.sin(angle) * distance + 40; // slight downward drift like gravity
 
         particle.style.setProperty('--tx', `${tx.toFixed(0)}px`);
         particle.style.setProperty('--ty', `${ty.toFixed(0)}px`);
-        particle.style.setProperty('--scale', (0.8 + Math.random() * 0.6).toFixed(2));
-        particle.style.setProperty('--rot', `${(-180 + Math.random() * 360).toFixed(0)}deg`);
+        particle.style.setProperty('--scale', (0.8 + randomAnimationFraction() * 0.6).toFixed(2));
+        particle.style.setProperty('--rot', `${(-180 + randomAnimationFraction() * 360).toFixed(0)}deg`);
         particle.style.setProperty('--delay', `${index * 18}ms`);
 
         overlay.appendChild(particle);
@@ -1376,8 +1522,7 @@ function launchBrandEasterEgg(originEl) {
 function showNextRouteEasterEgg(isRu) {
     if (typeof window.showModal !== 'function') return;
 
-    const radarSvg = '<i class="icon icon-radar icon-md text-blue-500 mr-1"></i>';
-    const title = isRu ? `${radarSvg} Найден секретный маршрут` : `${radarSvg} Secret route found`;
+    const title = isRu ? 'Найден секретный маршрут' : 'Secret route found';
     const content = isRu
         ? `
             <div class="flex flex-col items-center text-center gap-3">
@@ -1416,7 +1561,7 @@ function showNextRouteEasterEgg(isRu) {
                 close: true,
             },
             {
-                text: isRu ? '<span class="flex items-center justify-center gap-2"><i class="icon icon-rocket icon-sm bg-current"></i> Открыть NextRoute</span>' : '<span class="flex items-center justify-center gap-2"><i class="icon icon-rocket icon-sm bg-current"></i> Open NextRoute</span>',
+                text: isRu ? '🚀 Открыть NextRoute' : '🚀 Open NextRoute',
                 class: 'bg-blue-600 text-white hover:bg-blue-700',
                 close: true,
                 onClick: () => {
@@ -1467,13 +1612,13 @@ function toggleHint(e, id) {
     const c = document.getElementById('hintModalContent');
 
     if (m && c) {
-        setSafeHTML(c, el.innerHTML);
+        c.replaceChildren(...el.cloneNode(true).childNodes);
 
         let titleEl = el.closest('.flex')?.querySelector('span, label, p, h3');
         if (!titleEl) {
             titleEl = el.parentElement?.parentElement?.querySelector('span, label, p, h3');
         }
-        const defaultTitle = (typeof I18N !== 'undefined' && I18N.modal_title_info) ? I18N.modal_title_info : 'Info';
+        const defaultTitle = (typeof window.I18N !== 'undefined' && window.I18N.modal_title_info) ? window.I18N.modal_title_info : 'Info';
         document.getElementById('hintModalTitle').innerText = titleEl ? titleEl.innerText : defaultTitle;
 
         animateModalOpen(m, false);
@@ -1545,12 +1690,12 @@ async function addNodeDash() {
     if (!n) return;
 
     const btn = document.getElementById('btnAddNodeDash');
-    const originalHTML = btn.innerHTML;
+    const originalNodes = btn ? Array.from(btn.cloneNode(true).childNodes) : [];
 
     if (btn) {
         btn.style.width = getComputedStyle(btn).width;
         btn.disabled = true;
-        setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+        window.setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
     }
 
     try {
@@ -1566,29 +1711,29 @@ async function addNodeDash() {
         const d = await r.json();
         if (r.ok) {
             document.getElementById('nodeResultDash').classList.remove('hidden');
-            const tokenVal = (typeof decryptData === 'function') ? decryptData(d.token) : d.token;
-            const cmdVal = (typeof decryptData === 'function') ? decryptData(d.command) : d.command;
+            const tokenVal = (typeof window.decryptData === 'function') ? window.decryptData(d.token) : d.token;
+            const cmdVal = (typeof window.decryptData === 'function') ? window.decryptData(d.command) : d.command;
             document.getElementById('newNodeTokenDash').innerText = tokenVal;
             document.getElementById('newNodeCmdDash').innerText = cmdVal;
-            if (typeof NODES_DATA !== 'undefined') NODES_DATA.push({
+            if (typeof window.NODES_DATA !== 'undefined') window.NODES_DATA.push({
                 token: d.token,
                 name: n,
                 ip: 'Unknown'
             });
-            if (typeof renderNodes === 'function') renderNodes();
-            if (typeof fetchNodesList === 'function') fetchNodesList();
+            if (typeof window.renderNodes === 'function') window.renderNodes();
+            if (typeof window.fetchNodesList === 'function') window.fetchNodesList();
             i.value = '';
             validateNodeInput();
         } else {
-            const errTxt = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error';
+            const errTxt = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : 'Error';
             window.showModalAlert(d.error, errTxt);
         }
     } catch (e) {
-        const errTxt = (typeof I18N !== 'undefined' && I18N.web_error_short) ? I18N.web_error_short : 'Error';
+        const errTxt = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : 'Error';
         window.showModalAlert(e, errTxt);
     } finally {
         if (btn) {
-            setSafeHTML(btn, originalHTML);
+            btn.replaceChildren(...originalNodes.map(node => node.cloneNode(true)));
             btn.style.width = '';
             validateNodeInput();
         }
@@ -1629,7 +1774,7 @@ function initHolidayMood() {
                 const isDropdown = a11y.classList.contains('p-2') || a11y.closest('#mobileSettingsDropdown');
                 const btn = document.createElement('button');
                 btn.setAttribute('data-action', 'toggle-holiday-mode');
-                btn.setAttribute('title', (typeof I18N !== 'undefined' && I18N.web_toggle_holiday_mode) || 'Новогоднее настроение');
+                btn.setAttribute('title', (typeof window.I18N !== 'undefined' && window.I18N.web_toggle_holiday_mode) || 'Новогоднее настроение');
                 btn.className = isDropdown
                     ? 'p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-sky-400 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95'
                     : 'p-1.5 sm:p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 text-sky-400 hover:text-sky-500 dark:hover:text-sky-300 hover:scale-110 focus:ring-2 focus:ring-sky-400 focus:outline-none';
@@ -1695,12 +1840,12 @@ function toggleHolidayMood() {
     if (newState) {
         startHolidayEffects();
         if (typeof showToast === 'function') {
-            showToast((typeof I18N !== 'undefined' && I18N.web_holiday_mode_on) || 'Новогоднее настроение включено');
+            showToast((typeof window.I18N !== 'undefined' && window.I18N.web_holiday_mode_on) || 'Новогоднее настроение включено');
         }
     } else {
         stopHolidayEffects();
         if (typeof showToast === 'function') {
-            showToast((typeof I18N !== 'undefined' && I18N.web_holiday_mode_off) || 'Новогоднее настроение отключено');
+            showToast((typeof window.I18N !== 'undefined' && window.I18N.web_holiday_mode_off) || 'Новогоднее настроение отключено');
         }
     }
     if (window.playHaptic) playHaptic([10, 40, 10]);
@@ -1727,11 +1872,11 @@ function startSnow() {
     snowInterval = setInterval(() => {
         const s = document.createElement('div');
         s.className = 'snowflake';
-        s.innerText = icons[Math.floor(Math.random() * icons.length)];
-        s.style.left = Math.random() * 100 + 'vw';
-        s.style.animationDuration = (Math.random() * 3 + 4) + 's';
-        s.style.opacity = Math.random() * 0.7;
-        s.style.fontSize = (Math.random() * 8 + 8) + 'px';
+        s.innerText = icons.at(randomInteger(icons.length));
+        s.style.left = randomAnimationFraction() * 100 + 'vw';
+        s.style.animationDuration = (randomAnimationFraction() * 3 + 4) + 's';
+        s.style.opacity = randomAnimationFraction() * 0.7;
+        s.style.fontSize = (randomAnimationFraction() * 8 + 8) + 'px';
         container.appendChild(s);
         setTimeout(() => s.remove(), 6000);
     }, 300);
@@ -1778,7 +1923,7 @@ function initSSE() {
 
     try {
         sseSource = new EventSource('/api/events');
-    } catch (e) {
+    } catch {
         diagnoseConnectionIssue(false);
         return;
     }
@@ -1863,8 +2008,8 @@ async function diagnoseConnectionIssue(isWatchdog = false) {
         if (authRes.ok) {
             // Server is active and session is valid!
             if (isWatchdog) {
-                const slowText = (typeof I18N !== 'undefined' && I18N.web_slow_connection)
-                    ? I18N.web_slow_connection
+                const slowText = (typeof window.I18N !== 'undefined' && window.I18N.web_slow_connection)
+                    ? window.I18N.web_slow_connection
                     : "Slow internet connection...";
                 showToast(slowText);
             } else {
@@ -1892,14 +2037,14 @@ function handleClientOffline() {
     if (window._isSessionExpired || document.getElementById('session-expired-overlay')) return;
     if (document.getElementById('offline-toast')) return;
 
-    const title = (typeof I18N !== 'undefined' && I18N.web_client_offline) ? I18N.web_client_offline : "Отсутствует подключение к интернету";
-    const desc = (typeof I18N !== 'undefined' && I18N.web_client_offline_desc) ? I18N.web_client_offline_desc : "Проверьте сетевое соединение Wi-Fi или мобильные данные.";
+    const title = (typeof window.I18N !== 'undefined' && window.I18N.web_client_offline) ? window.I18N.web_client_offline : "Отсутствует подключение к интернету";
+    const desc = (typeof window.I18N !== 'undefined' && window.I18N.web_client_offline_desc) ? window.I18N.web_client_offline_desc : "Проверьте сетевое соединение Wi-Fi или мобильные данные.";
 
     const toastContainer = getToastContainer();
     const toast = document.createElement('div');
     toast.id = 'offline-toast';
     toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md w-auto max-w-sm transition-all duration-300 transform translate-y-0 opacity-100 mb-2';
-    setSafeHTML(toast, `
+    window.setSafeHTML(toast, `
         <div class="offline-toast-icon p-2 rounded-xl flex-shrink-0 flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
@@ -1922,7 +2067,7 @@ window.addEventListener('online', () => {
     const offlineToast = document.getElementById('offline-toast');
     if (offlineToast) offlineToast.remove();
     if (!window._isSessionExpired) {
-        const onlineText = (typeof I18N !== 'undefined' && I18N.web_client_online) ? I18N.web_client_online : "Подключение к сети восстановлено";
+        const onlineText = (typeof window.I18N !== 'undefined' && window.I18N.web_client_online) ? window.I18N.web_client_online : "Подключение к сети восстановлено";
         showToast(onlineText);
         diagnoseConnectionIssue(false);
     }
@@ -1969,26 +2114,35 @@ window.checkSessionStatus = function() {
 
 let lastUnreadCount = -1;
 let lastNotificationsJson = "";
+let lastNotificationsList = null;
+let notificationOutsideClickBound = false;
 
 function initNotifications() {
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/reset_password')) return;
 
-    const btn = document.getElementById('notifBtn');
-    if (!btn) return;
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
-    newBtn.addEventListener('click', toggleNotifications);
-    const clearBtn = document.getElementById('notifClearBtn');
-    if (clearBtn) {
-        const newClearBtn = clearBtn.cloneNode(true);
-        clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
-        newClearBtn.addEventListener('click', clearNotifications);
+    // SPA replaces the entire <nav>, including both notification buttons.
+    // Delegating clicks to document keeps the handler alive without cloning
+    // or re-binding detached header elements after every route change.
+    if (!document.getElementById('notifBtn')) return;
+
+    lastNotificationsJson = "";
+    if (lastNotificationsList !== null) {
+        updateNotifUI(lastNotificationsList, Math.max(0, lastUnreadCount));
     }
+    if (notificationOutsideClickBound) return;
+    notificationOutsideClickBound = true;
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('#notifDropdown') && !e.target.closest('#notifBtn')) {
+        const target = e.target;
+        if (target.closest('#notifClearBtn')) {
+            clearNotifications(e);
+            return;
+        }
+        if (target.closest('#notifBtn')) {
+            toggleNotifications();
+        } else if (!target.closest('#notifDropdown')) {
             if (typeof closeNotifications === 'function') closeNotifications();
         }
-        if (!e.target.closest('#mobileSettingsDropdown') && !e.target.closest('#mobileSettingsBtn')) {
+        if (!target.closest('#mobileSettingsDropdown') && !target.closest('#mobileSettingsBtn')) {
             if (typeof closeMobileSettings === 'function') closeMobileSettings();
         }
     });
@@ -2024,17 +2178,17 @@ function handleSessionExpired() {
     const restartOverlay = document.getElementById('server-restart-overlay');
     if (restartOverlay) restartOverlay.remove();
 
-    const title = (typeof I18N !== 'undefined' && I18N.web_session_expired) ? I18N.web_session_expired : "Сессия истекла";
-    const msg = (typeof I18N !== 'undefined' && I18N.web_session_expired_desc)
-        ? I18N.web_session_expired_desc
-        : ((typeof I18N !== 'undefined' && I18N.web_please_relogin) ? I18N.web_please_relogin : "Время вашей сессии истекло или доступ был отозван. Пожалуйста, выполните вход повторно.");
-    const btnText = (typeof I18N !== 'undefined' && I18N.web_login_btn) ? I18N.web_login_btn : "Войти";
+    const title = (typeof window.I18N !== 'undefined' && window.I18N.web_session_expired) ? window.I18N.web_session_expired : "Сессия истекла";
+    const msg = (typeof window.I18N !== 'undefined' && window.I18N.web_session_expired_desc)
+        ? window.I18N.web_session_expired_desc
+        : ((typeof window.I18N !== 'undefined' && window.I18N.web_please_relogin) ? window.I18N.web_please_relogin : "Время вашей сессии истекло или доступ был отозван. Пожалуйста, выполните вход повторно.");
+    const btnText = (typeof window.I18N !== 'undefined' && window.I18N.web_login_btn) ? window.I18N.web_login_btn : "Войти";
 
     const overlay = document.createElement('div');
     overlay.id = 'session-expired-overlay';
     overlay.className = 'fixed inset-0 z-[10001] bg-white/40 dark:bg-black/60 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300 opacity-0';
 
-    setSafeHTML(overlay, `
+    window.setSafeHTML(overlay, `
         <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 transform scale-95 transition-transform duration-300">
             <div class="mb-4 text-amber-500 mx-auto bg-amber-100 dark:bg-amber-900/30 w-16 h-16 flex items-center justify-center rounded-2xl shadow-inner">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2090,9 +2244,9 @@ function handleServerRestart() {
 
     dismissAllConnectionAlerts();
 
-    const title = (typeof I18N !== 'undefined' && I18N.web_server_rebooting) ? I18N.web_server_rebooting : "Восстановление сессии...";
-    const desc = (typeof I18N !== 'undefined' && I18N.web_server_rebooting_desc) ? I18N.web_server_rebooting_desc : "Ожидание восстановления связи с панелью управления...";
-    const checkAgainText = (typeof I18N !== 'undefined' && I18N.web_check_again) ? I18N.web_check_again : "Проверить сейчас";
+    const title = (typeof window.I18N !== 'undefined' && window.I18N.web_server_rebooting) ? window.I18N.web_server_rebooting : "Восстановление сессии...";
+    const desc = (typeof window.I18N !== 'undefined' && window.I18N.web_server_rebooting_desc) ? window.I18N.web_server_rebooting_desc : "Ожидание восстановления связи с панелью управления...";
+    const checkAgainText = (typeof window.I18N !== 'undefined' && window.I18N.web_check_again) ? window.I18N.web_check_again : "Проверить сейчас";
 
     createBlurOverlay('server-restart-overlay', `
         <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-200 dark:border-white/10 mx-auto">
@@ -2142,7 +2296,7 @@ function handleServerRestart() {
                     pollTimer = null;
                 }
                 if (statusEl) {
-                    const restoredText = (typeof I18N !== 'undefined' && I18N.web_server_restored) ? I18N.web_server_restored : "Связь восстановлена!";
+                    const restoredText = (typeof window.I18N !== 'undefined' && window.I18N.web_server_restored) ? window.I18N.web_server_restored : "Связь восстановлена!";
                     statusEl.textContent = restoredText;
                 }
                 const overlay = document.getElementById('server-restart-overlay');
@@ -2178,8 +2332,8 @@ function handleServerRestart() {
             const actions = document.getElementById('server-restart-actions');
             if (actions) actions.classList.remove('hidden');
             const descEl = document.getElementById('server-restart-desc');
-            if (descEl && typeof I18N !== 'undefined' && I18N.web_panel_unreachable_desc) {
-                descEl.textContent = I18N.web_panel_unreachable_desc;
+            if (descEl && typeof window.I18N !== 'undefined' && window.I18N.web_panel_unreachable_desc) {
+                descEl.textContent = window.I18N.web_panel_unreachable_desc;
             }
         }
 
@@ -2197,7 +2351,7 @@ function createBlurOverlay(id, content) {
     const overlay = document.createElement('div');
     overlay.id = id;
     overlay.className = 'fixed inset-0 z-[10000] bg-white/60 dark:bg-gray-900/80 backdrop-blur-lg flex items-center justify-center p-4 transition-opacity duration-500 opacity-0';
-    setSafeHTML(overlay, `<div class="text-center">${content}</div>`);
+    window.setSafeHTML(overlay, `<div class="text-center">${content}</div>`);
 
     document.body.appendChild(overlay);
     document.body.style.overflow = 'hidden';
@@ -2207,23 +2361,80 @@ function createBlurOverlay(id, content) {
     });
 }
 
-async function clearNotifications(e) {
-    if (e) e.stopPropagation();
+let notificationClearInProgress = false;
 
-    if (!await window.showModalConfirm(I18N.web_clear_notif_confirm || "Clear all notifications?", I18N.modal_title_confirm)) return;
+function sendNotificationClear() {
+    return fetch('/api/notifications/clear', {
+        method: 'POST',
+        credentials: 'same-origin'
+    });
+}
+
+async function clearNotifications(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    if (notificationClearInProgress) return;
+
+    const clearBtn = document.getElementById('notifClearBtn');
+    notificationClearInProgress = true;
+    if (clearBtn) clearBtn.disabled = true;
 
     try {
-        const res = await fetch('/api/notifications/clear', {
-            method: 'POST'
-        });
+        const message = (typeof window.I18N !== 'undefined' && window.I18N.web_clear_notif_confirm)
+            || "Clear all notifications?";
+        const title = typeof window.I18N !== 'undefined' ? window.I18N.modal_title_confirm : undefined;
+        if (!await window.showModalConfirm(message, title)) return;
 
-        if (res.ok) {
-            updateNotifUI([], 0);
-            if (window.showToast) window.showToast(I18N.web_notifications_cleared);
+        let response = await sendNotificationClear();
+        let errorMessage = '';
+        if (!response.ok) {
+            errorMessage = `HTTP ${response.status}`;
+            try {
+                const body = await response.json();
+                if (body && typeof body.error === 'string') errorMessage = body.error;
+            } catch (_) { /* HTTP status remains available without JSON */ }
+
+            // An authenticated session can outlive its one-hour CSRF token.
+            // Refresh it via the authenticated status endpoint, then retry once.
+            if (response.status === 403 && errorMessage === 'Invalid CSRF token') {
+                const auth = await fetch('/api/auth/status', {
+                    method: 'GET', credentials: 'same-origin', cache: 'no-store'
+                });
+                if (auth.ok) {
+                    response = await sendNotificationClear();
+                    errorMessage = `HTTP ${response.status}`;
+                    if (!response.ok) {
+                        try {
+                            const body = await response.json();
+                            if (body && typeof body.error === 'string') errorMessage = body.error;
+                        } catch (_) { /* Retain HTTP status */ }
+                    }
+                }
+            }
         }
-    } catch (e) {
-        console.error("Clear notifications error:", e);
-        if (window.showModalAlert) window.showModalAlert(String(e), I18N.web_error_short || "Error");
+        if (!response.ok) throw new Error(errorMessage);
+
+        const result = await response.json();
+        if (!result || result.status !== 'ok') {
+            throw new Error('Notification clear was not confirmed by the server');
+        }
+        // The shared API/SSE cutoff is committed; make the local list match immediately.
+        updateNotifUI([], 0);
+        if (typeof window.showToast === 'function') {
+            window.showToast((typeof window.I18N !== 'undefined' && window.I18N.web_notifications_cleared)
+                || 'Notifications cleared');
+        }
+    } catch (error) {
+        console.error('Clear notifications error:', error);
+        if (typeof window.showToast === 'function') {
+            const prefix = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) || 'Error';
+            window.showToast(`${prefix}: ${error.message || error}`);
+        }
+    } finally {
+        notificationClearInProgress = false;
+        if (clearBtn && clearBtn.isConnected) clearBtn.disabled = false;
     }
 }
 window.clearNotifications = clearNotifications;
@@ -2265,6 +2476,7 @@ function updateNotifUI(list, count) {
     } else badge.classList.add('hidden');
 
     lastUnreadCount = count;
+    lastNotificationsList = list;
 
     const clearBtn = document.getElementById('notifClearBtn');
     if (clearBtn) {
@@ -2277,33 +2489,39 @@ function updateNotifUI(list, count) {
     lastNotificationsJson = listJson;
 
     if (list.length === 0) {
-        setSafeHTML(listContainer, `<div class="p-4 text-center text-gray-500 text-sm">${escapeHtml((typeof I18N !== 'undefined' ? I18N.web_no_notifications : "No notifications"))}</div>`);
+        window.setSafeHTML(listContainer, `<div class="p-4 text-center text-gray-500 text-sm">${escapeHtml((typeof window.I18N !== 'undefined' ? window.I18N.web_no_notifications : "No notifications"))}</div>`);
     } else {
-        setSafeHTML(listContainer, "");
+        window.setSafeHTML(listContainer, "");
         list.forEach(n => {
             const div = document.createElement('div');
             div.className = "px-4 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition last:border-0 group";
             const date = new Date(n.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-            let badgeHtml = '';
-            if (n.source === 'node') {
-                badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 mr-2 uppercase tracking-wider">${escapeHtml(I18N?.web_notif_source_node || '')}</span>`;
-            } else {
-                badgeHtml = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 mr-2 uppercase tracking-wider">${escapeHtml(I18N?.web_notif_source_agent || '')}</span>`;
-            }
+            const metaRow = document.createElement('div');
+            metaRow.className = "flex justify-between items-start mb-1";
+            const metaWrap = document.createElement('div');
+            metaWrap.className = "flex items-center";
 
-            const cleanText = replaceEmojisWithFlagsHTML(formatNotificationText(n.text));
+            const badge = document.createElement('span');
+            badge.className = n.source === 'node'
+                ? "px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 mr-2 uppercase tracking-wider"
+                : "px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 mr-2 uppercase tracking-wider";
+            badge.textContent = n.source === 'node' ? (window.I18N?.web_notif_source_node || '') : (window.I18N?.web_notif_source_agent || '');
+            metaWrap.appendChild(badge);
 
-            setSafeHTML(div, `
-                <div class="flex justify-between items-start mb-1">
-                    <div class="flex items-center">
-                        ${badgeHtml}
-                        <span class="text-[10px] text-gray-400 font-mono">${escapeHtml(date)}</span>
-                    </div>
-                </div>
-                <div class="text-sm text-gray-700 dark:text-gray-300 leading-snug break-words group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                    ${cleanText}
-                </div>`);
+            const timeSpan = document.createElement('span');
+            timeSpan.className = "text-[10px] text-gray-400 font-mono";
+            timeSpan.textContent = date;
+            metaWrap.appendChild(timeSpan);
+            metaRow.appendChild(metaWrap);
+            div.appendChild(metaRow);
+
+            const bodyDiv = document.createElement('div');
+            bodyDiv.className = "text-sm text-gray-700 dark:text-gray-300 leading-snug break-words group-hover:text-gray-900 dark:group-hover:text-white transition-colors";
+            const formattedMessage = replaceEmojisWithFlagsHTML(formatNotificationHtml(n.text));
+            window.setSafeHTML(bodyDiv, formattedMessage);
+            div.appendChild(bodyDiv);
+
             listContainer.appendChild(div);
         });
     }
@@ -2683,11 +2901,21 @@ function animateModalClose(modal) {
 let sysModalResolve = null;
 
 function closeSystemModal(result) {
+    // Resolve the pending confirmation before any visual clean-up. A rendering
+    // or animation error must not swallow the user's OK and leave API work stuck.
+    const resolve = sysModalResolve;
+    sysModalResolve = null;
+    if (resolve) resolve(result);
+
     const modal = document.getElementById('systemModal');
-    animateModalClose(modal);
-    if (sysModalResolve) {
-        sysModalResolve(result);
-        sysModalResolve = null;
+    if (modal) {
+        try {
+            animateModalClose(modal);
+        } catch (error) {
+            console.error('System modal close animation failed:', error);
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
     }
 }
 window.closeSystemModal = closeSystemModal;
@@ -2701,14 +2929,14 @@ function _showSystemModalBase(title, message, type = 'alert', placeholder = '', 
             return;
         }
 
-        if (typeof I18N !== 'undefined') {
+        if (typeof window.I18N !== 'undefined') {
             const btnCancel = document.getElementById('sysModalCancel');
             const btnOk = document.getElementById('sysModalOk');
-            if (btnCancel && I18N.modal_btn_cancel) btnCancel.innerText = I18N.modal_btn_cancel;
-            if (btnOk && I18N.modal_btn_ok) btnOk.innerText = I18N.modal_btn_ok;
+            if (btnCancel && window.I18N.modal_btn_cancel) btnCancel.innerText = window.I18N.modal_btn_cancel;
+            if (btnOk && window.I18N.modal_btn_ok) btnOk.innerText = window.I18N.modal_btn_ok;
         }
 
-        const t = (typeof I18N !== 'undefined' && I18N['modal_title_' + type]) ? I18N['modal_title_' + type] : (title || 'Alert');
+        const t = (typeof window.I18N !== 'undefined' && window.I18N['modal_title_' + type]) ? window.I18N['modal_title_' + type] : (title || 'Alert');
         document.getElementById('sysModalTitle').innerText = t;
         const msgEl = document.getElementById('sysModalMessage');
         if (msgEl) {
@@ -2764,18 +2992,18 @@ window.animateModalOpen = animateModalOpen;
 window.animateModalClose = animateModalClose;
 
 window.clearLogs = function() {
-    return runMaintenanceAction({
+    return window.runMaintenanceAction({
         buttonId: 'clearLogsBtn', url: '/api/logs/clear', payload: { type: 'all' },
-        confirmText: I18N.web_clear_logs_confirm,
-        doneText: I18N.web_logs_cleared_alert || 'Cleared!', busyText: I18N.web_logs_clearing,
+        confirmText: window.I18N.web_clear_logs_confirm,
+        doneText: window.I18N.web_logs_cleared_alert || 'Cleared!', busyText: window.I18N.web_logs_clearing,
     });
 };
 
 window.resetTrafficSettings = function() {
-    return runMaintenanceAction({
+    return window.runMaintenanceAction({
         buttonId: 'resetTrafficBtn', url: '/api/traffic/reset',
-        confirmText: I18N.web_traffic_reset_confirm || 'Are you sure? This will zero out the counters.',
-        doneText: I18N.web_traffic_reset_no_emoji || 'Done!',
+        confirmText: window.I18N.web_traffic_reset_confirm || 'Are you sure? This will zero out the counters.',
+        doneText: window.I18N.web_traffic_reset_no_emoji || 'Done!',
     });
 };
 
@@ -2784,18 +3012,18 @@ document.addEventListener('keydown', (e) => {
         const modals = document.querySelectorAll('[id$="Modal"]');
         modals.forEach(modal => {
             if (!modal.classList.contains('hidden')) {
-                if (modal.id === 'nodeModal' && typeof closeNodeModal === 'function') {
-                    closeNodeModal();
+                if (modal.id === 'nodeModal' && typeof window.closeNodeModal === 'function') {
+                    window.closeNodeModal();
                 } else if (modal.id === 'addNodeModal' && typeof closeAddNodeModal === 'function') {
                     closeAddNodeModal();
                 } else if (modal.id === 'systemModal' && typeof closeSystemModal === 'function') {
                     closeSystemModal(null);
-                } else if (modal.id === 'servicesEditModal' && typeof closeServicesEditModal === 'function') {
-                    closeServicesEditModal();
-                } else if (modal.id === 'serviceInfoModal' && typeof closeServiceInfoModal === 'function') {
-                    closeServiceInfoModal();
-                } else if (modal.id === 'agentIpsModal' && typeof closeAgentIpsModal === 'function') {
-                    closeAgentIpsModal();
+                } else if (modal.id === 'servicesEditModal' && typeof window.closeServicesEditModal === 'function') {
+                    window.closeServicesEditModal();
+                } else if (modal.id === 'serviceInfoModal' && typeof window.closeServiceInfoModal === 'function') {
+                    window.closeServiceInfoModal();
+                } else if (modal.id === 'agentIpsModal' && typeof window.closeAgentIpsModal === 'function') {
+                    window.closeAgentIpsModal();
                 } else if (modal.id === 'genericHintModal' && typeof closeHintModal === 'function') {
                     closeHintModal();
                 }
@@ -2820,7 +3048,7 @@ function togglePerfMode() {
         }
     }
     if (typeof showToast === 'function') {
-        showToast(isPerfMode ? (I18N?.web_perf_mode_on || 'Light mode enabled') : (I18N?.web_perf_mode_off || 'Light mode disabled'));
+        showToast(isPerfMode ? (window.I18N?.web_perf_mode_on || 'Light mode enabled') : (window.I18N?.web_perf_mode_off || 'Light mode disabled'));
     }
     if (window.playHaptic) playHaptic([8, 40, 10]);
 }
@@ -2830,7 +3058,7 @@ function toggleA11yMode() {
     localStorage.setItem('a11y_mode', isA11yMode ? '1' : '0');
     requestAnimationFrame(() => syncThemeGlider(true));
     if (typeof showToast === 'function') {
-        showToast(isA11yMode ? (I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (I18N?.web_a11y_mode_off || 'Accessibility mode disabled'));
+        showToast(isA11yMode ? (window.I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (window.I18N?.web_a11y_mode_off || 'Accessibility mode disabled'));
     }
     if (window.playHaptic) playHaptic([8, 40, 10]);
 }
@@ -2862,36 +3090,36 @@ window.getBillingStatusColor = function(daysLeft) {
 
 window.getBillingBadgeHtml = function(daysLeft) {
     if (daysLeft === null) return '';
-    const color = getBillingStatusColor(daysLeft);
+    const color = window.getBillingStatusColor(daysLeft);
     const badgeClass = `text-${color}-700 dark:text-${color}-400`;
     const isSmall = typeof window !== 'undefined' && window.innerWidth <= 380;
     const daysTemplate = isSmall
-        ? (I18N?.web_billing_badge_days_short || "{days} д.")
-        : (I18N?.web_billing_badge_days || "{days} дней");
-    const txt = daysLeft < 0 ? (I18N?.web_billing_expired || "Expired!") : daysTemplate.replace("{days}", daysLeft);
+        ? (window.I18N?.web_billing_badge_days_short || "{days} д.")
+        : (window.I18N?.web_billing_badge_days || "{days} дней");
+    const txt = daysLeft < 0 ? (window.I18N?.web_billing_expired || "Expired!") : daysTemplate.replace("{days}", daysLeft);
     return `<span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ml-1.5 ${badgeClass}">${txt}</span>`;
 };
 
 window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
-    const title = I18N?.web_billing_modal_title || "Детали аренды";
-    const amountLbl = I18N?.web_billing_amount || "Стоимость аренды:";
-    const dateLbl = I18N?.web_billing_date || "Ближайший платёж:";
-    const hintText = I18N?.web_billing_bot_hint || "Управлять настройками оплаты можно в Telegram-боте.";
+    const title = window.I18N?.web_billing_modal_title || "Детали аренды";
+    const amountLbl = window.I18N?.web_billing_amount || "Стоимость аренды:";
+    const dateLbl = window.I18N?.web_billing_date || "Ближайший платёж:";
+    const hintText = window.I18N?.web_billing_bot_hint || "Управлять настройками оплаты можно в Telegram-боте.";
     
     let statusHtml = "";
     if (daysLeft !== null) {
         if (daysLeft < 0) {
-            statusHtml = `<span class="px-2 py-1 text-xs font-bold text-red-700 dark:text-red-400">${I18N?.web_billing_status_expired || "Просрочен!"}</span>`;
+            statusHtml = `<span class="px-2 py-1 text-xs font-bold text-red-700 dark:text-red-400">${window.I18N?.web_billing_status_expired || "Просрочен!"}</span>`;
         } else {
-            const activeText = (I18N?.web_billing_active_days || "Активен (осталось {days} дней)").replace("{days}", daysLeft);
+            const activeText = (window.I18N?.web_billing_active_days || "Активен (осталось {days} дней)").replace("{days}", daysLeft);
             statusHtml = `<span class="px-2 py-1 text-xs font-bold text-green-700 dark:text-green-400">${activeText}</span>`;
         }
     } else {
-        statusHtml = `<span class="text-xs text-gray-400 font-medium">${I18N?.web_billing_not_set || "Не установлена"}</span>`;
+        statusHtml = `<span class="text-xs text-gray-400 font-medium">${window.I18N?.web_billing_not_set || "Не установлена"}</span>`;
     }
     
-    const amountVal = amount !== null && amount !== undefined ? `${amount} ${currency}` : (I18N?.web_billing_not_set || "Не установлена");
-    const dateVal = dateStr ? new Date(dateStr).toLocaleDateString() : (I18N?.web_billing_not_set || "Не установлена");
+    const amountVal = amount !== null && amount !== undefined ? `${amount} ${currency}` : (window.I18N?.web_billing_not_set || "Не установлена");
+    const dateVal = dateStr ? new Date(dateStr).toLocaleDateString() : (window.I18N?.web_billing_not_set || "Не установлена");
     const nameHtml = replaceEmojisWithFlagsHTML(escapeHtml(String(name ?? '')));
 
     const contentHtml = `
@@ -2908,7 +3136,7 @@ window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
                 <span class="text-sm font-bold text-gray-900 dark:text-white bg-white dark:bg-black/40 px-2 py-0.5 rounded shadow-sm border border-gray-100 dark:border-white/5">${dateVal}</span>
             </div>
             <div class="flex justify-between items-center">
-                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">${I18N?.web_billing_status || 'Статус:'}</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">${window.I18N?.web_billing_status || 'Статус:'}</span>
                 ${statusHtml}
             </div>
         </div>
@@ -2920,38 +3148,38 @@ window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
         </div>
     `;
 
-    showModal({
+    window.showModal({
         title: title,
         content: contentHtml,
         buttons: [
-            { text: I18N?.modal_btn_ok || "OK", class: "bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/20 w-full", close: true }
+            { text: window.I18N?.modal_btn_ok || "OK", class: "bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/20 w-full", close: true }
         ]
     });
 };
 
 window.renderHeaderBilling = function() {
-    if (typeof master_billing_json === 'undefined' || !master_billing_json) return;
+    if (typeof window.master_billing_json === 'undefined' || !window.master_billing_json) return;
     const container = document.getElementById('headerBillingContainer');
     if (!container) return;
     
-    let isSet = master_billing_json.amount !== null && master_billing_json.amount !== undefined;
+    let isSet = window.master_billing_json.amount !== null && window.master_billing_json.amount !== undefined;
     let daysLeft = null;
     
-    if (master_billing_json.next_payment_date) {
-        daysLeft = calculateDaysLeft(master_billing_json.next_payment_date);
+    if (window.master_billing_json.next_payment_date) {
+        daysLeft = window.calculateDaysLeft(window.master_billing_json.next_payment_date);
     }
     
     // Only show the header icon if billing is enabled or data exists.
-    if (!isSet && !master_billing_json.next_payment_date) return;
+    if (!isSet && !window.master_billing_json.next_payment_date) return;
     
-    const color = getBillingStatusColor(daysLeft);
-    const fragment = DOMPurify.sanitize(`
+    const color = window.getBillingStatusColor(daysLeft);
+    const fragment = window.DOMPurify.sanitize(`
         <button class="header-billing-btn flex items-center justify-center h-8 px-2 sm:px-3 rounded-lg transition font-medium text-xs sm:text-sm gap-1 whitespace-nowrap group" data-status="${color}"
-                title="${I18N?.web_billing_modal_title || 'Детали аренды'}">
+                title="${window.I18N?.web_billing_modal_title || 'Детали аренды'}">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
             </svg>
-            <span class="hidden sm:inline-flex">${getBillingBadgeHtml(daysLeft)}</span>
+            <span class="hidden sm:inline-flex">${window.getBillingBadgeHtml(daysLeft)}</span>
         </button>
     `, { RETURN_DOM_FRAGMENT: true });
     container.textContent = '';
@@ -2959,11 +3187,11 @@ window.renderHeaderBilling = function() {
     const badgeBtn = container.querySelector('button');
     if (badgeBtn) {
         badgeBtn.onclick = () => {
-            showBillingModal(
-                I18N?.master_server_name || "Мой сервер (агент)",
-                master_billing_json.amount !== null && master_billing_json.amount !== undefined ? master_billing_json.amount : null,
-                master_billing_json.currency || '$',
-                master_billing_json.next_payment_date || null,
+            window.showBillingModal(
+                window.I18N?.master_server_name || "Мой сервер (агент)",
+                window.master_billing_json.amount !== null && window.master_billing_json.amount !== undefined ? window.master_billing_json.amount : null,
+                window.master_billing_json.currency || '$',
+                window.master_billing_json.next_payment_date || null,
                 daysLeft
             );
         };
@@ -2971,10 +3199,25 @@ window.renderHeaderBilling = function() {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (typeof renderHeaderBilling === 'function') {
-        renderHeaderBilling();
+    if (typeof window.renderHeaderBilling === 'function') {
+        window.renderHeaderBilling();
     }
 });
+
+function createCloseModalSvg() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'h-6 w-6');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('stroke', 'currentColor');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('d', 'M6 18L18 6M6 6l12 12');
+    svg.appendChild(path);
+    return svg;
+}
 
 window.showModal = function(options) {
     const { title, content, buttons } = options;
@@ -2987,53 +3230,51 @@ window.showModal = function(options) {
     modal.className = "fixed inset-0 z-[9999] hidden items-center justify-center bg-black/50 dark:bg-black/80 backdrop-blur-sm p-4";
     modal.onclick = (e) => { if (e.target === modal) window.closeDynamicModal(modalId); };
     
-    let buttonsHtml = '';
+    const dialog = document.createElement('div');
+    dialog.className = "bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col";
+    dialog.style.transition = "opacity 0.2s ease-out, transform 0.2s ease-out";
+
+    const header = document.createElement('div');
+    header.className = "p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl";
+    const headerTitle = document.createElement('h3');
+    headerTitle.className = "text-lg font-bold text-gray-900 dark:text-white";
+    headerTitle.textContent = title || '';
+    header.appendChild(headerTitle);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.id = `${modalId}_close_btn`;
+    closeBtn.className = "text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1";
+    closeBtn.setAttribute('type', 'button');
+    closeBtn.onclick = () => window.closeDynamicModal(modalId);
+    closeBtn.replaceChildren(createCloseModalSvg());
+    header.appendChild(closeBtn);
+    dialog.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = "p-5 text-sm text-gray-700 dark:text-gray-300";
+    window.setSafeHTML(body, content || '');
+    dialog.appendChild(body);
+
     if (buttons && buttons.length > 0) {
-        buttonsHtml = `<div class="p-4 border-t border-gray-200 dark:border-white/5 flex justify-end gap-2 rounded-b-2xl">`;
+        const footer = document.createElement('div');
+        footer.className = "p-4 border-t border-gray-200 dark:border-white/5 flex justify-end gap-2 rounded-b-2xl";
         buttons.forEach((btn, idx) => {
-            buttonsHtml += `<button id="${modalId}_btn_${idx}" class="px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition ${btn.class || 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'}">${btn.text}</button>`;
+            const b = document.createElement('button');
+            b.id = `${modalId}_btn_${idx}`;
+            b.className = `px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition ${btn.class || 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'}`;
+            b.textContent = btn.text || '';
+            b.onclick = () => {
+                if (btn.onClick) btn.onClick();
+                if (btn.close) window.closeDynamicModal(modalId);
+            };
+            footer.appendChild(b);
         });
-        buttonsHtml += `</div>`;
+        dialog.appendChild(footer);
     }
 
-    const fragment = DOMPurify.sanitize(`
-        <div class="bg-white dark:bg-gray-800 border border-white/20 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md relative flex flex-col" style="transition: opacity 0.2s ease-out, transform 0.2s ease-out;">
-            <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
-                <h3 class="text-lg font-bold text-gray-900 dark:text-white">${title || ''}</h3>
-                <button id="${modalId}_close_btn" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="p-5 text-sm text-gray-700 dark:text-gray-300">
-                ${content || ''}
-            </div>
-            ${buttonsHtml}
-        </div>
-    `, { RETURN_DOM_FRAGMENT: true });
-    modal.textContent = '';
-    modal.appendChild(fragment);
-    
+    modal.appendChild(dialog);
     document.body.appendChild(modal);
-    
-    const closeBtn = document.getElementById(`${modalId}_close_btn`);
-    if (closeBtn) {
-        closeBtn.onclick = () => window.closeDynamicModal(modalId);
-    }
-    
-    if (buttons && buttons.length > 0) {
-        buttons.forEach((btn, idx) => {
-            const btnEl = document.getElementById(`${modalId}_btn_${idx}`);
-            if (btnEl) {
-                btnEl.onclick = () => {
-                    if (btn.onClick) btn.onClick();
-                    if (btn.close) window.closeDynamicModal(modalId);
-                };
-            }
-        });
-    }
-    
+
     if (typeof animateModalOpen === 'function') {
         animateModalOpen(modal);
     } else {
@@ -3071,3 +3312,5 @@ window.closeDynamicModal = function(id) {
         });
     }
 })();
+
+window.toggleHaptics = toggleHaptics;

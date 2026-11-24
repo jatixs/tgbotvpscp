@@ -10,7 +10,7 @@
         const main = document.querySelector('main[data-panel-page="operations"]');
         if (!main) return;
         main.querySelectorAll('[data-operation-encrypted]').forEach(element => {
-            element.textContent = decryptData(element.dataset.operationEncrypted);
+            element.textContent = window.decryptData(element.dataset.operationEncrypted);
         });
         main.querySelectorAll('select').forEach((select, index) => {
             enhanceSelect(select, index, signal);
@@ -56,7 +56,7 @@
             connection.addEventListener('operations', event => {
                 if (source !== connection) return;
                 let updates;
-                try { updates = decryptApiResponse(JSON.parse(event.data)); } catch { return; }
+                try { updates = window.decryptApiResponse(JSON.parse(event.data)); } catch { return; }
                 if (!Array.isArray(updates)) return;
                 for (const update of updates) {
                     if (!update || !Number.isSafeInteger(update.id)) continue;

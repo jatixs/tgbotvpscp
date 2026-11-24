@@ -108,7 +108,7 @@ self.addEventListener('notificationclick', (event) => {
         : '/';
 
     event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
             // Check if there is already a window open
             for (let i = 0; i < windowClients.length; i++) {
                 const client = windowClients[i];
@@ -120,8 +120,8 @@ self.addEventListener('notificationclick', (event) => {
                 }
             }
             // If no active window is found, open a new one
-            if (clients.openWindow) {
-                return clients.openWindow(targetUrl);
+            if (self.clients.openWindow) {
+                return self.clients.openWindow(targetUrl);
             }
         })
     );

@@ -3,25 +3,25 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- Elements ---
     const pageTitle = document.getElementById('page-title');
-    if (pageTitle) pageTitle.innerText = (typeof I18N !== 'undefined' && I18N.reset_page_title) ? I18N.reset_page_title : "Reset Password";
+    if (pageTitle) pageTitle.innerText = (typeof window.I18N !== 'undefined' && window.I18N.reset_page_title) ? window.I18N.reset_page_title : "Reset Password";
 
     const brandName = document.getElementById('brand-name');
-    if (brandName) brandName.innerText = (typeof I18N !== 'undefined' && I18N.web_brand_name) ? I18N.web_brand_name : "VPS Manager";
+    if (brandName) brandName.innerText = (typeof window.I18N !== 'undefined' && window.I18N.web_brand_name) ? window.I18N.web_brand_name : "VPS Manager";
 
     const lblNew = document.getElementById('lbl-new-pass');
-    if (lblNew) lblNew.innerText = (typeof I18N !== 'undefined' && I18N.web_new_password) ? I18N.web_new_password : "New Password";
+    if (lblNew) lblNew.innerText = (typeof window.I18N !== 'undefined' && window.I18N.web_new_password) ? window.I18N.web_new_password : "New Password";
 
     const lblConfirm = document.getElementById('lbl-confirm-pass');
-    if (lblConfirm) lblConfirm.innerText = (typeof I18N !== 'undefined' && I18N.web_confirm_password) ? I18N.web_confirm_password : "Confirm Password";
+    if (lblConfirm) lblConfirm.innerText = (typeof window.I18N !== 'undefined' && window.I18N.web_confirm_password) ? window.I18N.web_confirm_password : "Confirm Password";
 
     const btnText = document.getElementById('btn-text');
-    if (btnText) btnText.innerText = (typeof I18N !== 'undefined' && I18N.web_save_btn) ? I18N.web_save_btn : "Save";
+    if (btnText) btnText.innerText = (typeof window.I18N !== 'undefined' && window.I18N.web_save_btn) ? window.I18N.web_save_btn : "Save";
 
     const txtHintLen = document.getElementById('txt-hint-len');
-    if (txtHintLen) txtHintLen.innerText = (typeof I18N !== 'undefined' && I18N.pass_req_length) ? I18N.pass_req_length : "Min 8 chars";
+    if (txtHintLen) txtHintLen.innerText = (typeof window.I18N !== 'undefined' && window.I18N.pass_req_length) ? window.I18N.pass_req_length : "Min 8 chars";
 
     const txtHintNum = document.getElementById('txt-hint-num');
-    if (txtHintNum) txtHintNum.innerText = (typeof I18N !== 'undefined' && I18N.pass_req_num) ? I18N.pass_req_num : "Min 1 digit";
+    if (txtHintNum) txtHintNum.innerText = (typeof window.I18N !== 'undefined' && window.I18N.pass_req_num) ? window.I18N.pass_req_num : "Min 1 digit";
 
     const passInput = document.getElementById('new_pass');
     const confirmInput = document.getElementById('confirm_pass');
@@ -62,9 +62,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let label = "";
 
         // Safe access to I18N
-        const txtWeak = (typeof I18N !== 'undefined' && I18N.pass_strength_weak) ? I18N.pass_strength_weak : "Weak";
-        const txtFair = (typeof I18N !== 'undefined' && I18N.pass_strength_fair) ? I18N.pass_strength_fair : "Normal";
-        const txtStrong = (typeof I18N !== 'undefined' && I18N.pass_strength_strong) ? I18N.pass_strength_strong : "Strong";
+        const txtWeak = (typeof window.I18N !== 'undefined' && window.I18N.pass_strength_weak) ? window.I18N.pass_strength_weak : "Weak";
+        const txtFair = (typeof window.I18N !== 'undefined' && window.I18N.pass_strength_fair) ? window.I18N.pass_strength_fair : "Normal";
+        const txtStrong = (typeof window.I18N !== 'undefined' && window.I18N.pass_strength_strong) ? window.I18N.pass_strength_strong : "Strong";
 
         if (password.length === 0) {
             width = '0%';
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function validateMatch() {
         if (confirmInput.value && passInput.value !== confirmInput.value) {
-            const errText = (typeof I18N !== 'undefined' && I18N.pass_match_error) ? I18N.pass_match_error : "Passwords do not match";
+            const errText = (typeof window.I18N !== 'undefined' && window.I18N.pass_match_error) ? window.I18N.pass_match_error : "Passwords do not match";
             matchError.innerText = errText;
             matchError.classList.remove('hidden');
             confirmInput.classList.add('border-red-500');
@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const handleEnter = (e) => {
         if (e.key === 'Enter' && !submitBtn.disabled) {
-            resetConfirm();
+            window.resetConfirm();
         }
     };
     passInput.addEventListener('keydown', handleEnter);
@@ -135,8 +135,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.showAlert = function(msg) {
         return new Promise(resolve => {
             modalResolve = resolve;
-            const titleTxt = (typeof I18N !== 'undefined' && I18N.modal_title_alert) ? I18N.modal_title_alert : "Alert";
-            const btnTxt = (typeof I18N !== 'undefined' && I18N.modal_btn_ok) ? I18N.modal_btn_ok : "OK";
+            const titleTxt = (typeof window.I18N !== 'undefined' && window.I18N.modal_title_alert) ? window.I18N.modal_title_alert : "Alert";
+            const btnTxt = (typeof window.I18N !== 'undefined' && window.I18N.modal_btn_ok) ? window.I18N.modal_btn_ok : "OK";
             
             modalTitle.innerText = titleTxt;
             modalMsg.innerText = msg;
@@ -167,38 +167,38 @@ document.addEventListener('DOMContentLoaded', () => {
         const pwd = passInput.value;
         const confirm = confirmInput.value;
 
-        const msgEmpty = (typeof I18N !== 'undefined' && I18N.pass_is_empty) ? I18N.pass_is_empty : "Fill all fields";
-        const msgMismatch = (typeof I18N !== 'undefined' && I18N.pass_match_error) ? I18N.pass_match_error : "Mismatch";
-        const msgWeak = (typeof I18N !== 'undefined' && I18N.pass_hint_title) ? I18N.pass_hint_title + " " + ((I18N.pass_req_length || "") + ", " + (I18N.pass_req_num || "")) : "Password is too weak";
+        const msgEmpty = (typeof window.I18N !== 'undefined' && window.I18N.pass_is_empty) ? window.I18N.pass_is_empty : "Fill all fields";
+        const msgMismatch = (typeof window.I18N !== 'undefined' && window.I18N.pass_match_error) ? window.I18N.pass_match_error : "Mismatch";
+        const msgWeak = (typeof window.I18N !== 'undefined' && window.I18N.pass_hint_title) ? window.I18N.pass_hint_title + " " + ((window.I18N.pass_req_length || "") + ", " + (window.I18N.pass_req_num || "")) : "Password is too weak";
 
         if (!pwd || !confirm) {
-            await showAlert(msgEmpty);
+            await window.showAlert(msgEmpty);
             return;
         }
         if (pwd !== confirm) {
-            await showAlert(msgMismatch);
+            await window.showAlert(msgMismatch);
             return;
         }
         if (!checkStrength(pwd)) {
-            await showAlert(msgWeak);
+            await window.showAlert(msgWeak);
             return;
         }
 
         const originalText = document.getElementById('btn-text').innerText;
-        const saveText = (typeof I18N !== 'undefined' && I18N.web_saving_btn) ? I18N.web_saving_btn : "Saving...";
+        const saveText = (typeof window.I18N !== 'undefined' && window.I18N.web_saving_btn) ? window.I18N.web_saving_btn : "Saving...";
 
         const spinner = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
 
         btnText.replaceChildren(
-            DOMPurify.sanitize(spinner, { RETURN_DOM_FRAGMENT: true }),
+            window.DOMPurify.sanitize(spinner, { RETURN_DOM_FRAGMENT: true }),
             document.createTextNode(saveText)
         );
         submitBtn.disabled = true;
 
         try {
-            const token = (typeof RESET_TOKEN !== 'undefined') ? RESET_TOKEN : (new URLSearchParams(window.location.search).get('token'));
+            const token = (typeof window.RESET_TOKEN !== 'undefined') ? window.RESET_TOKEN : (new URLSearchParams(window.location.search).get('token'));
 
-            const csrfToken = getCsrfToken();
+            const csrfToken = window.getCsrfToken();
             const res = await fetch('/api/reset/confirm', {
                 method: 'POST',
                 headers: {
@@ -219,10 +219,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 submitBtn.classList.add('bg-green-600', 'hover:bg-green-500');
 
                 const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
-                const redirText = (typeof I18N !== 'undefined' && I18N.web_redirecting) ? I18N.web_redirecting : "Redirecting...";
+                const redirText = (typeof window.I18N !== 'undefined' && window.I18N.web_redirecting) ? window.I18N.web_redirecting : "Redirecting...";
 
                 btnText.replaceChildren(
-                    DOMPurify.sanitize(checkIcon, { RETURN_DOM_FRAGMENT: true }),
+                    window.DOMPurify.sanitize(checkIcon, { RETURN_DOM_FRAGMENT: true }),
                     document.createTextNode(redirText)
                 );
 
@@ -230,14 +230,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.location.assign('/login');
                 }, 1000);
             } else {
-                const errPrefix = (typeof I18N !== 'undefined' && I18N.web_error) ? I18N.web_error : "Error";
-                await showAlert(errPrefix + ": " + (data.error || "Unknown"));
+                const errPrefix = (typeof window.I18N !== 'undefined' && window.I18N.web_error) ? window.I18N.web_error : "Error";
+                await window.showAlert(errPrefix + ": " + (data.error || "Unknown"));
                 document.getElementById('btn-text').innerText = originalText;
                 submitBtn.disabled = false;
             }
         } catch (_e) {
-            const connErr = (typeof I18N !== 'undefined' && I18N.web_conn_error) ? I18N.web_conn_error : "Connection error";
-            await showAlert(connErr);
+            const connErr = (typeof window.I18N !== 'undefined' && window.I18N.web_conn_error) ? window.I18N.web_conn_error : "Connection error";
+            await window.showAlert(connErr);
             document.getElementById('btn-text').innerText = originalText;
             submitBtn.disabled = false;
         }
