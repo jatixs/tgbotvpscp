@@ -300,11 +300,12 @@ def _get_top_processes(metric: str) -> list[str]:
 
         # "name (primary|alt)": the dashboard toggles between the two values on click.
         if metric == "cpu":
+            cpu_count = psutil.cpu_count() or 1
             freq = psutil.cpu_freq()
             mhz = freq.current if freq else 0
             sorted_processes = sorted(processes, key=lambda p: p.get("cpu_percent", 0), reverse=True)[:5]
             return [
-                f"{p['name']} ({p.get('cpu_percent', 0)}%" + (f"|{get_cpu_freq(p, mhz)}" if mhz else "") + ")"
+                f"{p['name']} ({p.get('cpu_percent', 0) / cpu_count:.1f}%" + (f"|{get_cpu_freq(p, mhz)}" if mhz else "") + ")"
                 for p in sorted_processes
             ]
 

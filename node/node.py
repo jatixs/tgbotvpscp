@@ -765,8 +765,9 @@ def get_top_processes(metric):
                 pass
 
         if metric == 'cpu':
+            cpu_count = psutil.cpu_count() or 1
             sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:3]
-            info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
+            info_list = [f"{p['name']} ({p['cpu_percent'] / cpu_count:.1f}%)" for p in sorted_procs]
         elif metric == 'ram':
             sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:3]
             info_list = [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]

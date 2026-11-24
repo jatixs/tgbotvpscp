@@ -1584,7 +1584,7 @@ function renderNotifNodesList() {
         <button data-action="switch-notif-view" data-token="${n.id}" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
                 <i class="icon icon-monitor icon-lg text-blue-500 group-hover:scale-110 transition-transform flex-shrink-0"></i>
-                <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
+                <span data-sensitive class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
             </div>
             <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
         </button>`;
@@ -2348,7 +2348,7 @@ function renderSessionItem(s) {
                 ${userBadge}
                 <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${escapeHtml(s.ua)}">${escapeHtml(deviceText)}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                    <span class="font-mono">${escapeHtml(window.decryptData(s.ip))}</span>
+                    <span data-sensitive class="font-mono">${escapeHtml(window.decryptData(s.ip))}</span>
                     <span>•</span>
                     <span>${date}</span>
                 </div>

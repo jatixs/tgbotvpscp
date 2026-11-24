@@ -14,6 +14,7 @@ from core import config
 from core.auth import is_allowed, send_access_denied_message
 from core.i18n import I18nFilter, _, get_user_lang
 from core.messaging import delete_previous_message
+from core.network_addresses import get_reverse_ptr
 from core.shared_state import LAST_MESSAGE_IDS
 from core.utils import (
     escape_html,
@@ -300,6 +301,9 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
     if fetched_ipv6:
         ip_v6 = fetched_ipv6
 
+    ptr_ip = fetched_ipv4 or fetched_ipv6
+    reverse_ptr = await get_reverse_ptr(ptr_ip) if ptr_ip else ""
+
     from core import nodes_db
     all_nodes = await nodes_db.get_all_nodes()
     total_nodes = len(all_nodes)
@@ -356,6 +360,7 @@ async def _generate_selftest_data(lang: str) -> tuple[str, InlineKeyboardMarkup]
         ipv6=ip_v6,
         rx=rx_fmt,
         tx=tx_fmt,
+        reverse_ptr=("\n" + _("selftest_reverse_ptr", lang, ptr=escape_html(reverse_ptr))) if reverse_ptr else "",
     )
 
     full_text = f"{header}{body}{ssh_info}"

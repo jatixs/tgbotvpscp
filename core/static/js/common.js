@@ -782,87 +782,133 @@ document.addEventListener("DOMContentLoaded", () => {
 
 });
 
+const HAPTIC_PRESS_MS = 18;
+const HAPTIC_RANGE_MS = 10;
+const HAPTIC_RANGE_EDGE_MS = 16;
+const HAPTIC_RANGE_INTERVAL_MS = 45;
+const HAPTIC_TOGGLE_MS = 16;
+const HAPTIC_CONTROL_SELECTOR = 'button, a[href], [role="button"], [role="switch"], .ip-copy-btn, input[type="checkbox"], input[type="radio"], input[type="range"]';
+
 function initHapticsFeedback() {
-    let pressedControl = null;
-    const rangeFeedback = new WeakMap();
-    function releaseControl() {
-        if (pressedControl) pressedControl.classList.remove('is-control-pressed');
-        pressedControl = null;
+    let active = null;
+    let pending = null;
+    const options = { capture: true, passive: true };
+
+    function resolve(target) {
+        if (!(target instanceof Element)) return null;
+        const row = target.closest('[data-haptics-toggle]');
+        const label = target.closest('label');
+        const control = row?.querySelector('input[type="checkbox"]') ||
+            label?.control || target.closest(HAPTIC_CONTROL_SELECTOR);
+        if (!control || !control.matches(HAPTIC_CONTROL_SELECTOR) ||
+            control.closest(':disabled, [aria-disabled="true"], [inert]')) return null;
+        const kind = control.matches('input[type="range"]') ? 'range' :
+            control.matches('input[type="checkbox"], input[type="radio"], [role="switch"]') ? 'toggle' : 'button';
+        return { control, kind, visual: row || (control.matches('input') ? (label || control) : control) };
     }
-    document.addEventListener('pointerdown', (e) => {
-        if (!(e.target instanceof Element) || !e.isPrimary || e.button !== 0) return;
-        releaseControl();
-        const label = e.target.closest('label');
-        const control = e.target.matches('input') ? e.target : label?.control;
-        if (!control || control.disabled || !control.matches('input[type="range"], input[type="checkbox"].peer')) return;
-        pressedControl = control;
-        control.classList.add('is-control-pressed');
-    }, { capture: true, passive: true });
-    document.addEventListener('pointerup', releaseControl, { capture: true, passive: true });
-    document.addEventListener('pointercancel', releaseControl, { capture: true, passive: true });
-    window.addEventListener('blur', releaseControl);
+
+    function state(control) {
+        return control.matches('input') ? control.checked : control.getAttribute('aria-checked');
+    }
+
+    function clear() {
+        if (!active) return;
+        active.control.classList.remove('is-control-pressed');
+        active.visual.classList.remove('is-haptic-pressed');
+        active.visual.removeEventListener('pointerleave', active.leave);
+        active = null;
+    }
+
+    function inside(e) {
+        const r = active.bounds;
+        return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    }
+
+    document.addEventListener('pointerdown', e => {
+        pending = null;
+        if (!e.isPrimary) return;
+        clear();
+        if (e.pointerType !== 'touch' || e.button !== 0) return;
+        const item = resolve(e.target);
+        if (!item) return;
+        const leave = ev => {
+            if (active?.id === ev.pointerId && active.kind !== 'range') clear();
+        };
+        active = { ...item, id: e.pointerId, bounds: item.visual.getBoundingClientRect(),
+            before: state(item.control), value: item.control.valueAsNumber, time: -Infinity, leave };
+        item.visual.addEventListener('pointerleave', leave);
+        if (item.kind === 'button') item.visual.classList.add('is-haptic-pressed');
+        else item.control.classList.add('is-control-pressed');
+    }, options);
+
+    document.addEventListener('pointermove', e => {
+        if (active?.id === e.pointerId && active.kind !== 'range' && !inside(e)) clear();
+    }, options);
+    document.addEventListener('pointerup', e => {
+        if (active?.id !== e.pointerId) return;
+        if (active.kind !== 'range' && inside(e)) {
+            const token = pending = active;
+            setTimeout(() => { if (pending === token) pending = null; }, 700);
+        }
+        clear();
+    }, options);
+    document.addEventListener('pointercancel', e => {
+        if (active?.id === e.pointerId) clear();
+    }, options);
+    window.addEventListener('blur', () => { clear(); pending = null; });
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) releaseControl();
+        if (document.hidden) { clear(); pending = null; }
     });
-    document.addEventListener('input', (e) => {
-        if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range') {
-            const control = e.target;
-            const value = control.valueAsNumber;
-            const previous = rangeFeedback.get(control);
-            if (previous?.value === value) return;
-            const now = performance.now();
-            const atEdge = value === Number(control.min || 0) || value === Number(control.max || 100);
-            if (!atEdge && previous && now - previous.time < 40) return;
-            rangeFeedback.set(control, { value, time: now });
-            playHaptic(atEdge ? 'rangeEdge' : 'range');
-        }
-    });
+    document.addEventListener('keydown', () => { pending = null; }, options);
 
-    document.addEventListener('change', (e) => {
-        if (e.target && e.target.tagName === 'INPUT' && (e.target.type === 'checkbox' || e.target.type === 'radio')) {
-            if (e.target.checked) {
-                playHaptic('toggleOn');
-            } else {
-                playHaptic('toggleOff');
-            }
-        }
-    });
+    document.addEventListener('input', e => {
+        if (active?.kind !== 'range' || active.control !== e.target) return;
+        const control = e.target;
+        const value = control.valueAsNumber;
+        if (active.value === value) return;
+        const now = performance.now();
+        const edge = value === Number(control.min || 0) || value === Number(control.max || 100);
+        if (!edge && now - active.time < HAPTIC_RANGE_INTERVAL_MS) return;
+        active.value = value;
+        active.time = now;
+        playHaptic(edge ? HAPTIC_RANGE_EDGE_MS : HAPTIC_RANGE_MS);
+    }, options);
 
-    // Capture clicks before local handlers stop propagation or replace the clicked element.
-    document.addEventListener('click', (e) => {
-        if (!(e.target instanceof Element)) return;
-        const control = e.target.closest('input, label, button, a[href], [role="button"], .ip-copy-btn, .btn, [data-action], [onclick]');
-        if (!control || control.closest('[data-haptics-toggle]') ||
-            control.matches(':disabled, [aria-disabled="true"]') ||
-            control.matches('input, label')) return;
-        playHaptic('press');
-    }, { capture: true, passive: true });
+    document.addEventListener('change', e => {
+        if (pending?.kind !== 'toggle' || pending.control !== e.target ||
+            state(e.target) === pending.before) return;
+        pending = null;
+        playHaptic(HAPTIC_TOGGLE_MS);
+    }, options);
+
+    document.addEventListener('click', e => {
+        const token = pending;
+        if (!token || !e.isTrusted || e.detail === 0) return;
+        const item = resolve(e.target);
+        if (!item || item.control !== token.control) return;
+        if (token.kind === 'button') {
+            pending = null;
+            setTimeout(() => { if (!e.defaultPrevented) playHaptic(HAPTIC_PRESS_MS); }, 0);
+        } else {
+            // Run after inline and delegated click handlers, including preventDefault switches.
+            setTimeout(() => {
+                if (pending !== token) return;
+                if (state(token.control) !== token.before) {
+                    pending = null;
+                    playHaptic(HAPTIC_TOGGLE_MS);
+                }
+            }, 0);
+        }
+    }, options);
 }
 
-function playHaptic(pattern = [10, 30, 10]) {
-    if (typeof navigator.vibrate !== 'function' || localStorage.getItem('haptics_enabled') === 'false') return;
-    const profiles = {
-        press: 10,
-        toggleOn: [10, 30, 10],
-        toggleOff: 10,
-        range: 5,
-        rangeEdge: 14,
-        modalOpen: [18, 35, 8],
-        modalClose: 8
-    };
-    if (typeof pattern === 'string') {
-        if (!Object.hasOwn(profiles, pattern)) {
-            console.warn('Unknown haptic feedback profile:', pattern);
-            return;
-        }
-        pattern = profiles[pattern];
-    }
+function playHaptic(duration) {
+    if (typeof duration !== 'number' || typeof navigator.vibrate !== 'function') return;
     try {
-        if (!navigator.vibrate(pattern)) {
-            console.debug('Haptic feedback was rejected by the browser.');
-        }
+        if (localStorage.getItem('haptics_enabled') === 'false') return;
+        navigator.vibrate(duration);
     } catch (error) {
-        console.warn('Haptic feedback failed:', error);
+        console.debug('Haptic feedback unavailable:', error);
     }
 }
 
@@ -880,7 +926,7 @@ function toggleHaptics() {
     localStorage.setItem('haptics_enabled', currentState ? 'false' : 'true');
     updateHapticsUI();
     if (!currentState) {
-        playHaptic();
+
         const msgOn = (typeof window.I18N !== 'undefined' && window.I18N.web_haptics_on) ? window.I18N.web_haptics_on : "Haptics: ON";
         if (window.showToast) window.showToast(msgOn);
     } else {
@@ -1190,9 +1236,6 @@ function copyToken(el) {
 }
 
 function copyTextToClipboard(text) {
-    if (typeof playHaptic === 'function') {
-        playHaptic([10, 30, 10]);
-    }
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(showCopyFeedback);
     } else {
@@ -1428,10 +1471,11 @@ function formatNotificationHtml(text) {
         .replace(/\n/g, '<br>');
 }
 
-function showToast(message) {
+function showToast(message, { screenshotSafe = false } = {}) {
     const container = getToastContainer();
     const toast = document.createElement('div');
     toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
+    if (screenshotSafe) toast.setAttribute('data-screenshot-safe', '');
     const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
     const closeBtn = `<button data-action="close-toast" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
     window.setSafeHTML(toast, `${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${formatNotificationHtml(message)}</p></div>${closeBtn}`);
@@ -1512,9 +1556,6 @@ function launchBrandEasterEgg(originEl) {
     const isRu = (document.documentElement.lang || 'ru').toLowerCase().startsWith('ru');
     showToast(isRu ? 'Пасхалка найдена: панель одобряет любопытных.' : 'Easter egg found: the panel approves curious minds.');
 
-    if (window.playHaptic) {
-        window.playHaptic([25, 40, 25]);
-    }
 
     setTimeout(() => showNextRouteEasterEgg(isRu), 900);
 }
@@ -1848,7 +1889,6 @@ function toggleHolidayMood() {
             showToast((typeof window.I18N !== 'undefined' && window.I18N.web_holiday_mode_off) || 'Новогоднее настроение отключено');
         }
     }
-    if (window.playHaptic) playHaptic([10, 40, 10]);
 }
 
 window.toggleHolidayMood = toggleHolidayMood;
@@ -2634,7 +2674,6 @@ function applyThemeDirect(resolvedTheme) {
     document.documentElement.classList.toggle('amoled', resolvedTheme === 'amoled');
     applyThemeUI(resolvedTheme);
     window.dispatchEvent(new Event("themeChanged"));
-    if (typeof playHaptic === 'function') playHaptic('press');
 }
 
 function setThemeDirect(theme, event) {
@@ -2727,7 +2766,6 @@ function handleModalInputClick(e) {
 function animateModalOpen(modal, isInput = false) {
     if (!modal) return;
 
-    if (!openModalSet.has(modal)) playHaptic('modalOpen');
 
     if (modalCloseTimer) {
         clearTimeout(modalCloseTimer);
@@ -2845,7 +2883,6 @@ function animateModalClose(modal) {
     // Only decrement once per modal — guards against double-close calls (overlay click +
     // explicit close button both firing) desyncing the shared lock counter.
     if (openModalSet.has(modal)) {
-        playHaptic('modalClose');
         openModalSet.delete(modal);
         openModalStackCount = Math.max(0, openModalStackCount - 1);
     }
@@ -3050,7 +3087,6 @@ function togglePerfMode() {
     if (typeof showToast === 'function') {
         showToast(isPerfMode ? (window.I18N?.web_perf_mode_on || 'Light mode enabled') : (window.I18N?.web_perf_mode_off || 'Light mode disabled'));
     }
-    if (window.playHaptic) playHaptic([8, 40, 10]);
 }
 
 function toggleA11yMode() {
@@ -3060,7 +3096,6 @@ function toggleA11yMode() {
     if (typeof showToast === 'function') {
         showToast(isA11yMode ? (window.I18N?.web_a11y_mode_on || 'Accessibility mode enabled') : (window.I18N?.web_a11y_mode_off || 'Accessibility mode disabled'));
     }
-    if (window.playHaptic) playHaptic([8, 40, 10]);
 }
 
 window.togglePerfMode = togglePerfMode;

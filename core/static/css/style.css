@@ -23,17 +23,21 @@ html { scrollbar-gutter: stable; }
 
 .gradient-cloud {
     display: inline-block;
-    font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif;
-    font-variant-emoji: text;
+    width: 1.15em;
+    height: 1em;
+    flex-shrink: 0;
+    vertical-align: -0.12em;
     background-image: inherit;
-    background-clip: text;
-    -webkit-background-clip: text;
+    background-clip: border-box;
+    -webkit-background-clip: border-box;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 19C3.24 19 1 16.76 1 14C1 11.5 2.84 9.43 5.24 9.06C6.25 5.99 9.13 4 12.5 4C16.09 4 19.13 6.48 19.85 9.85C22.23 10.48 24 12.65 24 15C24 17.21 22.21 19 20 19Z' fill='black'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 19C3.24 19 1 16.76 1 14C1 11.5 2.84 9.43 5.24 9.06C6.25 5.99 9.13 4 12.5 4C16.09 4 19.13 6.48 19.85 9.85C22.23 10.48 24 12.65 24 15C24 17.21 22.21 19 20 19Z' fill='black'/%3E%3C/svg%3E") center / contain no-repeat;
     color: transparent;
     -webkit-text-fill-color: transparent;
+    font-size: inherit;
+    text-indent: -9999px;
+    overflow: hidden;
     line-height: 1;
-    vertical-align: -0.06em;
-    padding: 0.08em 0.18em 0.14em 0.18em;
-    margin-right: -0.08em;
 }
 
 .ip-address-toggle { min-width: 0; max-width: 100%; }
@@ -235,11 +239,15 @@ input[type="range"].is-control-pressed::-moz-range-thumb {
 	scale: 1.35;
 }
 
-input[type="checkbox"].peer + div::after {
+input[type="checkbox"].peer + div::after,
+.screenshot-toggle-track::after {
 	transition: transform 160ms ease-out, scale 160ms ease-out;
 }
 
-input[type="checkbox"].peer.is-control-pressed + div::after {
+input[type="checkbox"].peer.is-control-pressed + div::after,
+.screenshot-toggle.is-control-pressed .screenshot-toggle-track::after,
+.screenshot-toggle:active .screenshot-toggle-track::after,
+.screenshot-toggle-track:active::after {
 	scale: 1.15;
 }
 
@@ -252,7 +260,8 @@ input[type="checkbox"].peer.is-control-pressed + div::after {
 		transition: none;
 	}
 
-	input[type="checkbox"].peer + div::after {
+	input[type="checkbox"].peer + div::after,
+.screenshot-toggle-track::after {
 		transition: none;
 	}
 }
@@ -1171,20 +1180,18 @@ html.dark .header-billing-btn[data-status="gray"] {
 	}
 }
 
-/* Lock Icon Styles */
+/* Telegram-only icon styles */
 #lockIcon {
 	transition: all 0.3s ease;
 }
 
 #lockIcon.lock-active {
-	color: #10b981 !important;
-	/* green-500 */
-	filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6));
+	color: #229ed9 !important;
+	filter: drop-shadow(0 0 8px rgba(34, 158, 217, 0.6));
 }
 
 html.dark #lockIcon.lock-active {
-	color: #34d399 !important;
-	/* green-400 */
+	color: #229ed9 !important;
 }
 
 /* Password Section Blur */
@@ -1218,20 +1225,20 @@ html.dark #lockIcon.lock-active {
 	border-radius: 0.75rem;
 	font-size: 0.8rem;
 	font-weight: 700;
-	color: #065f46;
-	background: rgba(209, 250, 229, 0.92);
-	border: 1px solid rgba(16, 185, 129, 0.45);
-	box-shadow: 0 10px 24px rgba(16, 185, 129, 0.16);
+	color: #075985;
+	background: rgba(224, 242, 254, 0.92);
+	border: 1px solid rgba(34, 158, 217, 0.45);
+	box-shadow: 0 10px 24px rgba(34, 158, 217, 0.16);
 	backdrop-filter: blur(4px);
 	max-width: calc(100% - 1rem);
 	text-align: center;
 }
 
 html.dark .telegram-only-overlay-badge {
-	color: #a7f3d0;
-	background: rgba(6, 78, 59, 0.88);
-	border-color: rgba(16, 185, 129, 0.55);
-	box-shadow: 0 10px 24px rgba(16, 185, 129, 0.24);
+	color: #bae6fd;
+	background: rgba(12, 74, 110, 0.88);
+	border-color: rgba(34, 158, 217, 0.55);
+	box-shadow: 0 10px 24px rgba(34, 158, 217, 0.24);
 }
 
 /* Haptic feedback toggle animation */
@@ -3353,4 +3360,67 @@ html[data-panel-navigating]::view-transition-new(panel-main) {
     ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) {
         animation: none !important;
     }
+}
+
+/* Touch press depth: individual scale preserves existing transforms. */
+@media (any-pointer: coarse) {
+    :is(button, a[href], [role="button"], [role="switch"], .ip-copy-btn, .btn, [data-action], [onclick], label, input[type="checkbox"], input[type="radio"]) {
+        transition-property: scale, filter, background-color, color, border-color, box-shadow, opacity, transform;
+        transition-duration: 130ms;
+        transition-timing-function: ease-out;
+    }
+    .is-haptic-pressed {
+        scale: 0.96;
+        filter: brightness(0.94);
+        transition-duration: 65ms;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .is-haptic-pressed { scale: none; transition: none; }
+}
+
+/* CSS-only Telegram and screenshot privacy icons. */
+.telegram-css-icon {
+    display: inline-block;
+    flex-shrink: 0;
+    background-color: currentColor;
+    clip-path: polygon(evenodd, 7% 45%, 91% 14%, 96% 15%, 97% 21%, 82% 87%, 78% 90%, 56% 74%, 43% 86%, 39% 85%, 31% 58%, 7% 51%, 4% 48%, 7% 45%, 35% 55%, 80% 27%, 44% 64%, 42% 79%, 35% 55%, 7% 45%);
+}
+/* The shadow belongs to the unclipped parent, not the plane silhouette. */
+#telegramOnlyBtn:has(#lockIcon.lock-active) {
+    filter: drop-shadow(0 0 8px rgba(34, 158, 217, 0.6));
+}
+#lockIcon.lock-active { filter: none; }
+.screenshot-toggle-icon {
+    display: inline-block;
+    position: relative;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.screenshot-toggle-icon::before,
+.screenshot-toggle-icon::after {
+    content: '';
+    position: absolute;
+    border-radius: 0.8px;
+    background: currentColor;
+}
+.screenshot-toggle-icon::before {
+    left: 2.5px;
+    top: 2.5px;
+    width: 4.17px;
+    height: 4.17px;
+    box-shadow: 5.83px 0 color-mix(in srgb, currentColor 65%, transparent),
+        0 5.83px color-mix(in srgb, currentColor 65%, transparent),
+        5.83px 5.83px currentColor, 0 11.67px currentColor;
+}
+.screenshot-toggle-icon::after {
+    left: 14.17px;
+    top: 2.5px;
+    width: 3.33px;
+    height: 3.33px;
+    background: color-mix(in srgb, currentColor 30%, transparent);
+    box-shadow: 0.42px 6.25px 0 -0.42px color-mix(in srgb, currentColor 45%, transparent),
+        -5.42px 12.08px 0 -0.42px color-mix(in srgb, currentColor 45%, transparent),
+        0.42px 12.08px 0 -0.42px color-mix(in srgb, currentColor 20%, transparent);
 }

@@ -100,11 +100,12 @@ def get_top_processes_info(metric: str) -> str:
                 pass
         info_list = []
         if metric == "cpu":
+            cpu_count = psutil.cpu_count() or 1
             sorted_procs = sorted(
                 procs, key=lambda p: p["cpu_percent"], reverse=True
             )[:5]
             for p in sorted_procs:
-                info_list.append(f"• <b>{p['name']}</b>: {p['cpu_percent']}%")
+                info_list.append(f"• <b>{p['name']}</b>: {p['cpu_percent'] / cpu_count:.1f}%")
         elif metric == "ram":
             sorted_procs = sorted(
                 procs, key=lambda p: p["memory_percent"], reverse=True

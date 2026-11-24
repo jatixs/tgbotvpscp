@@ -1,7 +1,11 @@
-"""Validated host addresses for dual-stack monitoring, without network lookups."""
+"""Validated host addresses for dual-stack monitoring, and asynchronous reverse DNS."""
+import asyncio
 import ipaddress
 import logging
 import socket
+import time
+
+from network_validation import parse_public_ip
 
 
 def normalize_address(value, version):
@@ -37,3 +41,37 @@ def node_ip_addresses(node):
         candidates = (stats.get(f"ipv{version}"), stats.get("external_ip") if version == 4 else None, node.get("ip"))
         result[f"ipv{version}"] = next((ip for value in candidates if (ip := normalize_address(value, version))), "")
     return result
+
+
+_PTR_CACHE: dict[str, tuple[float, str]] = {}
+
+
+async def get_reverse_ptr(ip: str) -> str:
+    """Resolve a public IP PTR with a bounded cache and timeout."""
+    address = parse_public_ip(ip)
+    if address is None or address.is_multicast:
+        return ""
+    key = str(address)
+    cached = _PTR_CACHE.get(key)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    try:
+        hostname, _, _ = await asyncio.wait_for(
+            asyncio.to_thread(socket.gethostbyaddr, key), timeout=3.0
+        )
+        result = hostname.rstrip(".")
+    except (ValueError, OSError, asyncio.TimeoutError) as exc:
+        logging.debug("Reverse PTR lookup failed for %s: %s", key, exc)
+        result = ""
+    if len(_PTR_CACHE) >= 1024:
+        _PTR_CACHE.pop(next(iter(_PTR_CACHE)))
+    _PTR_CACHE[key] = (time.monotonic() + (900 if result else 60), result)
+    return result
+
+
+async def get_preferred_reverse_ptr(ipv4: str, ipv6: str) -> str:
+    for value, version in ((ipv4, 4), (ipv6, 6)):
+        address = parse_public_ip(value)
+        if address is not None and address.version == version and not address.is_multicast:
+            return await get_reverse_ptr(str(address))
+    return ""

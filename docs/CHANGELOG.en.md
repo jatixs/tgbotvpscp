@@ -10,6 +10,27 @@
     <img src="https://img.shields.io/badge/status-stable-green?style=for-the-badge" alt="Status Stable"/>
 </p>
 
+## [Unreleased]
+
+### Added
+
+* **Screenshot mode in the WebUI** — a pixelation icon toggle in the settings header blurs sensitive information across panel pages. Its state persists in the browser and synchronizes across tabs.
+* Blurring covers server addresses and names, user and active session details, keys, commands, logs, and terminal content.
+* Smooth transitions and toast messages explain when screenshot mode is enabled or disabled. Mode notifications remain readable. Animations respect the reduced motion preference.
+* **PTR record in server status** — the Telegram report displays the reverse DNS hostname of the public IP (IPv4, or IPv6 if IPv4 is unavailable) below network traffic. If no PTR record exists or the DNS lookup fails, the line is hidden.
+
+### Changed
+
+* Process CPU percentages in Telegram alerts, the node agent, and the WebUI now use the total capacity of all vCPUs and display one decimal place. Alert labels clarify the measurement scale.
+* Terminal buttons on the dashboard and node monitoring page now use compact icons with tooltips.
+
+* **WebUI haptic feedback** — short vibration pulses for confirmed touch actions, switch state changes and slider adjustments; touches without an action do not vibrate.
+* Telegram and screenshot privacy icons now use CSS without SVG; Telegram-only login mode uses the brand's blue palette.
+
+### Fixed
+
+* Removed overlapping gradient cloud glyphs on mobile devices and vertically centered the notification center heading icon.
+
 ## [1.28.1] - 2026-11-21
 
 Release **1.28.1 (Build 100)** focuses on absolute WebUI production reliability and uncompromised code security hardening. We resolved subtle client-side routing edge cases, introduced seamless IPv4/IPv6 dual-stack infrastructure support, and achieved 100% compliance with our strict Zero-Suppression static analysis standards.

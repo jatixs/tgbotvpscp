@@ -247,7 +247,7 @@ STRINGS = {
 - ⚠️ Resource threshold exceeded (CPU/RAM/Disk)
 - 🔒 SSH logins to server
 - 🛡️ IP ban via Fail2Ban
-- 📡 Node downtime (node offline > 60 sec)
+- 📡 Node downtime (configurable offline timeout, default 20 s)
 - 🚀 System events (bot start/restart)
 
 **Delivery Channels:**
@@ -560,7 +560,7 @@ GET  /api/logs/system          — System logs (journalctl)
 POST /api/logs/clear           — Clear logs
 
 POST /api/settings/save        — Save notifications (alerts)
-POST /api/settings/system      — CPU/RAM/Disk thresholds
+POST /api/settings/system      — Global resource thresholds and system intervals
 POST /api/settings/keyboard    — Bot button visibility
 POST /api/settings/metadata    — Favicon, Title, Description (SEO)
 POST /api/settings/language    — Switch WebUI language
@@ -598,7 +598,6 @@ GET  /api/agent/ipv4           — Agent IPv4 addresses
 
 **3. `GET /api/events/node` — Specific node details:**
 - Statistics, availability, billing (the modal charts subscribe to `/api/events/metrics`)
-- Updates via `?token=...` parameter
 - Updates by numeric `node_id`; the agent token is not sent to the browser
 
 **4. `GET /api/events/services` — Service Manager stream:**
@@ -717,22 +716,31 @@ def has_subcategory() -> bool:
 #### **notifications.py** — Alert System
 **Purpose:** Background monitoring and notifications
 
-**Monitored Metrics:**
-- CPU > 80% (configurable threshold, 50–99%)
-- RAM > 90%
-- Disk > 85%
-- Node downtime > 60 seconds
+**System configuration defaults (`core/config.py`):**
+
+| Parameter | Default | Consumer |
+|---|---:|---|
+| `CPU_THRESHOLD` / `RAM_THRESHOLD` / `DISK_THRESHOLD` | 90% / 90% / 95% | Resource alerts for the central server and nodes |
+| `TRAFFIC_INTERVAL` | 5 s | Traffic monitoring |
+| `SERVICES_INTERVAL` | 5 s | WebUI service status SSE |
+| `PING_INTERVAL` | 30 s | Central server and node latency measurements |
+| `NODE_OFFLINE_TIMEOUT` | 20 s | Node availability and downtime alerts |
+| `RESOURCE_CHECK_INTERVAL` | 60 s | Central server resource monitoring |
+| `RESOURCE_ALERT_COOLDOWN` | 1800 s | Repeated resource alerts |
 
 **Mechanism:**
-- Async task `asyncio.create_task(check_alerts_loop())`
-- Check interval: 30 seconds
-- Debounce: repeat notification after 5 minutes
-- Grace period on startup (prevent false alerts)
+- `resource_monitor()` checks central server resources after an initial 15-second delay, then sleeps for `RESOURCE_CHECK_INTERVAL` between iterations.
+- `modules/nodes.py::nodes_monitor()` checks node availability and resources, sleeping 20 seconds between iterations. Startup grace is the initial offline timeout plus 15 seconds.
+- Resource alerts are generated at or above the configured thresholds; recovery alerts are generated below them. Persistent violations can trigger repeat alerts after the cooldown.
+- The offline timeout is a detection threshold, not a guaranteed delivery interval; the monitor cadence and delivery latency also apply.
 
-**Configuration:**
-- Global thresholds (for agent)
-- Individual thresholds (for each node)
-- Real-time synchronization between bot and WebUI
+**Configuration and API responsibilities:**
+- `POST /api/settings/system` saves global thresholds and intervals through `save_system_config_async()`.
+- `POST /api/settings/save` saves notification preferences, including per-node subscriptions; it does not set resource thresholds.
+- Both central server and node resource monitors use global thresholds. Per-node alert state and subscription preferences are separate.
+- `send_alert()` centralizes notification delivery. Traffic, service and ping intervals do not directly schedule resource alerts.
+- Runtime consumers should read current configuration values rather than retain imported scalar snapshots. Currently, some node REST handlers retain an imported offline timeout, while the node monitor and SSE read current configuration.
+- The current WebUI system settings form submits both threshold and interval fields together; the two visual save groups are not independent at the payload level.
 
 ---
 

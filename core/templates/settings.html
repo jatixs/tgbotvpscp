@@ -20,6 +20,7 @@
         <link rel="stylesheet" href="/static/css/main.css?v={{ asset_ver }}">
         <script src="/static/vendor/crypto-js.min.js"></script>
         <script src="/static/js/theme_init.js?v={{ asset_ver }}"></script>
+        <script src="/static/js/screenshot_mode.js?v={{ asset_ver }}"></script>
         <script>
         var I18N = JSON.parse({{ i18n_json | tojson }});
         if (typeof I18N === 'string') { try { I18N = JSON.parse(I18N); } catch {} }
@@ -68,6 +69,12 @@
                     <span class="font-bold text-lg whitespace-nowrap truncate">{{ web_settings_page_title }}</span>
                 </div>
                 <div class="flex items-center gap-1 sm:gap-4 shrink-0">
+                    <button type="button" class="screenshot-toggle hide-on-mobile" data-screenshot-toggle data-enabled-message="{{ web_screenshot_mode_enabled }}" data-disabled-message="{{ web_screenshot_mode_disabled }}" role="switch" aria-checked="false"
+                            aria-label="{{ web_screenshot_mode }}"
+                            title="{{ web_screenshot_mode_hint }}">
+                        <span class="screenshot-toggle-icon" aria-hidden="true"></span>
+                        <span class="screenshot-toggle-track" aria-hidden="true"></span>
+                    </button>
                     <div id="headerBillingContainer"></div>
                     <div class="relative group">
                         <button id="notifBtn"
@@ -161,7 +168,7 @@
                             <div
                                 class="bg-white/90 dark:bg-gray-800 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl backdrop-blur-sm overflow-hidden py-1">
                                 <div class="w-full px-4 py-2 text-sm flex items-center justify-between text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-white/5">
-                                    <span class="font-medium">Тема</span>
+                                    <span class="font-medium">{{ web_theme_label }}</span>
                                     <div class="flex items-center gap-1 bg-gray-200/50 dark:bg-black/30 p-1 rounded-xl text-sm shrink-0" id="mobileThemeSegment">
                                         <button onclick="setThemeDirect('light', event)" class="p-1.5 rounded-md transition-colors leading-none" id="mThemeLight">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
@@ -185,6 +192,11 @@
                                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
                                     </label>
                                 </div>
+                                <button type="button" class="screenshot-toggle screenshot-toggle-menu hover:bg-gray-100 dark:hover:bg-white/5 text-gray-800 dark:text-gray-200" data-screenshot-toggle data-enabled-message="{{ web_screenshot_mode_enabled }}" data-disabled-message="{{ web_screenshot_mode_disabled }}" role="switch" aria-checked="false"
+                                    title="{{ web_screenshot_mode_hint }}">
+                                    <span>{{ web_screenshot_mode }}</span>
+                                    <span class="screenshot-toggle-track" aria-hidden="true"></span>
+                                </button>
                                 <div class="w-full px-4 py-2 flex items-center justify-center gap-3 border-t border-gray-100 dark:border-white/5">
                                     <button data-action="toggle-perf-mode" title="{{ web_toggle_perf_mode }}" class="p-2 rounded-xl bg-gray-200/50 dark:bg-black/30 transition text-yellow-500 hover:bg-black/5 dark:hover:bg-white/10 w-full flex justify-center active:scale-95">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
@@ -213,8 +225,8 @@
                         </button>
                     </form>
                     <div class="hidden md:flex items-center gap-2 bg-white/60 dark:bg-white/5 px-3 py-1.5 rounded-full border border-white/40 dark:border-white/5 shadow-sm dark:shadow-none max-w-[140px] sm:max-w-none">
-                        {{ user_avatar | safe }}
-                        <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">{{ user_name }}</span>
+                        <span data-sensitive>{{ user_avatar | safe }}</span>
+                        <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate"><span data-sensitive>{{ user_name }}</span></span>
                     </div>
                 </div>
             </div>
@@ -626,7 +638,7 @@
                                 <button id="notifHeaderBackBtn" onclick="notifGoBack()" class="hidden items-center justify-center p-1 sm:p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg transition-colors" title="{{ web_back }}">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                                 </button>
-                                <h2 class="min-w-0 flex items-start gap-2 pr-2 text-lg sm:items-center sm:text-xl font-bold text-gray-900 dark:text-white leading-tight">
+                                <h2 class="min-w-0 flex items-center gap-2 pr-2 text-lg sm:text-xl font-bold text-gray-900 dark:text-white leading-tight">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500 dark:text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                     </svg>
@@ -799,13 +811,7 @@
                                     onclick="toggleTelegramOnlyMode()"
                                     class="relative p-2 rounded-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-white/10"
                                     title="{{ web_telegram_only_tooltip }}">
-                                <svg id="lockIcon" xmlns="http://www.w3.org/2000/svg" 
-                                      class="h-6 w-6 text-gray-400 transition-all duration-200" 
-                                     fill="none" 
-                                     viewBox="0 0 24 24" 
-                                     stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
+                                <span id="lockIcon" class="telegram-css-icon h-6 w-6 text-gray-400 transition-all duration-200" aria-hidden="true"></span>
                             </button>
                         </div>
                         <div class="w-full relative">
@@ -839,9 +845,7 @@
                             </div>
                             <div id="passwordChangeOverlay" class="telegram-only-overlay hidden">
                                 <div class="telegram-only-overlay-badge">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                    </svg>
+                                    <span class="telegram-css-icon h-5 w-5" aria-hidden="true"></span>
                                     <span>{{ web_telegram_only_notice }}</span>
                                 </div>
                             </div>
@@ -1356,7 +1360,7 @@
                 <div class="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center rounded-t-2xl">
                     <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                        <span class="i18n-text" id="web_ping_target_title">Цель пинга</span>
+                        <span class="i18n-text" id="web_ping_target_title">{{ web_ping_target_title }}</span>
                     </h3>
                     <button onclick="closePingTargetModal()"
                             class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1">
@@ -1383,15 +1387,15 @@
                     <label id="ping_target_internal_label" class="flex items-center gap-4 px-5 py-4 border border-gray-200 dark:border-white/10 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
                         <input type="radio" name="ping_target_radio" value="internal" class="w-5 h-5 flex-shrink-0 text-blue-600 border-gray-300 focus:ring-blue-500 dark:bg-black/20 dark:border-white/10">
                         <div class="flex-1">
-                            <span class="block text-sm font-bold text-gray-900 dark:text-white i18n-text" id="web_ping_target_internal">Внутренняя сеть</span>
-                            <span class="block text-xs text-gray-500 dark:text-gray-400 i18n-text" id="web_ping_target_internal_desc">Пинг до ваших нод</span>
+                            <span class="block text-sm font-bold text-gray-900 dark:text-white i18n-text" id="web_ping_target_internal">{{ web_ping_target_internal }}</span>
+                            <span class="block text-xs text-gray-500 dark:text-gray-400 i18n-text" id="web_ping_target_internal_desc">{{ web_ping_target_internal_desc }}</span>
                         </div>
                     </label>
                 </div>
                 <div class="p-5 border-t border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-black/20 rounded-b-2xl">
                     <button onclick="window.savePingTargetModal()"
                             class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2">
-                        <span class="i18n-text" id="web_apply">Применить</span>
+                        <span class="i18n-text" id="web_apply">{{ web_apply }}</span>
                     </button>
                 </div>
             </div>
