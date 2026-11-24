@@ -5,70 +5,30 @@
 <h1 align="center">📝 Telegram VPS Management Bot — Changelog</h1>
 <p align="center">
     <img src="https://img.shields.io/badge/version-v1.28.2-blue?style=for-the-badge" alt="Version 1.28.2"/>
+    <img src="https://img.shields.io/badge/codename-Argus-0ea5e9?style=for-the-badge" alt="Codename Argus"/>
     <img src="https://img.shields.io/badge/build-101-purple?style=for-the-badge" alt="Build 101"/>
     <img src="https://img.shields.io/badge/date-Nov%2024%202026-green?style=for-the-badge" alt="Date Nov 24 2026"/>
     <img src="https://img.shields.io/badge/status-stable-green?style=for-the-badge" alt="Status Stable"/>
 </p>
 
-## [1.28.2] - 2026-11-24
+## [1.28.2] - 2026-11-24 — Argus
 
-Release **1.28.2 (Build 101)** focuses on enterprise infrastructure scalability, WebUI presentation privacy, and comprehensive UX/DX polish. We redesigned the distributed node client update workflow to effortlessly handle 100+ node deployments, introduced a client-side Screenshot Mode with real-time sensitive data masking, streamlined the deployment CLI, and completed the Jinja2 template architecture migration.
+### 🛡️ Privacy & WebUI (Screenshot Mode)
+* **Screenshot Mode:** A header and mobile menu toggle blurs sensitive data (`.data-sensitive`, IPs, node names, tokens, sessions, logs, and terminal output), persists in `localStorage`, and syncs across tabs. Empty search inputs and mode notifications stay readable.
+* **Touch & Haptic Feedback:** Elastic knob scaling (`scale: 1.15`) applies strictly on touch devices alongside short vibration pulses for confirmed actions and controls, respecting `prefers-reduced-motion`.
+* **Visual Polish:** Compact tooltip terminal icons, Telegram-blue login styling, pure CSS icons, mobile cloud icon overlap fix, and aligned notification center header.
 
----
 
-### 🛡️ Privacy & Presentation Mode (Screenshot Mode)
+### 🔄 Scalable Node Client Updates
+* **Compact Cluster Badge:** Replaced the multi-line node list in Settings with a responsive status pill (`Nodes: all updated (N)`, `Nodes: N to update`, `Nodes: N error`) and tighter block padding.
+* **Redesigned Updates Modal:** Matches the Sessions modal design system with a glassmorphic backdrop, spring open/close animations, blue accents, and a full-width footer action button.
+* **Colored Borders & Live Versions:** Replaced stark white borders in Dark/AMOLED themes with semantic status borders, and replaced the static "Node" label with the installed client version (`v1.28.1`) reported via heartbeats.
 
-* 👁️ **Client-Side Sensitive Data Masking on the Fly:**
-  * **Complete Privacy Isolation:** Toggling the pixelation switch in the top navigation header instantly masks IP addresses, server hostnames, credentials, active sessions, terminal outputs, and system logs across all views.
-  * **Cross-Tab Synchronization:** Mode state persists in browser `localStorage` and synchronizes across all open tabs without requiring full-page reloads.
-  * **Intelligent Selective Obfuscation:** Explanatory texts, control labels, and UI headers remain sharp and readable — only designated sensitive DOM elements (`.data-sensitive`) receive dynamic Gaussian blurring.
-  * **Fluid Visual Transitions:** Switching is accompanied by informative toast alerts, smooth 150ms transitions, and strict adherence to accessibility preferences (`prefers-reduced-motion`).
-
-* 📱 **Haptic Elastic Feedback on Touch Devices:**
-  * **Spring Knob Scale (1.15x):** Added a tactile elastic scaling effect to the toggle knob during touch-and-hold gestures on smartphones and tablets (`@media (pointer: coarse), (hover: none)`), aligning with native mobile toggles.
-  * **Clean Desktop Experience:** The scaling effect is excluded for desktop mouse pointers, ensuring crisp, instant clicking without visual lag.
-
----
-
-### 🔄 Scalable Node Client Updates (Cluster Rollouts)
-
-* 🗂️ **Compact Cluster Status Indicator:**
-  * **Clean Settings Layout:** Replaced the unbounded multi-row node update list on the Settings page with a unified, responsive cluster indicator. Clusters with tens or hundreds of servers are now elegantly summarized into a single interactive badge: `Nodes: all updated (N)`, `Nodes: N to update`, or `Nodes: N error`.
-  * **Pixel-Perfect Safe Margins:** Refined padding on the update status container (`px-3.5 py-2.5 sm:px-4 sm:py-3 min-h-[66px]`) to ensure seamless alignment and prevent layout shifting.
-
-* 🖥️ **Dedicated Node Updates Modal:**
-  * **Consistent Modal Architecture:** Designed to mirror the Sessions Management modal with an ultra-clean glassmorphic backdrop (`backdrop-blur-xl`, `max-w-2xl`) and spring-based open/close transitions (`cubic-bezier(0.175, 0.885, 0.32, 1.275)`).
-  * **Theme-Aware Colored Borders:** Eliminated harsh white borders in dark and AMOLED themes. Node cards feature refined accent outlines: blue (`rgba(59, 130, 246, 0.45)` / `#93c5fd`) for synchronized nodes, amber for pending rollouts, and red for failed clients.
-  * **Real Client Version Reporting:** Replaced the generic "Node" subtitle with the actual installed client version reported by the remote `tg-node` daemon (`v1.28.1 • Synchronized`), maintaining strict typography and color harmony.
-  * **Full-Width Footer Action Button:** Clean action button in the modal footer allowing operators to trigger cluster-wide client updates with automatic modal dismissal and click debouncing.
-
----
-
-### 🌐 Network Diagnostics & Metric Accuracy
-
-* 🔍 **Reverse DNS Resolution (PTR Records):**
-  * Added automated PTR record lookups for public server IPv4/IPv6 addresses in detailed Telegram health summaries and notifications. When a valid PTR hostname is resolved, it displays directly below network traffic stats; otherwise, the field is cleanly hidden.
-
-* 📊 **Normalized CPU Utilization (0–100%):**
-  * Normalized individual process CPU utilization in Telegram alerts, node daemons, and WebUI by dividing usage across total vCPU capacity, preventing confusing numbers exceeding 100% on multi-core servers.
-
----
-
-### 🛠️ Deployment CLI & Update Hardening (`deploy.sh` / `deploy_en.sh`)
-
-* ⚡ **Direct Update Without Backup:**
-  * In the interactive update workflow when modified system files are detected, the redundant "Show Git diff" option has been replaced with: `2) Update without backup (overwrite local changes)`.
-  * Operators can proceed with fresh updates immediately without cluttering disk space with disposable `.backups/` directories when local changes are experimental.
-
----
-
-### 🧩 Template Architecture & Localization (Jinja2 & i18n)
-
-* 🎨 **Native Jinja2 Templating:**
-  * Converted remaining string concatenations and template default filters to unified Jinja2 context variables across `dashboard.html`, `nodes_monitor.html`, and `settings.html`.
-  * Shared navigation elements, headers, active locale, and session state are centralized within `_render_html_response`.
-* 🌐 **Bilingual Localization Polish:**
-  * Expanded `core/i18n.py` with complete Russian and English translations for cluster update modals, node status indicators, privacy controls, and tooltip hints.
+### 🌐 Metrics, Diagnostics & CLI
+* **Normalized CPU Reporting (0–100%):** Process CPU percentages across Telegram alerts, node agents, and WebUI now reflect total vCPU capacity with one-decimal precision.
+* **PTR Hostname Lookup:** Telegram status reports display the public IP’s reverse DNS hostname (preferring IPv4 over IPv6) below traffic stats when resolved.
+* **Update Without Backup (`deploy.sh` / `deploy_en.sh`):** Replaced the `Show Git diff` prompt with `Update without backup (overwrite local changes)` during integrity checks.
+* **Jinja2 & i18n Unification:** Migrated dashboard, node monitor, and settings templates to centralized Jinja2 context variables (`_render_html_response`) with updated RU/EN translations.
 
 ---
 
