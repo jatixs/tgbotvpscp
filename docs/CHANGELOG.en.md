@@ -7,28 +7,27 @@
     <img src="https://img.shields.io/badge/version-v1.28.2-blue?style=for-the-badge" alt="Version 1.28.2"/>
     <img src="https://img.shields.io/badge/codename-Argus-0ea5e9?style=for-the-badge" alt="Codename Argus"/>
     <img src="https://img.shields.io/badge/build-101-purple?style=for-the-badge" alt="Build 101"/>
-    <img src="https://img.shields.io/badge/date-Nov%2024%202026-green?style=for-the-badge" alt="Date Nov 24 2026"/>
+    <img src="https://img.shields.io/badge/date-Dec%2023%202026-green?style=for-the-badge" alt="Date Dec 23 2026"/>
     <img src="https://img.shields.io/badge/status-stable-green?style=for-the-badge" alt="Status Stable"/>
 </p>
 
-## [1.28.2] - 2026-11-24 — Argus
+## [1.28.2] - 2026-12-23 — Argus
 
-### 🛡️ Privacy & WebUI (Screenshot Mode)
-* **Screenshot Mode:** A header and mobile menu toggle blurs sensitive data (`.data-sensitive`, IPs, node names, tokens, sessions, logs, and terminal output), persists in `localStorage`, and syncs across tabs. Empty search inputs and mode notifications stay readable.
-* **Touch & Haptic Feedback:** Elastic knob scaling (`scale: 1.15`) applies strictly on touch devices alongside short vibration pulses for confirmed actions and controls, respecting `prefers-reduced-motion`.
-* **Visual Polish:** Compact tooltip terminal icons, Telegram-blue login styling, pure CSS icons, mobile cloud icon overlap fix, and aligned notification center header.
+### 🚀 Added
+* **Screenshot Mode:** A toggle in the header and mobile menu blurs sensitive data (IPs, server names, tokens, sessions, logs, and terminal output), saves your choice, and syncs across browser tabs while keeping empty search fields and mode hints readable.
+* **PTR Hostname Lookup:** Status reports show the reverse DNS name of the server's public IP (preferring IPv4 with IPv6 fallback) under network traffic stats, and hide the line if none is set.
 
+### 🐛 Fixed
+* **Process CPU Usage on Multi-Core Servers:** Fixed CPU percentage calculation where each core counted as `100%` (causing values above `100%`); usage now maps accurately to `0–100%` of total server capacity.
+* **Login Language Switcher:** Fixed language switching on the sign-in page so all labels, titles, and tooltips update properly.
+* **Background Error Logging:** Removed silent error swallowing in background monitoring, node agents, and live panel streams so failures are recorded in logs for faster troubleshooting.
 
-### 🔄 Scalable Node Client Updates
-* **Compact Cluster Badge:** Replaced the multi-line node list in Settings with a responsive status pill (`Nodes: all updated (N)`, `Nodes: N to update`, `Nodes: N error`) and tighter block padding.
-* **Redesigned Updates Modal:** Matches the Sessions modal design system with a glassmorphic backdrop, spring open/close animations, blue accents, and a full-width footer action button.
-* **Colored Borders & Live Versions:** Replaced stark white borders in Dark/AMOLED themes with semantic status borders, and replaced the static "Node" label with the installed client version (`v1.28.1`) reported via heartbeats.
-
-### 🌐 Metrics, Diagnostics & CLI
-* **Normalized CPU Reporting (0–100%):** Process CPU percentages across Telegram alerts, node agents, and WebUI now reflect total vCPU capacity with one-decimal precision.
-* **PTR Hostname Lookup:** Telegram status reports display the public IP’s reverse DNS hostname (preferring IPv4 over IPv6) below traffic stats when resolved.
-* **Update Without Backup (`deploy.sh` / `deploy_en.sh`):** Replaced the `Show Git diff` prompt with `Update without backup (overwrite local changes)` during integrity checks.
-* **Jinja2 & i18n Unification:** Migrated dashboard, node monitor, and settings templates to centralized Jinja2 context variables (`_render_html_response`) with updated RU/EN translations.
+### ✨ Changed
+* **Redesigned Agent & Node Updates Block:** Overhauled the updates section in Settings with a compact cluster status badge, a glassmorphic node-by-node breakdown modal with status borders, and each node's actual client version.
+* **More Flexible Touch & Haptic Feedback:** Reworked vibration feedback for confirmed actions and switches, and scoped elastic toggle scaling strictly to touch screens while respecting reduced-motion preferences.
+* **Visual Polish:** Added compact tooltip terminal icons, Telegram-blue sign-in styling, and clean CSS icons.
+* **Update Without Backup (`deploy.sh` / `deploy_en.sh`):** Replaced the `Show Git diff` prompt on local changes with `Update without backup (overwrite local changes)`.
+* **Under-the-Hood Security & Consistency:** Hardened the web UI against unsafe content injection, made system command execution more predictable, unified page translations across the panel, and brought monitoring documentation up to date.
 
 ---
 
