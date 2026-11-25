@@ -29,8 +29,9 @@ function getI18n() {
 
 function t(key, fallbackRu, fallbackEn) {
     const dict = getI18n();
-    if (dict && typeof dict[key] === 'string' && dict[key].trim()) {
-        return dict[key];
+    const val = dict && typeof key === 'string' ? Reflect.get(dict, key) : undefined;
+    if (typeof val === 'string' && val.trim()) {
+        return val;
     }
     const isEn = typeof document !== 'undefined' && document.documentElement?.lang === 'en';
     return isEn ? (fallbackEn || fallbackRu || key) : (fallbackRu || fallbackEn || key);
@@ -278,7 +279,7 @@ document.addEventListener('app:action:node-service-action', (e) => {
         stop:    t('web_service_stop',    'остановка', 'stop'),
         start:   t('web_service_start',   'запуск', 'start'),
     };
-    const actionLabel = cmdLabels[cmd] || cmd;
+    const actionLabel = Reflect.get(cmdLabels, cmd) || cmd;
 
     showConfirm(
         t('modal_title_confirm', 'Подтверждение', 'Confirm'),
@@ -387,6 +388,7 @@ function renderNodes() {
         // Fallback if structural changes occurred
         window.setSafeHTML(container, newHtml);
     }
+    window.initializeIpBadges(container);
     
     if (typeof window.parsePageEmojis === 'function') {
         window.parsePageEmojis(container);
@@ -690,7 +692,7 @@ window.massCommand = async function(cmd) {
         'speedtest': t('web_nodes_monitor_btn_speedtest', 'Тест скорости', 'Speedtest'),
         'traffic': t('web_nodes_monitor_btn_traffic', 'Трафик', 'Traffic')
     };
-    const cmdName = cmdNames[cmd] || cmd;
+    const cmdName = Reflect.get(cmdNames, cmd) || cmd;
     
     const confirmMsg = cmd === 'reboot' 
         ? t('web_nodes_monitor_confirm_mass_reboot', `Перезагрузить выбранные ноды (${selectedNodes.size})?`, `Reboot ${selectedNodes.size} selected nodes?`)
@@ -1421,7 +1423,7 @@ function formatBytes(bytes) {
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes.at(i);
 }
 
 function formatSpeed(v) {
@@ -1444,7 +1446,7 @@ function resolveLocalizedMessage(message) {
     const localizedKeyMatch = message.match(/^\[([a-z0-9_]+)\]$/i);
     if (!localizedKeyMatch) return message;
 
-    const localizedValue = getI18n()?.[localizedKeyMatch[1]];
+    const localizedValue = Reflect.get(getI18n() || {}, localizedKeyMatch[1]);
     return localizedValue || message;
 }
 
@@ -1494,14 +1496,14 @@ function closeSystemModal() {
 // Theme toggle (if not defined in common.js)
 if (typeof window.toggleTheme === 'undefined') {
     window.toggleTheme = function() {
-        const html = document.documentElement;
-        const current = html.classList.contains('dark') ? 'dark' : 'light';
+        const rootEl = document.documentElement;
+        const current = rootEl.classList.contains('dark') ? 'dark' : 'light';
         const next = current === 'dark' ? 'light' : 'dark';
         
         if (next === 'dark') {
-            html.classList.add('dark');
+            rootEl.classList.add('dark');
         } else {
-            html.classList.remove('dark');
+            rootEl.classList.remove('dark');
         }
         
         localStorage.setItem('theme', next);
@@ -1554,23 +1556,49 @@ window.showPingErrorModal = function(event) {
         fixText = t('web_ping_fix_http', 'Выбран режим HTTP. Проверьте фаервол на исходящий порт 443.', 'HTTP mode selected. Check firewall for port 443 out.');
     }
 
-    const htmlContent = `
-        <div class="text-sm text-gray-700 dark:text-gray-300 mb-4">${desc}</div>
-        <details class="group bg-gray-50 dark:bg-black/20 rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden">
-            <summary class="px-4 py-3 cursor-pointer font-medium text-sm text-gray-900 dark:text-white flex items-center justify-between select-none">
-                ${btnText}
-                <svg class="w-4 h-4 transform transition-transform group-open:rotate-180 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </summary>
-            <div class="px-4 pb-4 pt-1 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-100 dark:border-white/5">
-                ${fixText}
-            </div>
-        </details>
-    `;
+    const body = document.createDocumentFragment();
+    const descEl = document.createElement('div');
+    descEl.className = 'text-sm text-gray-700 dark:text-gray-300 mb-4';
+    descEl.textContent = desc;
+    body.appendChild(descEl);
 
-    if (window.showModalAlert) {
-        window.showModalAlert(htmlContent, title);
+    const detailsEl = document.createElement('details');
+    detailsEl.className = 'group bg-gray-50 dark:bg-black/20 rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden';
+    const summaryEl = document.createElement('summary');
+    summaryEl.className = 'px-4 py-3 cursor-pointer font-medium text-sm text-gray-900 dark:text-white flex items-center justify-between select-none';
+    summaryEl.appendChild(document.createTextNode(btnText));
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const arrowSvg = document.createElementNS(svgNS, 'svg');
+    arrowSvg.setAttribute('class', 'w-4 h-4 transform transition-transform group-open:rotate-180 text-gray-500');
+    arrowSvg.setAttribute('fill', 'none');
+    arrowSvg.setAttribute('viewBox', '0 0 24 24');
+    arrowSvg.setAttribute('stroke', 'currentColor');
+    const arrowPath = document.createElementNS(svgNS, 'path');
+    arrowPath.setAttribute('stroke-linecap', 'round');
+    arrowPath.setAttribute('stroke-linejoin', 'round');
+    arrowPath.setAttribute('stroke-width', '2');
+    arrowPath.setAttribute('d', 'M19 9l-7 7-7-7');
+    arrowSvg.appendChild(arrowPath);
+    summaryEl.appendChild(arrowSvg);
+    detailsEl.appendChild(summaryEl);
+
+    const fixEl = document.createElement('div');
+    fixEl.className = 'px-4 pb-4 pt-1 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-100 dark:border-white/5';
+    fixEl.textContent = fixText;
+    detailsEl.appendChild(fixEl);
+    body.appendChild(detailsEl);
+
+    if (typeof window.showModal === 'function') {
+        window.showModal({
+            title: title,
+            content: body,
+            buttons: [
+                { text: window.I18N?.modal_btn_ok || 'OK', class: 'bg-blue-600 text-white hover:bg-blue-500 w-full', close: true }
+            ]
+        });
+    } else if (window.showModalAlert) {
+        window.showModalAlert(`${desc}\n\n${btnText}:\n${fixText}`, title);
     } else {
         alert(title + "\\n\\n" + desc);
     }

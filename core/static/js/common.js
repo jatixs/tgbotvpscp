@@ -218,7 +218,7 @@ window.animateDecryption = function(element, decryptedContent, duration = 800, u
         let currentText = '';
         for (let i = 0; i < finalText.length; i++) {
             if (i < (iterations / maxIterations) * finalText.length) {
-                currentText += finalText[i];
+                currentText += finalText.charAt(i);
             } else {
                 currentText += chars.charAt(randomInteger(chars.length));
             }
@@ -441,14 +441,14 @@ function chartDataMatchesSnapshot(chart, labels, datasets) {
     const currentLabels = chart.data.labels || [];
     if (currentLabels.length !== labels.length || chart.data.datasets.length !== datasets.length) return false;
     for (let i = 0; i < labels.length; i++) {
-        if (!Object.is(currentLabels[i], labels[i])) return false;
+        if (!Object.is(currentLabels.at(i), labels.at(i))) return false;
     }
     for (let i = 0; i < datasets.length; i++) {
-        const currentData = chart.data.datasets[i].data || [];
-        const previousData = datasets[i];
+        const currentData = chart.data.datasets.at(i).data || [];
+        const previousData = datasets.at(i);
         if (currentData.length !== previousData.length) return false;
         for (let j = 0; j < previousData.length; j++) {
-            if (!Object.is(currentData[j], previousData[j])) return false;
+            if (!Object.is(currentData.at(j), previousData.at(j))) return false;
         }
     }
     return true;
@@ -824,6 +824,10 @@ function initHapticsFeedback() {
         return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
     }
 
+    function handlePointerLeave(ev) {
+        if (active?.id === ev.pointerId && active.kind !== 'range') clear();
+    }
+
     document.addEventListener('pointerdown', e => {
         pending = null;
         if (!e.isPrimary) return;
@@ -831,12 +835,9 @@ function initHapticsFeedback() {
         if (e.pointerType !== 'touch' || e.button !== 0) return;
         const item = resolve(e.target);
         if (!item) return;
-        const leave = ev => {
-            if (active?.id === ev.pointerId && active.kind !== 'range') clear();
-        };
         active = { ...item, id: e.pointerId, bounds: item.visual.getBoundingClientRect(),
-            before: state(item.control), value: item.control.valueAsNumber, time: -Infinity, leave };
-        item.visual.addEventListener('pointerleave', leave);
+            before: state(item.control), value: item.control.valueAsNumber, time: -Infinity, leave: handlePointerLeave };
+        item.visual.addEventListener('pointerleave', handlePointerLeave);
         if (item.kind === 'button') item.visual.classList.add('is-haptic-pressed');
         else item.control.classList.add('is-control-pressed');
     }, options);
@@ -847,8 +848,9 @@ function initHapticsFeedback() {
     document.addEventListener('pointerup', e => {
         if (active?.id !== e.pointerId) return;
         if (active.kind !== 'range' && inside(e)) {
-            const token = pending = active;
-            setTimeout(() => { if (pending === token) pending = null; }, 700);
+            pending = active;
+            const pressEntry = active;
+            setTimeout(() => { if (Object.is(pending, pressEntry)) pending = null; }, 700);
         }
         clear();
     }, options);
@@ -882,18 +884,18 @@ function initHapticsFeedback() {
     }, options);
 
     document.addEventListener('click', e => {
-        const token = pending;
-        if (!token || !e.isTrusted || e.detail === 0) return;
+        const pressEntry = pending;
+        if (!pressEntry || !e.isTrusted || e.detail === 0) return;
         const item = resolve(e.target);
-        if (!item || item.control !== token.control) return;
-        if (token.kind === 'button') {
+        if (!item || item.control !== pressEntry.control) return;
+        if (pressEntry.kind === 'button') {
             pending = null;
             setTimeout(() => { if (!e.defaultPrevented) playHaptic(HAPTIC_PRESS_MS); }, 0);
         } else {
             // Run after inline and delegated click handlers, including preventDefault switches.
             setTimeout(() => {
-                if (pending !== token) return;
-                if (state(token.control) !== token.before) {
+                if (!Object.is(pending, pressEntry)) return;
+                if (state(pressEntry.control) !== pressEntry.before) {
                     pending = null;
                     playHaptic(HAPTIC_TOGGLE_MS);
                 }
@@ -1030,15 +1032,19 @@ function parsePageEmojis(element) {
     styleGradientClouds(root);
 }
 
+function flagEmojiToUrl(match) {
+    const code1 = match.codePointAt(0);
+    const code2 = match.codePointAt(2);
+    const char1 = String.fromCharCode(code1 - 0x1F1E6 + 97);
+    const char2 = String.fromCharCode(code2 - 0x1F1E6 + 97);
+    return `https://flagcdn.com/${char1}${char2}.svg`;
+}
+
 function replaceEmojisWithFlagsAsHtml(text) {
     if (!text) return text;
     const regex = /([\uD83C][\uDDE6-\uDDFF]){2}/g;
     return text.replace(regex, function(match) {
-        const code1 = match.codePointAt(0);
-        const code2 = match.codePointAt(2);
-        const char1 = String.fromCharCode(code1 - 0x1F1E6 + 97);
-        const char2 = String.fromCharCode(code2 - 0x1F1E6 + 97);
-        return `<img src="https://flagcdn.com/${char1}${char2}.svg" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
+        return `<img src="${flagEmojiToUrl(match)}" class="emoji flagcdn" style="width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)" alt="${match}" />`;
     });
 }
 
@@ -1081,13 +1087,37 @@ function setNodeIconFlag(iconBox, code) {
     if (svg) svg.style.display = 'none';
 }
 
+function createFlagImgNode(match) {
+    const img = document.createElement('img');
+    img.src = flagEmojiToUrl(match);
+    img.className = 'emoji flagcdn';
+    img.style.cssText = 'width: 1.4em; height: 1em; object-fit: cover; border-radius: 2px; display: inline-block; vertical-align: -0.15em; box-shadow: 0 1px 2px rgba(0,0,0,0.1)';
+    img.alt = match;
+    return img;
+}
+
+function appendTextWithFlags(parent, text) {
+    const str = String(text ?? '');
+    const regex = /([\uD83C][\uDDE6-\uDDFF]){2}/g;
+    let lastIndex = 0;
+    for (const match of str.matchAll(regex)) {
+        if (match.index > lastIndex) {
+            parent.appendChild(document.createTextNode(str.slice(lastIndex, match.index)));
+        }
+        parent.appendChild(createFlagImgNode(match[0]));
+        lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < str.length) {
+        parent.appendChild(document.createTextNode(str.slice(lastIndex)));
+    }
+}
+
 function renderNodeModalTitle(titleEl, rawName) {
     if (!titleEl) return;
     const { code, name } = splitNodeFlag(rawName);
-    const formattedTitle = replaceEmojisWithFlagsHTML(escapeHtml(name));
     const temp = titleEl.cloneNode(false);
-    window.setSafeHTML(temp, formattedTitle);
-    if (!updateDOM(titleEl, temp)) window.setSafeHTML(titleEl, formattedTitle);
+    appendTextWithFlags(temp, name);
+    if (!updateDOM(titleEl, temp)) titleEl.replaceChildren(...Array.from(temp.childNodes));
     if (typeof parsePageEmojis === 'function') parsePageEmojis(titleEl);
     titleEl.dataset.rawName = String(rawName || '');
     titleEl.title = name;
@@ -1183,10 +1213,14 @@ function updateDOM(oldNode, newNode) {
         return true;
     }
     if (oldNode.nodeName !== newNode.nodeName) return false;
+    if (oldNode.matches?.('.ip-address-toggle[data-ip-key]') && newNode.matches?.('.ip-address-toggle[data-ip-key]')) {
+        updateIpBadge(oldNode, ipBadgeState(newNode.dataset.ipv4, newNode.dataset.ipv6, newNode.dataset.ipKey));
+        return true;
+    }
     
     if (newNode.attributes) {
         for (let i = 0; i < newNode.attributes.length; i++) {
-            const attr = newNode.attributes[i];
+            const attr = newNode.attributes.item(i);
             if (oldNode.getAttribute(attr.name) !== attr.value) {
                 oldNode.setAttribute(attr.name, attr.value);
             }
@@ -1194,7 +1228,7 @@ function updateDOM(oldNode, newNode) {
     }
     if (oldNode.attributes) {
         for (let i = oldNode.attributes.length - 1; i >= 0; i--) {
-            const attr = oldNode.attributes[i];
+            const attr = oldNode.attributes.item(i);
             if (!newNode.hasAttribute(attr.name)) {
                 oldNode.removeAttribute(attr.name);
             }
@@ -1209,7 +1243,7 @@ function updateDOM(oldNode, newNode) {
     
     if (oldNode.childNodes.length !== newNode.childNodes.length) return false;
     for (let i = 0; i < oldNode.childNodes.length; i++) {
-        if (!updateDOM(oldNode.childNodes[i], newNode.childNodes[i])) return false;
+        if (!updateDOM(oldNode.childNodes.item(i), newNode.childNodes.item(i))) return false;
     }
     return true;
 }
@@ -1339,13 +1373,22 @@ function updateIpBadge(container, state) {
     container.classList.add('ip-address-toggle', 'ip-copy-container');
     const text = container.querySelector('.ip-copy-text');
     if (text) {
-        if (text.decryptionInterval) clearInterval(text.decryptionInterval);
-        if (text.scrambleInterval) clearInterval(text.scrambleInterval);
-        text.decryptionInterval = null;
-        text.scrambleInterval = null;
-        text.dataset.isScrambling = 'false';
-        text.classList.remove('decrypt-on-load');
-        text.textContent = state.ip;
+        const content = escapeHtml(state.ip);
+        // Repeated metric updates must not interrupt an ongoing reveal.
+        if (text.dataset.decryptedValue !== content) {
+            if (text.decryptionInterval) clearInterval(text.decryptionInterval);
+            if (text.scrambleInterval) clearInterval(text.scrambleInterval);
+            text.decryptionInterval = null;
+            text.scrambleInterval = null;
+            text.dataset.isScrambling = 'false';
+            if (state.ip === '-' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+                text.textContent = state.ip;
+                text.dataset.decryptedValue = content;
+            } else {
+                text.textContent = '•'.repeat(state.ip.length);
+                window.animateDecryption(text, content, 800, 'ip:' + state.key + ':' + state.ip);
+            }
+        }
         text.title = state.ip;
     }
     const label = container.querySelector('.ip-family-label');
@@ -1385,6 +1428,12 @@ function renderNodeIpBadge(node) {
     </div>`;
 }
 window.renderNodeIpBadge = renderNodeIpBadge;
+
+window.initializeIpBadges = function(root) {
+    root.querySelectorAll('.ip-address-toggle[data-ip-key]').forEach(badge => {
+        updateIpBadge(badge, ipBadgeState(badge.dataset.ipv4, badge.dataset.ipv6, badge.dataset.ipKey));
+    });
+};
 
 document.addEventListener('keydown', event => {
     const badge = event.target.closest?.('[data-ip-switch="true"]');
@@ -1467,9 +1516,53 @@ function getToastContainer() {
     return toastContainer;
 }
 
-function formatNotificationHtml(text) {
-    return escapeHtml(text).replace(/&lt;b&gt;/gi, '<b>').replace(/&lt;\/b&gt;/gi, '</b>')
-        .replace(/\n/g, '<br>');
+function appendNotificationLine(parent, line, withFlags) {
+    if (withFlags) {
+        appendTextWithFlags(parent, line);
+    } else {
+        parent.appendChild(document.createTextNode(line));
+    }
+}
+
+function appendNotificationNodes(parent, text, withFlags = false) {
+    const str = String(text ?? '');
+    const boldRegex = /<b>([\s\S]*?)<\/b>/gi;
+    function appendPlain(chunk) {
+        const lines = chunk.split('\n');
+        lines.forEach((line, idx) => {
+            if (idx > 0) parent.appendChild(document.createElement('br'));
+            if (line) appendNotificationLine(parent, line, withFlags);
+        });
+    }
+    let lastIndex = 0;
+    for (const match of str.matchAll(boldRegex)) {
+        if (match.index > lastIndex) {
+            appendPlain(str.slice(lastIndex, match.index));
+        }
+        const b = document.createElement('b');
+        appendNotificationLine(b, match[1], withFlags);
+        parent.appendChild(b);
+        lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < str.length) {
+        appendPlain(str.slice(lastIndex));
+    }
+}
+
+function createToastSvg(pathD, svgClass) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('class', svgClass);
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('stroke', 'currentColor');
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('d', pathD);
+    svg.appendChild(path);
+    return svg;
 }
 
 function showToast(message, { screenshotSafe = false } = {}) {
@@ -1477,9 +1570,20 @@ function showToast(message, { screenshotSafe = false } = {}) {
     const toast = document.createElement('div');
     toast.className = 'app-toast pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md border transition-all duration-500 ease-out transform translate-y-10 opacity-0 bg-white/90 dark:bg-gray-800/90 border-gray-200 dark:border-white/10 w-auto max-w-sm';
     if (screenshotSafe) toast.setAttribute('data-screenshot-safe', '');
-    const icon = `<div class="p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>`;
-    const closeBtn = `<button data-action="close-toast" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
-    window.setSafeHTML(toast, `${icon}<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 dark:text-white leading-snug break-words">${formatNotificationHtml(message)}</p></div>${closeBtn}`);
+    const iconWrap = document.createElement('div');
+    iconWrap.className = 'p-1.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0';
+    iconWrap.appendChild(createToastSvg('M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', 'h-4 w-4'));
+    const textWrap = document.createElement('div');
+    textWrap.className = 'flex-1 min-w-0';
+    const msgEl = document.createElement('p');
+    msgEl.className = 'text-sm font-medium text-gray-900 dark:text-white leading-snug break-words';
+    appendNotificationNodes(msgEl, message, false);
+    textWrap.appendChild(msgEl);
+    const closeBtn = document.createElement('button');
+    closeBtn.dataset.action = 'close-toast';
+    closeBtn.className = 'text-gray-400 hover:text-gray-600 dark:hover:text-white transition p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 ml-1 flex-shrink-0';
+    closeBtn.appendChild(createToastSvg('M6 18L18 6M6 6l12 12', 'h-3.5 w-3.5'));
+    toast.replaceChildren(iconWrap, textWrap, closeBtn);
     container.appendChild(toast);
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -2559,8 +2663,7 @@ function updateNotifUI(list, count) {
 
             const bodyDiv = document.createElement('div');
             bodyDiv.className = "text-sm text-gray-700 dark:text-gray-300 leading-snug break-words group-hover:text-gray-900 dark:group-hover:text-white transition-colors";
-            const formattedMessage = replaceEmojisWithFlagsHTML(formatNotificationHtml(n.text));
-            window.setSafeHTML(bodyDiv, formattedMessage);
+            appendNotificationNodes(bodyDiv, n.text, true);
             div.appendChild(bodyDiv);
 
             listContainer.appendChild(div);
@@ -2906,16 +3009,16 @@ function animateModalClose(modal) {
             document.body.style.overflow = '';
 
             // Restore original scroll behavior temporarily
-            const html = document.documentElement;
-            const originalBehavior = html.style.scrollBehavior;
-            html.style.scrollBehavior = 'auto';
+            const rootEl = document.documentElement;
+            const originalBehavior = rootEl.style.scrollBehavior;
+            rootEl.style.scrollBehavior = 'auto';
 
             // Instantly jump to the original scroll position
             window.scrollTo(0, scrollYToRestore);
 
             // Restore smooth scrolling if it was previously enabled
             setTimeout(() => {
-                html.style.scrollBehavior = originalBehavior;
+                rootEl.style.scrollBehavior = originalBehavior;
             }, 50);
         }
 
@@ -3141,52 +3244,87 @@ window.showBillingModal = function(name, amount, currency, dateStr, daysLeft) {
     const amountLbl = window.I18N?.web_billing_amount || "Стоимость аренды:";
     const dateLbl = window.I18N?.web_billing_date || "Ближайший платёж:";
     const hintText = window.I18N?.web_billing_bot_hint || "Управлять настройками оплаты можно в Telegram-боте.";
-    
-    let statusHtml = "";
+
+    const statusBadge = document.createElement('span');
     if (daysLeft !== null) {
         if (daysLeft < 0) {
-            statusHtml = `<span class="px-2 py-1 text-xs font-bold text-red-700 dark:text-red-400">${window.I18N?.web_billing_status_expired || "Просрочен!"}</span>`;
+            statusBadge.className = "px-2 py-1 text-xs font-bold text-red-700 dark:text-red-400";
+            statusBadge.textContent = window.I18N?.web_billing_status_expired || "Просрочен!";
         } else {
-            const activeText = (window.I18N?.web_billing_active_days || "Активен (осталось {days} дней)").replace("{days}", daysLeft);
-            statusHtml = `<span class="px-2 py-1 text-xs font-bold text-green-700 dark:text-green-400">${activeText}</span>`;
+            statusBadge.className = "px-2 py-1 text-xs font-bold text-green-700 dark:text-green-400";
+            statusBadge.textContent = (window.I18N?.web_billing_active_days || "Активен (осталось {days} дней)").replace("{days}", daysLeft);
         }
     } else {
-        statusHtml = `<span class="text-xs text-gray-400 font-medium">${window.I18N?.web_billing_not_set || "Не установлена"}</span>`;
+        statusBadge.className = "text-xs text-gray-400 font-medium";
+        statusBadge.textContent = window.I18N?.web_billing_not_set || "Не установлена";
     }
-    
+
     const amountVal = amount !== null && amount !== undefined ? `${amount} ${currency}` : (window.I18N?.web_billing_not_set || "Не установлена");
     const dateVal = dateStr ? new Date(dateStr).toLocaleDateString() : (window.I18N?.web_billing_not_set || "Не установлена");
-    const nameHtml = replaceEmojisWithFlagsHTML(escapeHtml(String(name ?? '')));
 
-    const contentHtml = `
-        <div class="mb-4 text-center">
-            <h3 class="text-xl font-black text-gray-900 dark:text-white">${nameHtml}</h3>
-        </div>
-        <div class="bg-gray-50 dark:bg-black/20 rounded-xl p-4 space-y-3 border border-gray-100 dark:border-white/5 shadow-inner">
-            <div class="flex justify-between items-center border-b border-gray-200 dark:border-white/10 pb-2">
-                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">${amountLbl}</span>
-                <span class="text-sm font-bold text-gray-900 dark:text-white bg-white dark:bg-black/40 px-2 py-0.5 rounded shadow-sm border border-gray-100 dark:border-white/5">${amountVal}</span>
-            </div>
-            <div class="flex justify-between items-center border-b border-gray-200 dark:border-white/10 pb-2">
-                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">${dateLbl}</span>
-                <span class="text-sm font-bold text-gray-900 dark:text-white bg-white dark:bg-black/40 px-2 py-0.5 rounded shadow-sm border border-gray-100 dark:border-white/5">${dateVal}</span>
-            </div>
-            <div class="flex justify-between items-center">
-                <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">${window.I18N?.web_billing_status || 'Статус:'}</span>
-                ${statusHtml}
-            </div>
-        </div>
-        <div class="mt-6 p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/20 flex gap-3 items-start">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p class="text-xs text-blue-800 dark:text-blue-300 leading-relaxed font-medium">${hintText}</p>
-        </div>
-    `;
+    const fragment = document.createDocumentFragment();
+    const titleWrap = document.createElement('div');
+    titleWrap.className = "mb-4 text-center";
+    const heading = document.createElement('h3');
+    heading.className = "text-xl font-black text-gray-900 dark:text-white";
+    appendTextWithFlags(heading, String(name ?? ''));
+    titleWrap.appendChild(heading);
+    fragment.appendChild(titleWrap);
+
+    const card = document.createElement('div');
+    card.className = "bg-gray-50 dark:bg-black/20 rounded-xl p-4 space-y-3 border border-gray-100 dark:border-white/5 shadow-inner";
+
+    function createInfoRow(labelText, valueText, withBottomBorder) {
+        const row = document.createElement('div');
+        row.className = withBottomBorder
+            ? "flex justify-between items-center border-b border-gray-200 dark:border-white/10 pb-2"
+            : "flex justify-between items-center";
+        const lbl = document.createElement('span');
+        lbl.className = "text-sm text-gray-500 dark:text-gray-400 font-medium";
+        lbl.textContent = labelText;
+        const val = document.createElement('span');
+        val.className = "text-sm font-bold text-gray-900 dark:text-white bg-white dark:bg-black/40 px-2 py-0.5 rounded shadow-sm border border-gray-100 dark:border-white/5";
+        val.textContent = valueText;
+        row.replaceChildren(lbl, val);
+        return row;
+    }
+
+    card.appendChild(createInfoRow(amountLbl, amountVal, true));
+    card.appendChild(createInfoRow(dateLbl, dateVal, true));
+
+    const statusRow = document.createElement('div');
+    statusRow.className = "flex justify-between items-center";
+    const statusLbl = document.createElement('span');
+    statusLbl.className = "text-sm text-gray-500 dark:text-gray-400 font-medium";
+    statusLbl.textContent = window.I18N?.web_billing_status || 'Статус:';
+    statusRow.replaceChildren(statusLbl, statusBadge);
+    card.appendChild(statusRow);
+    fragment.appendChild(card);
+
+    const hintBox = document.createElement('div');
+    hintBox.className = "mt-6 p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/20 flex gap-3 items-start";
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const infoSvg = document.createElementNS(svgNS, 'svg');
+    infoSvg.setAttribute('xmlns', svgNS);
+    infoSvg.setAttribute('class', 'h-5 w-5 text-blue-500 shrink-0 mt-0.5');
+    infoSvg.setAttribute('fill', 'none');
+    infoSvg.setAttribute('viewBox', '0 0 24 24');
+    infoSvg.setAttribute('stroke', 'currentColor');
+    const infoPath = document.createElementNS(svgNS, 'path');
+    infoPath.setAttribute('stroke-linecap', 'round');
+    infoPath.setAttribute('stroke-linejoin', 'round');
+    infoPath.setAttribute('stroke-width', '2');
+    infoPath.setAttribute('d', 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z');
+    infoSvg.appendChild(infoPath);
+    const hintP = document.createElement('p');
+    hintP.className = "text-xs text-blue-800 dark:text-blue-300 leading-relaxed font-medium";
+    hintP.textContent = hintText;
+    hintBox.replaceChildren(infoSvg, hintP);
+    fragment.appendChild(hintBox);
 
     window.showModal({
         title: title,
-        content: contentHtml,
+        content: fragment,
         buttons: [
             { text: window.I18N?.modal_btn_ok || "OK", class: "bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/20 w-full", close: true }
         ]
@@ -3288,7 +3426,11 @@ window.showModal = function(options) {
 
     const body = document.createElement('div');
     body.className = "p-5 text-sm text-gray-700 dark:text-gray-300";
-    window.setSafeHTML(body, content || '');
+    if (content instanceof Node) {
+        body.replaceChildren(content);
+    } else {
+        window.setSafeHTML(body, content || '');
+    }
     dialog.appendChild(body);
 
     if (buttons && buttons.length > 0) {

@@ -43,14 +43,17 @@ async function onTelegramAuth(data) {
             
             if (response.status === 403) {
                 const title = (typeof window.I18N !== 'undefined' && window.I18N.login_access_denied) ? window.I18N.login_access_denied : "Access Denied";
-                let msgTemplate = (typeof window.I18N !== 'undefined' && window.I18N.login_unauthorized) ? window.I18N.login_unauthorized : "User <b>@{username}</b> is not authorized.<br><br>Please ask the administrator to add your ID: <b>{id}</b>";
-                
-                const msg = msgTemplate.replace('{username}', uname).replace('{id}', uid);
-                
+                const rawTemplate = (typeof window.I18N !== 'undefined' && window.I18N.login_unauthorized)
+                    ? window.I18N.login_unauthorized.replace(/<br\s*\/?>/gi, '\n').replace(/<\/?b>/gi, '')
+                    : "User @{username} is not authorized.\n\nPlease ask the administrator to add your ID: {id}";
+                const alertMessage = rawTemplate
+                    .replace('{username}', String(uname))
+                    .replace('{id}', String(uid));
+
                 if (window.showModalAlert) {
-                    await window.showModalAlert(msg, title);
+                    await window.showModalAlert(alertMessage, title);
                 } else {
-                    alert(`${title}\n\n${msg.replace(/<br>/g, '\n').replace(/<b>/g, '').replace(/<\/b>/g, '')}`);
+                    alert(`${title}\n\n${alertMessage}`);
                 }
             } else {
                 const errTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Auth Error";
@@ -141,9 +144,9 @@ function setLoginLanguage(lang) {
     document.cookie = "guest_lang=" + lang + "; path=/; max-age=31536000";
     updateLangSlider(lang);
 
-    if (typeof window.I18N_ALL !== 'undefined' && window.I18N_ALL[lang]) {
-        const dict = window.I18N_ALL[lang];
-        window.I18N = dict;
+    const selectedDict = typeof window.I18N_ALL !== 'undefined' ? Reflect.get(window.I18N_ALL, lang) : null;
+    if (selectedDict) {
+        window.I18N = selectedDict;
 
         const elements = document.querySelectorAll('[data-i18n]');
         elements.forEach(el => {
@@ -154,20 +157,24 @@ function setLoginLanguage(lang) {
         setTimeout(() => {
             elements.forEach(el => {
                 const key = el.getAttribute('data-i18n');
-                if (dict[key]) {
-                    if (el.tagName === 'INPUT') el.placeholder = dict[key];
-                    else window.setSafeHTML(el, dict[key]);
+                const translated = key ? Reflect.get(selectedDict, key) : null;
+                if (translated) {
+                    if (el.tagName === 'INPUT') el.placeholder = translated;
+                    else window.setSafeHTML(el, translated);
                 }
                 el.style.opacity = '1';
             });
 
-            if (dict.web_title) document.title = dict.web_title;
+            const webTitle = Reflect.get(selectedDict, 'web_title');
+            if (webTitle) document.title = webTitle;
 
             const gh = document.querySelector('a[title="GitHub"]');
-            if (gh && dict['login_github_tooltip']) gh.title = dict['login_github_tooltip'];
+            const ghTooltip = Reflect.get(selectedDict, 'login_github_tooltip');
+            if (gh && ghTooltip) gh.title = ghTooltip;
 
             const sp = document.querySelector('button[title="Support"]');
-            if (sp && dict['login_support_tooltip']) sp.title = dict['login_support_tooltip'];
+            const spTooltip = Reflect.get(selectedDict, 'login_support_tooltip');
+            if (sp && spTooltip) sp.title = spTooltip;
         }, 200);
     }
 }
@@ -555,7 +562,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const container = document.getElementById('telegram-widget-container');
     const magicForm = document.getElementById('magic-link-form');
 
-    const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(window.location.hostname);
+    const hostParts = window.location.hostname.split('.');
+    const isIp = hostParts.length === 4 && hostParts.every(part => part.length > 0 && part.length <= 3 && [...part].every(ch => ch >= '0' && ch <= '9'));
     const isLocalhost = window.location.hostname === 'localhost';
     const isHttps = window.location.protocol === 'https:';
 

@@ -67,6 +67,86 @@ async def _prepare_sse(response: web.StreamResponse, request: web.Request) -> bo
         return False
 
 
+async def _open_sse_stream(request: web.Request) -> tuple[web.StreamResponse, bool]:
+    """Create, configure headers on, and prepare an EventSource response."""
+    response = web.StreamResponse(status=200, reason="OK")
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    prepared = await _prepare_sse(response, request)
+    return response, prepared
+
+
+async def _sse_should_stop(
+    request: web.Request,
+    response: web.StreamResponse,
+    current_token: str | None,
+) -> bool:
+    """Handle shutdown/disconnect/session expiry and return True when the SSE loop should stop."""
+    if shared_state.IS_RESTARTING:
+        try:
+            await response.write(b"event: shutdown\ndata: restarting\n\n")
+        except Exception as exc:
+            logging.debug(f"SSE shutdown write aborted: {exc}")
+        return True
+
+    try:
+        if request.transport is None or request.transport.is_closing():
+            return True
+    except Exception:
+        return True
+
+    if _session_expired(current_token):
+        try:
+            await response.write(b"event: session_status\ndata: expired\n\n")
+            await response.drain()
+        except Exception as exc:
+            logging.debug(f"SSE session expired write aborted: {exc}")
+        return True
+
+    return False
+
+
+async def _run_sse_loop(
+    request: web.Request,
+    interval_getter,
+    tick,
+    *,
+    error_label: str,
+) -> web.StreamResponse:
+    """Run an authenticated EventSource loop until disconnect, shutdown, or expiry."""
+    current_token = request.cookies.get(COOKIE_NAME)
+    response, prepared = await _open_sse_stream(request)
+    if not prepared:
+        return response
+
+    shutdown_event = request.app.get("shutdown_event")
+    try:
+        while True:
+            if await _sse_should_stop(request, response, current_token):
+                break
+            if not await tick(response):
+                break
+            sleep_time = float(interval_getter())
+            if shutdown_event:
+                try:
+                    if not shared_state.IS_RESTARTING:
+                        await asyncio.wait_for(shutdown_event.wait(), timeout=sleep_time)
+                        break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(sleep_time)
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
+            logging.error("%s: %s", error_label, exc)
+
+    return response
+
+
 def _build_websocket_notice(path: str) -> web.Response:
     message = (
         f"Это обычный HTTP/HTTPS-запрос.\n"
@@ -582,34 +662,81 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
         return response
 
     shutdown_event = request.app.get("shutdown_event")
-    journal_bin = ["journalctl"]
+    host_journalctl: str | None = None
     if DEPLOY_MODE == "docker" and current_config.INSTALL_MODE == "root":
         if os.path.exists("/host/usr/bin/journalctl"):
-            journal_bin = ["chroot", "/host", "/usr/bin/journalctl"]
+            host_journalctl = "/usr/bin/journalctl"
         elif os.path.exists("/host/bin/journalctl"):
-            journal_bin = ["chroot", "/host", "/bin/journalctl"]
+            host_journalctl = "/bin/journalctl"
+
+    async def _spawn_journalctl(
+        unit_name: str | None,
+        range_flag: str,
+        range_value: str,
+    ):
+        if host_journalctl and unit_name:
+            return await asyncio.create_subprocess_exec(
+                "chroot",
+                "/host",
+                host_journalctl,
+                "--no-pager",
+                "--show-cursor",
+                "-u",
+                unit_name,
+                range_flag,
+                range_value,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        if host_journalctl:
+            return await asyncio.create_subprocess_exec(
+                "chroot",
+                "/host",
+                host_journalctl,
+                "--no-pager",
+                "--show-cursor",
+                range_flag,
+                range_value,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        if unit_name:
+            return await asyncio.create_subprocess_exec(
+                "journalctl",
+                "--no-pager",
+                "--show-cursor",
+                "-u",
+                unit_name,
+                range_flag,
+                range_value,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        return await asyncio.create_subprocess_exec(
+            "journalctl",
+            "--no-pager",
+            "--show-cursor",
+            range_flag,
+            range_value,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
 
     async def fetch_sys_logs(
         cursor: str | None = None,
         lines: int | None = None,
         unit: str | None = None,
     ) -> tuple[list[str], str | None]:
-        cmd = journal_bin + ["--no-pager", "--show-cursor"]
-        if unit:
-            cmd.extend(["-u", f"{unit}.service"])
+        unit_name = f"{unit}.service" if unit else None
         if cursor:
-            cmd.extend(["--after-cursor", cursor])
+            range_flag, range_value = "--after-cursor", cursor
         elif lines:
-            cmd.extend(["-n", str(lines)])
+            range_flag, range_value = "-n", str(lines)
         else:
-            cmd.extend(["-n", "300"])
+            range_flag, range_value = "-n", "300"
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            proc = await _spawn_journalctl(unit_name, range_flag, range_value)
             stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
                 logging.error("Journalctl error: %s", stderr.decode("utf-8", errors="ignore"))
@@ -746,8 +873,8 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
                 try:
                     await response.write(b"event: session_status\ndata: expired\n\n")
                     await response.drain()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug(f"SSE session expired write aborted: {exc}")
                 break
 
             data_sent = False
@@ -764,8 +891,8 @@ async def handle_sse_logs(request: web.Request) -> web.StreamResponse:
                                 handle.seek(cursor)
                                 new_data = handle.readlines()
                                 new_cursor = handle.tell()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logging.debug(f"Failed to read bot log updates: {exc}")
                     return (new_data, new_cursor)
 
                 new_lines, last_pos = await asyncio.to_thread(read_updates, last_pos)
@@ -872,89 +999,42 @@ async def handle_sse_node_details(request: web.Request) -> web.StreamResponse:
         return web.Response(status=404)
     token = node["token"]
 
-    current_token = request.cookies.get(COOKIE_NAME)
     lang = get_user_lang(int(user["id"]))
 
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    response.headers["X-Accel-Buffering"] = "no"
-    if not await _prepare_sse(response, request):
-        return response
-
-    shutdown_event = request.app.get("shutdown_event")
-    try:
-        while True:
-            if shared_state.IS_RESTARTING:
-                try:
-                    await response.write(b"event: shutdown\ndata: restarting\n\n")
-                except Exception:
-                    pass
-                break
-
+    async def tick(response: web.StreamResponse) -> bool:
+        latest = await nodes_db.get_node_by_token(token)
+        if not latest:
             try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
-                break
+                await _write_sse(response, "error", {"error": "Node not found"})
+            except (ConnectionResetError, BrokenPipeError, ConnectionError):
+                pass
+            return False
+        last_seen = latest.get("last_seen", 0)
+        is_restarting = latest.get("is_restarting", False)
+        status = "restarting" if is_restarting else "online" if time.time() - last_seen < current_config.NODE_OFFLINE_TIMEOUT else "offline"
+        payload = {
+            "name": encrypt_for_web(latest.get("name")),
+            "ip": encrypt_for_web(latest.get("ip")),
+            "ipv4": encrypt_for_web(node_ip_addresses(latest)["ipv4"]),
+            "ipv6": encrypt_for_web(node_ip_addresses(latest)["ipv6"]),
+            "stats": _encrypt_node_stats_for_web(latest.get("stats")),
+            "history": latest.get("history", []),
+            "id": latest["id"],
+            "last_seen": last_seen,
+            "is_restarting": is_restarting,
+            "status": status,
+            "availability": get_node_uptime_snapshot(latest, lang, current_config.NODE_OFFLINE_TIMEOUT, time.time()),
+            "billing_amount": latest.get("billing_amount"),
+            "currency": latest.get("currency", "$"),
+            "next_payment_date": latest.get("next_payment_date").isoformat() if hasattr(latest.get("next_payment_date"), "isoformat") else str(latest.get("next_payment_date")) if latest.get("next_payment_date") else None,
+        }
+        try:
+            await _write_sse(response, "node_details", payload)
+            return True
+        except (ConnectionResetError, BrokenPipeError, ConnectionError):
+            return False
 
-            if _session_expired(current_token):
-                try:
-                    await response.write(b"event: session_status\ndata: expired\n\n")
-                    await response.drain()
-                except Exception:
-                    pass
-                break
-
-            node = await nodes_db.get_node_by_token(token)
-            if node:
-                last_seen = node.get("last_seen", 0)
-                is_restarting = node.get("is_restarting", False)
-                status = "restarting" if is_restarting else "online" if time.time() - last_seen < current_config.NODE_OFFLINE_TIMEOUT else "offline"
-                payload = {
-                    "name": encrypt_for_web(node.get("name")),
-                    "ip": encrypt_for_web(node.get("ip")),
-                    "ipv4": encrypt_for_web(node_ip_addresses(node)["ipv4"]),
-                    "ipv6": encrypt_for_web(node_ip_addresses(node)["ipv6"]),
-                    "stats": _encrypt_node_stats_for_web(node.get("stats")),
-                    "history": node.get("history", []),
-                    "id": node["id"],
-                    "last_seen": last_seen,
-                    "is_restarting": is_restarting,
-                    "status": status,
-                    "availability": get_node_uptime_snapshot(node, lang, current_config.NODE_OFFLINE_TIMEOUT, time.time()),
-                    "billing_amount": node.get("billing_amount"),
-                    "currency": node.get("currency", "$"),
-                    "next_payment_date": node.get("next_payment_date").isoformat() if hasattr(node.get("next_payment_date"), "isoformat") else str(node.get("next_payment_date")) if node.get("next_payment_date") else None,
-                }
-                try:
-                    await _write_sse(response, "node_details", payload)
-                except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                    break
-            else:
-                try:
-                    await _write_sse(response, "error", {"error": "Node not found"})
-                except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                    pass
-                break
-
-            if shutdown_event:
-                try:
-                    if not shared_state.IS_RESTARTING:
-                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                        break
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await asyncio.sleep(3)
-    except asyncio.CancelledError:
-        pass
-    except Exception as exc:
-        if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
-            logging.error("SSE node details error: %s", exc)
-
-    return response
+    return await _run_sse_loop(request, lambda: 3.0, tick, error_label="SSE node details error")
 
 
 @routes.get("/api/events/node/services")
@@ -977,71 +1057,26 @@ async def handle_sse_node_services(request: web.Request) -> web.StreamResponse:
         return web.Response(status=404)
     token = node["token"]
 
-    current_token = request.cookies.get(COOKIE_NAME)
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    response.headers["X-Accel-Buffering"] = "no"
-    if not await _prepare_sse(response, request):
-        return response
-
-    shutdown_event = request.app.get("shutdown_event")
-    try:
-        while True:
-            if shared_state.IS_RESTARTING:
-                try:
-                    await response.write(b"event: shutdown\ndata: restarting\n\n")
-                except Exception:
-                    pass
-                break
-
+    async def tick(response: web.StreamResponse) -> bool:
+        latest = await nodes_db.get_node_by_token(token)
+        if not latest:
             try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
-                break
-
-            if _session_expired(current_token):
-                try:
-                    await response.write(b"event: session_status\ndata: expired\n\n")
-                    await response.drain()
-                except Exception:
-                    pass
-                break
-
-            node = await nodes_db.get_node_by_token(token)
-            if not node:
-                try:
-                    await _write_sse(response, "error", {"error": "Node not found"})
-                except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                    pass
-                break
-
-            try:
-                payload = {"services": _encrypt_node_services_for_web(node.get("services", []))}
-                await _write_sse(response, "node_services", payload)
+                await _write_sse(response, "error", {"error": "Node not found"})
             except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                break
-            except Exception as exc:
-                logging.error("SSE node services fetch error: %s", exc)
+                pass
+            return False
 
-            if shutdown_event:
-                try:
-                    if not shared_state.IS_RESTARTING:
-                        await asyncio.wait_for(shutdown_event.wait(), timeout=3.0)
-                        break
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await asyncio.sleep(3)
-    except asyncio.CancelledError:
-        pass
-    except Exception as exc:
-        if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
-            logging.error("SSE node services error: %s", exc)
+        try:
+            payload = {"services": _encrypt_node_services_for_web(latest.get("services", []))}
+            await _write_sse(response, "node_services", payload)
+            return True
+        except (ConnectionResetError, BrokenPipeError, ConnectionError):
+            return False
+        except Exception as exc:
+            logging.error("SSE node services fetch error: %s", exc)
+            return True
 
-    return response
+    return await _run_sse_loop(request, lambda: 3.0, tick, error_label="SSE node services error")
 
 
 @routes.get("/api/events/services")
@@ -1054,73 +1089,32 @@ async def handle_sse_services(request: web.Request) -> web.StreamResponse:
     if not user:
         return web.Response(status=401)
 
-    current_token = request.cookies.get(COOKIE_NAME)
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    response.headers["X-Accel-Buffering"] = "no"
-    if not await _prepare_sse(response, request):
-        return response
+    async def tick(response: web.StreamResponse) -> bool:
+        try:
+            from modules.services import get_all_services_status
+            services = await asyncio.to_thread(get_all_services_status)
+            encrypted_services = [
+                {
+                    "name": encrypt_for_web(svc.get("name", "")),
+                    "type": encrypt_for_web(svc.get("type", "")),
+                    "status": encrypt_for_web(svc.get("status", "")),
+                }
+                for svc in services
+            ]
+            await _write_sse(response, "services", {"services": encrypted_services})
+            return True
+        except (ConnectionResetError, BrokenPipeError, ConnectionError):
+            return False
+        except Exception as exc:
+            logging.error("SSE services fetch error: %s", exc)
+            return True
 
-    shutdown_event = request.app.get("shutdown_event")
-    try:
-        while True:
-            if shared_state.IS_RESTARTING:
-                try:
-                    await response.write(b"event: shutdown\ndata: restarting\n\n")
-                except Exception:
-                    pass
-                break
-
-            try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
-                break
-
-            if _session_expired(current_token):
-                try:
-                    await response.write(b"event: session_status\ndata: expired\n\n")
-                    await response.drain()
-                except Exception:
-                    pass
-                break
-
-            try:
-                from modules.services import get_all_services_status
-                services = await asyncio.to_thread(get_all_services_status)
-                encrypted_services = [
-                    {
-                        "name": encrypt_for_web(svc.get("name", "")),
-                        "type": encrypt_for_web(svc.get("type", "")),
-                        "status": encrypt_for_web(svc.get("status", "")),
-                    }
-                    for svc in services
-                ]
-                await _write_sse(response, "services", {"services": encrypted_services})
-            except (ConnectionResetError, BrokenPipeError, ConnectionError):
-                break
-            except Exception as exc:
-                logging.error("SSE services fetch error: %s", exc)
-
-            sleep_time = float(getattr(current_config, "SERVICES_INTERVAL", 5))
-            if shutdown_event:
-                try:
-                    if not shared_state.IS_RESTARTING:
-                        await asyncio.wait_for(shutdown_event.wait(), timeout=sleep_time)
-                        break
-                except asyncio.TimeoutError:
-                    pass
-            else:
-                await asyncio.sleep(sleep_time)
-    except asyncio.CancelledError:
-        pass
-    except Exception as exc:
-        if "closing transport" not in str(exc) and "'NoneType' object" not in str(exc):
-            logging.error("SSE services error: %s", exc)
-
-    return response
+    return await _run_sse_loop(
+        request,
+        lambda: getattr(current_config, "SERVICES_INTERVAL", 5),
+        tick,
+        error_label="SSE services error",
+    )
 
 
 async def _forward_ws_stream(stream: Any, ws_client: web.WebSocketResponse) -> None:
@@ -1526,12 +1520,8 @@ async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
         return web.Response(status=400)
 
     current_token = request.cookies.get(COOKIE_NAME)
-    response = web.StreamResponse(status=200, reason="OK")
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    response.headers["X-Accel-Buffering"] = "no"
-    if not await _prepare_sse(response, request):
+    response, prepared = await _open_sse_stream(request)
+    if not prepared:
         return response
 
     shutdown_event = request.app.get("shutdown_event")
@@ -1539,25 +1529,7 @@ async def handle_sse_metrics(request: web.Request) -> web.StreamResponse:
     last_t: int | None = None
     try:
         while True:
-            if shared_state.IS_RESTARTING:
-                try:
-                    await response.write(b"event: shutdown\ndata: restarting\n\n")
-                except Exception:
-                    pass
-                break
-
-            try:
-                if request.transport is None or request.transport.is_closing():
-                    break
-            except Exception:
-                break
-
-            if _session_expired(current_token):
-                try:
-                    await response.write(b"event: session_status\ndata: expired\n\n")
-                    await response.drain()
-                except Exception:
-                    pass
+            if await _sse_should_stop(request, response, current_token):
                 break
 
             await metrics_history.flush_pending()

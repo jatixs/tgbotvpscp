@@ -33,11 +33,11 @@
 
 ## 📋 Table of Contents
 
-1. [About](#%EF%B8%8F-about-the-project)
+1. [About](#-about-the-project)
 2. [Key Features](#-key-features)
-3. [Architecture](#%EF%B8%8F-architecture)
+3. [Architecture](#-architecture)
 4. [Quick Start](#-quick-start)
-5. [Web Interface](#%EF%B8%8F-web-interface)
+5. [Web Interface](#-web-interface)
 6. [Security](#-security)
 7. [Project Structure](#-project-structure)
 8. [Documentation](#-documentation)
@@ -45,7 +45,7 @@
 
 ---
 
-## ℹ️ About the Project
+## 📖 About the Project
 
 **VPS Manager Telegram Bot** is a comprehensive enterprise-class solution for managing server infrastructure via Telegram and web interface.
 
@@ -138,7 +138,7 @@
 
 ---
 
-## 🏗️ Architecture
+## 🧩 Architecture
 
 **Agent-Client Pattern** with centralized management:
 
@@ -256,7 +256,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 
 ---
 
-## 🖥️ Web Interface
+## 💻 Web Interface
 
 ### Main Features
 

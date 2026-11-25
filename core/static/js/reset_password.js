@@ -118,11 +118,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (passInput) passInput.addEventListener('input', updateState);
     if (confirmInput) confirmInput.addEventListener('input', updateState);
 
-    const handleEnter = (e) => {
+    function handleEnter(e) {
         if (e.key === 'Enter' && !submitBtn.disabled) {
             window.resetConfirm();
         }
-    };
+    }
     passInput.addEventListener('keydown', handleEnter);
     confirmInput.addEventListener('keydown', handleEnter);
 

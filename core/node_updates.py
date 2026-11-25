@@ -1,5 +1,6 @@
 """Confirmation and heartbeat delivery for node client updates."""
 import asyncio
+import logging
 import re
 import secrets
 import time
@@ -74,15 +75,19 @@ def _is_eligible(node, now: float) -> bool:
     return report.get("supported") is True and not report["busy"] and now - node.last_seen < config.NODE_OFFLINE_TIMEOUT
 
 
+def _get_agent_version() -> str:
+    try:
+        from .utils import get_app_version
+        return get_app_version()
+    except Exception:
+        logging.debug("Unable to read agent application version", exc_info=True)
+        return ""
+
+
 async def eligible_nodes():
     now = time.time()
     nodes = await Node.all().order_by("id")
-    agent_ver = ""
-    try:
-        from .utils import get_app_version
-        agent_ver = get_app_version()
-    except Exception:
-        pass
+    agent_ver = _get_agent_version()
     eligible = []
     for node in nodes:
         if _is_eligible(node, now):
@@ -170,12 +175,7 @@ async def latest_results(user_id: int) -> list[dict]:
         return []
     now = time.time()
     jobs = await NodeClientUpdate.filter(rollout=latest.rollout).prefetch_related("node").order_by("node_id")
-    agent_ver = ""
-    try:
-        from .utils import get_app_version
-        agent_ver = get_app_version()
-    except Exception:
-        pass
+    agent_ver = _get_agent_version()
     results = []
     for job in jobs:
         node_stats = job.node.stats or {}

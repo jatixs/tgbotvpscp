@@ -879,6 +879,16 @@ main {
 }
 
 /* Node update modal cards */
+.node-update-icon {
+    position: relative;
+}
+
+.node-update-check {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+}
+
 .node-update-item {
 	transition: all 0.2s ease-in-out;
 }
@@ -926,6 +936,33 @@ body.dark .node-update-item.is-failed,
 html.amoled .node-update-item.is-failed {
 	background-color: rgba(127, 29, 29, 0.12) !important;
 	border: 1px solid rgba(239, 68, 68, 0.5) !important;
+}
+
+#modalBtnCloseUpdates.is-all-updated {
+	background-color: #16a34a;
+	color: #ffffff;
+	box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.25);
+}
+#modalBtnCloseUpdates.is-all-updated:hover {
+	background-color: #22c55e;
+}
+
+#modalBtnCloseUpdates.is-partial-update {
+	background-color: #d97706;
+	color: #ffffff;
+	box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.25);
+}
+#modalBtnCloseUpdates.is-partial-update:hover {
+	background-color: #f59e0b;
+}
+
+#modalBtnCloseUpdates.is-none-updated {
+	background-color: #dc2626;
+	color: #ffffff;
+	box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.25);
+}
+#modalBtnCloseUpdates.is-none-updated:hover {
+	background-color: #ef4444;
 }
 
 /* Node card reboot button */

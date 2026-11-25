@@ -57,8 +57,8 @@ class ClientUpdater:
                     m = re.search(r"## \[(\d+\.\d+\.\d+)\]", content)
                     if m:
                         return f"v{m.group(1)}"
-        except Exception:
-            pass
+        except (OSError, UnicodeError):
+            logging.debug("Unable to read node client version", exc_info=True)
         return ""
 
     def report(self):

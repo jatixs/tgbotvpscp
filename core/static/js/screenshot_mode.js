@@ -101,13 +101,13 @@
         if (event.key === storageKey || event.key === null) apply(event.newValue === 'true', true);
     });
     // Delegation and observation also cover headers replaced by panel navigation.
-    const sync = () => {
+    function syncToggles() {
         document.querySelectorAll('[data-screenshot-toggle]').forEach(button => {
             button.setAttribute('aria-checked', String(root.classList.contains('screenshot-mode')));
         });
-    };
+    }
     document.addEventListener('DOMContentLoaded', () => {
-        sync();
-        new MutationObserver(sync).observe(document.body, { childList:true, subtree:true });
+        syncToggles();
+        new MutationObserver(syncToggles).observe(document.body, { childList: true, subtree: true });
     });
 })();

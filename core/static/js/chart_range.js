@@ -287,7 +287,7 @@
             const names = ['', ...ctl.interfaces];
             if (ctl.interfaceName && !names.includes(ctl.interfaceName)) names.push(ctl.interfaceName);
             const existing = [...container.children].map(chip => chip.dataset.interface);
-            if (existing.length !== names.length || names.some((name, i) => name !== existing[i])) {
+            if (existing.length !== names.length || names.some((name, i) => name !== existing.at(i))) {
                 container.replaceChildren(...names.map(name => {
                     const chip = document.createElement('button');
                     chip.type = 'button';
@@ -523,8 +523,8 @@
             }
             let viewportStarted = false;
             for (let i = 0; i < pts.length; i++) {
-                const p = pts[i];
-                if (i > 0 && p.t - pts[i - 1].t > gap) {
+                const p = pts.at(i);
+                if (i > 0 && p.t - pts.at(i - 1).t > gap) {
                     series.labels.push('');
                     series.cpu.push(null);
                     series.ram.push(null);
@@ -588,8 +588,8 @@
         function pointsEqual(left, right) {
             if (left.length !== right.length) return false;
             for (let i = 0; i < left.length; i++) {
-                const a = left[i];
-                const b = right[i];
+                const a = left.at(i);
+                const b = right.at(i);
                 if (a.t !== b.t || a.c !== b.c || a.r !== b.r || a.d !== b.d || a.rx !== b.rx || a.tx !== b.tx || a.ping !== b.ping) {
                     return false;
                 }
@@ -603,7 +603,7 @@
                 ? opts.getValues
                 : point => [point.c, point.r, point.d, point.rx, point.tx, point.ping];
             const previousByTime = new Map(previous.map(point => [point.t, point]));
-            let preceding = previous[previous.length - 1];
+            let preceding = previous.at(-1);
 
             for (const point of next) {
                 const sameTime = previousByTime.get(point.t);
@@ -611,7 +611,7 @@
                 if (comparison) {
                     const oldValues = getValues(comparison);
                     const newValues = getValues(point);
-                    if (oldValues.length !== newValues.length || oldValues.some((value, index) => !Object.is(value, newValues[index]))) {
+                    if (oldValues.length !== newValues.length || oldValues.some((value, index) => !Object.is(value, newValues.at(index)))) {
                         return true;
                     }
                 }
@@ -836,10 +836,11 @@
                             return undefined;
                         }
                         const points = ctx.dataset?.data;
-                        const scale = ctx.chart?.scales?.[ctx.dataset?.yAxisID || 'ping'];
+                        const scaleKey = ctx.dataset?.yAxisID || 'ping';
+                        const scale = ctx.chart?.scales ? Reflect.get(ctx.chart.scales, scaleKey) : undefined;
                         if (points && scale) {
                             for (let i = ctx.dataIndex - 1; i >= 0; i--) {
-                                const val = points[i];
+                                const val = points.at(i);
                                 if (typeof val === 'number' && !isNaN(val)) {
                                     return scale.getPixelForValue(val);
                                 }
@@ -892,8 +893,8 @@
         if (!sourceCanvas) return;
 
         const sourceChart = (typeof window.Chart !== 'undefined' ? window.Chart.getChart(sourceCanvas) : null)
-            || window.__chartRegistry?.[canvasId]
-            || window[canvasId];
+            || (window.__chartRegistry ? Reflect.get(window.__chartRegistry, canvasId) : null)
+            || Reflect.get(window, canvasId);
         if (!sourceChart || !sourceChart.data) return;
 
         const overlay = overlayId
@@ -923,8 +924,9 @@
         overlay.classList.remove('hidden');
 
         // Clean & create fresh canvas element inside expanded body
-        body.innerHTML = '<canvas style="display:block;width:100%;height:100%;"></canvas>';
-        const expandedCanvas = body.querySelector('canvas');
+        const expandedCanvas = document.createElement('canvas');
+        expandedCanvas.style.cssText = 'display:block;width:100%;height:100%;';
+        body.replaceChildren(expandedCanvas);
         const expandedCtx = expandedCanvas.getContext('2d');
 
         const isDark = document.documentElement.classList.contains('dark');
@@ -959,7 +961,7 @@
                 delete s._subProxy;
                 delete s._stack;
                 delete s._descriptors;
-                sanitizedScales[key] = s;
+                Reflect.set(sanitizedScales, key, s);
             }
         }
 
@@ -1064,8 +1066,9 @@
         const exp = activeExpandedChart.expandedChart;
         exp.data.labels = [...(sourceChart.data.labels || [])];
         sourceChart.data.datasets.forEach((ds, i) => {
-            if (exp.data.datasets[i]) {
-                exp.data.datasets[i].data = [...(ds.data || [])];
+            const targetDs = exp.data.datasets.at(i);
+            if (targetDs) {
+                targetDs.data = [...(ds.data || [])];
             }
         });
         if (sourceChart.__chartTimeWindow) {

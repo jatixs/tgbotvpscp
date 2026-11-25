@@ -36,24 +36,39 @@ async def logs_handler(message: types.Message, state: FSMContext):
             _("logs_docker_secure_not_available", user_id), reply_markup=main_keyboard
         )
         return
-    cmd = []
+    host_journalctl = None
     if DEPLOY_MODE == "docker" and INSTALL_MODE == "root":
         if os.path.exists("/host/usr/bin/journalctl"):
-            cmd = ["chroot", "/host", "/usr/bin/journalctl", "-n", "20", "--no-pager"]
+            host_journalctl = "/usr/bin/journalctl"
         elif os.path.exists("/host/bin/journalctl"):
-            cmd = ["chroot", "/host", "/bin/journalctl", "-n", "20", "--no-pager"]
+            host_journalctl = "/bin/journalctl"
         else:
             await message.answer(
                 _("logs_journalctl_not_found_in_host", user_id),
                 reply_markup=main_keyboard,
             )
             return
-    else:
-        cmd = ["journalctl", "-n", "20", "--no-pager"]
     try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
+        if host_journalctl:
+            process = await asyncio.create_subprocess_exec(
+                "chroot",
+                "/host",
+                host_journalctl,
+                "-n",
+                "20",
+                "--no-pager",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                "journalctl",
+                "-n",
+                "20",
+                "--no-pager",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
         stdout, stderr = await process.communicate()
         if process.returncode == 0:
             log_output = stdout.decode().strip()
@@ -70,7 +85,8 @@ async def logs_handler(message: types.Message, state: FSMContext):
             response_text, reply_markup=main_keyboard, parse_mode="HTML"
         )
     except FileNotFoundError:
-        logging.error(f"Command '{cmd[0]}' not found.")
+        binary_name = "chroot" if host_journalctl else "journalctl"
+        logging.error(f"Command '{binary_name}' not found.")
         await message.answer(
             _("logs_journalctl_not_found", user_id), reply_markup=main_keyboard
         )

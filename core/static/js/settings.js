@@ -63,28 +63,15 @@ function createStatusSvg(state) {
     svg.setAttribute('fill', 'none');
     svg.setAttribute('viewBox', '0 0 24 24');
     if (state === 'neutral') {
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('class', 'opacity-25');
-        circle.setAttribute('cx', '12');
-        circle.setAttribute('cy', '12');
-        circle.setAttribute('r', '10');
-        circle.setAttribute('stroke', 'currentColor');
-        circle.setAttribute('stroke-width', '4');
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('class', 'opacity-75');
-        path.setAttribute('fill', 'currentColor');
-        path.setAttribute('d', 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z');
-        svg.appendChild(circle);
-        svg.appendChild(path);
-    } else {
-        svg.setAttribute('stroke', 'currentColor');
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('stroke-linecap', 'round');
-        path.setAttribute('stroke-linejoin', 'round');
-        path.setAttribute('stroke-width', '3');
-        path.setAttribute('d', state === 'success' ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12');
-        svg.appendChild(path);
+        return createSpinnerSvg('w-3 h-3 animate-spin');
     }
+    svg.setAttribute('stroke', 'currentColor');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-width', '3');
+    path.setAttribute('d', state === 'success' ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12');
+    svg.appendChild(path);
     return svg;
 }
 
@@ -181,7 +168,6 @@ window.initSettings = function () {
             rightCol.className = 'flex items-center flex-shrink-0';
 
             const total = nodeUpdates.length;
-            const updatedCount = nodeUpdates.filter(n => n.status === 'updated' || n.status === 'current').length;
             const pendingCount = nodeUpdates.filter(n => n.status === 'pending').length;
             const failedCount = nodeUpdates.filter(n => n.status === 'failed' || n.status === 'expired').length;
 
@@ -208,13 +194,27 @@ window.initSettings = function () {
             nodeBtn.id = 'btn-open-node-updates-modal';
             nodeBtn.title = window.I18N?.web_nodes_badge_tooltip || "Нажмите для просмотра списка нод";
             nodeBtn.className = `inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold border transition shadow-sm active:scale-95 cursor-pointer select-none ${badgeClass}`;
-            nodeBtn.innerHTML = `
-                <span class="w-1.5 h-1.5 rounded-full ${dotClass} flex-shrink-0"></span>
-                <span class="whitespace-nowrap">${badgeText}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 opacity-60 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                </svg>
-            `;
+
+            const dotSpan = document.createElement('span');
+            dotSpan.className = `w-1.5 h-1.5 rounded-full ${dotClass} flex-shrink-0`;
+
+            const badgeSpan = document.createElement('span');
+            badgeSpan.className = 'whitespace-nowrap';
+            badgeSpan.textContent = badgeText;
+
+            const chevronSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            chevronSvg.setAttribute('class', 'h-3 w-3 opacity-60 flex-shrink-0');
+            chevronSvg.setAttribute('fill', 'none');
+            chevronSvg.setAttribute('viewBox', '0 0 24 24');
+            chevronSvg.setAttribute('stroke', 'currentColor');
+            const chevronPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            chevronPath.setAttribute('stroke-linecap', 'round');
+            chevronPath.setAttribute('stroke-linejoin', 'round');
+            chevronPath.setAttribute('stroke-width', '2');
+            chevronPath.setAttribute('d', 'M9 5l7 7-7 7');
+            chevronSvg.appendChild(chevronPath);
+
+            nodeBtn.replaceChildren(dotSpan, badgeSpan, chevronSvg);
             nodeBtn.addEventListener('click', () => openNodeUpdatesModal(data));
             rightCol.appendChild(nodeBtn);
             wrapper.appendChild(rightCol);
@@ -238,6 +238,58 @@ window.initSettings = function () {
         const modalBtnDoUpdate = document.getElementById('modalBtnDoUpdate');
         const modalBtnCloseUpdates = document.getElementById('modalBtnCloseUpdates');
 
+        if (modalBtnCloseUpdates) {
+            const totalNodes = nodeUpdates.length;
+            const updatedNodesCount = nodeUpdates.filter(
+                n => n.status === 'updated' || n.status === 'current'
+            ).length;
+            const pendingNodesCount = totalNodes - updatedNodesCount;
+
+            const baseBtnClass = 'w-full py-3 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2';
+            let statusBtnClass = 'bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-gray-700 dark:text-gray-200';
+            let statusLabel = window.I18N?.btn_close || 'Закрыть';
+            let statusIconPath = '';
+
+            if (totalNodes > 0) {
+                if (pendingNodesCount === 0) {
+                    statusBtnClass = 'is-all-updated bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-500/20';
+                    statusLabel = window.I18N?.web_nodes_modal_all_updated || 'Все ноды обновлены';
+                    statusIconPath = 'M5 13l4 4L19 7';
+                } else if (updatedNodesCount > 0) {
+                    statusBtnClass = 'is-partial-update text-white shadow-lg';
+                    statusLabel = (window.I18N?.web_nodes_modal_partial_update || '{pending} из {total} требует обновления')
+                        .replace('{pending}', String(pendingNodesCount))
+                        .replace('{total}', String(totalNodes));
+                    statusIconPath = 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z';
+                } else {
+                    statusBtnClass = 'is-none-updated bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20';
+                    statusLabel = (window.I18N?.web_nodes_modal_none_updated || '{total} требует обновления')
+                        .replace('{total}', String(totalNodes));
+                    statusIconPath = 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z';
+                }
+            }
+
+            modalBtnCloseUpdates.className = `${baseBtnClass} ${statusBtnClass}`;
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = statusLabel;
+            if (statusIconPath) {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('class', 'h-5 w-5 flex-shrink-0');
+                svg.setAttribute('fill', 'none');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('stroke', 'currentColor');
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('stroke-linecap', 'round');
+                path.setAttribute('stroke-linejoin', 'round');
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('d', statusIconPath);
+                svg.appendChild(path);
+                modalBtnCloseUpdates.replaceChildren(svg, labelSpan);
+            } else {
+                modalBtnCloseUpdates.replaceChildren(labelSpan);
+            }
+        }
+
         if (modalBtnDoUpdate && modalBtnCloseUpdates) {
             if (data.update_available) {
                 modalBtnDoUpdate.classList.remove('hidden');
@@ -253,7 +305,7 @@ window.initSettings = function () {
 
             if (nodeUpdates.length === 0) {
                 const empty = document.createElement('div');
-                empty.className = 'text-center text-gray-500 py-4';
+                empty.className = 'col-span-full text-center text-gray-500 py-4';
                 empty.textContent = window.I18N?.web_nodes_not_found || "Ноды не найдены";
                 listEl.appendChild(empty);
             } else {
@@ -266,14 +318,14 @@ window.initSettings = function () {
                     let iconBgClass = 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400';
                     let badgeBgClass = 'bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-400';
                     let badgeText = String(node.status || '').toUpperCase();
-                    let statusDesc = window.I18N?.web_nodes_client_synced || 'Синхронизирован';
+                    let statusDesc = window.I18N?.web_nodes_client_synced || 'Нода синхронизирована';
 
                     if (isUpdated) {
                         bgClass = 'is-updated';
                         iconBgClass = 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
                         badgeBgClass = 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
                         badgeText = (window.I18N?.web_nodes_badge_updated || 'ОБНОВЛЁН').toUpperCase();
-                        statusDesc = window.I18N?.web_nodes_client_synced || 'Синхронизирован';
+                        statusDesc = window.I18N?.web_nodes_client_synced || 'Нода синхронизирована';
                     } else if (isPending) {
                         bgClass = 'is-pending';
                         iconBgClass = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400';
@@ -298,32 +350,86 @@ window.initSettings = function () {
                     const versionLabel = nodeVersion || (window.I18N?.web_notif_source_node || 'Нода');
 
                     const rawName = String(node.name || 'Unnamed');
-                    const serverIconSvg = `
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-                        </svg>
-                    `;
 
                     const item = document.createElement('div');
-                    item.className = `node-update-item flex items-center justify-between p-3 rounded-xl border ${bgClass} transition hover:shadow-sm`;
-                    item.innerHTML = `
-                        <div class="flex items-center gap-3 overflow-hidden">
-                            <div class="p-2 rounded-lg ${iconBgClass} flex-shrink-0">
-                                ${serverIconSvg}
-                            </div>
-                            <div class="min-w-0">
-                                <div class="text-sm font-bold text-gray-900 dark:text-white truncate data-sensitive" title="${escapeHtml(rawName)}">${escapeHtml(rawName)}</div>
-                                <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                                    <span>${escapeHtml(versionLabel)}</span>
-                                    <span>•</span>
-                                    <span>${escapeHtml(statusDesc)}</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex-shrink-0 ml-2">
-                            <span class="px-2 py-1 ${badgeBgClass} text-[10px] font-bold uppercase rounded-lg tracking-wider">${escapeHtml(badgeText)}</span>
-                        </div>
-                    `;
+                    item.className = `node-update-item min-w-0 p-3 rounded-xl border ${bgClass} transition hover:shadow-sm`;
+
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center gap-3 min-w-0';
+
+                    const iconWrap = document.createElement('div');
+                    iconWrap.className = `node-update-icon relative p-2 rounded-lg ${iconBgClass} flex-shrink-0`;
+
+                    const serverSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    serverSvg.setAttribute('class', 'h-5 w-5');
+                    serverSvg.setAttribute('fill', 'none');
+                    serverSvg.setAttribute('viewBox', '0 0 24 24');
+                    serverSvg.setAttribute('stroke', 'currentColor');
+                    const serverPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    serverPath.setAttribute('stroke-linecap', 'round');
+                    serverPath.setAttribute('stroke-linejoin', 'round');
+                    serverPath.setAttribute('stroke-width', '2');
+                    serverPath.setAttribute('d', 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01');
+                    serverSvg.appendChild(serverPath);
+                    iconWrap.appendChild(serverSvg);
+
+                    if (isUpdated) {
+                        const checkSpan = document.createElement('span');
+                        checkSpan.className = 'node-update-check flex h-4 w-4 items-center justify-center rounded-full bg-green-500 text-white ring-2 ring-white dark:ring-gray-900';
+                        checkSpan.setAttribute('role', 'img');
+                        checkSpan.setAttribute('aria-label', badgeText);
+                        checkSpan.title = badgeText;
+
+                        const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                        checkSvg.setAttribute('class', 'h-3 w-3');
+                        checkSvg.setAttribute('fill', 'none');
+                        checkSvg.setAttribute('viewBox', '0 0 24 24');
+                        checkSvg.setAttribute('stroke', 'currentColor');
+                        checkSvg.setAttribute('aria-hidden', 'true');
+                        const checkPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        checkPath.setAttribute('stroke-linecap', 'round');
+                        checkPath.setAttribute('stroke-linejoin', 'round');
+                        checkPath.setAttribute('stroke-width', '3');
+                        checkPath.setAttribute('d', 'M5 13l4 4L19 7');
+                        checkSvg.appendChild(checkPath);
+                        checkSpan.appendChild(checkSvg);
+                        iconWrap.appendChild(checkSpan);
+                    }
+
+                    const textWrap = document.createElement('div');
+                    textWrap.className = 'min-w-0 flex-1';
+
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'text-sm font-bold text-gray-900 dark:text-white truncate data-sensitive';
+                    nameEl.title = rawName;
+                    nameEl.textContent = rawName;
+
+                    const metaEl = document.createElement('div');
+                    metaEl.className = 'text-xs text-gray-500 dark:text-gray-400';
+
+                    const verSpan = document.createElement('span');
+                    verSpan.textContent = versionLabel;
+                    const sepSpan = document.createElement('span');
+                    sepSpan.setAttribute('aria-hidden', 'true');
+                    sepSpan.textContent = ' · ';
+                    const descSpan = document.createElement('span');
+                    descSpan.textContent = statusDesc;
+
+                    metaEl.replaceChildren(verSpan, sepSpan, descSpan);
+                    textWrap.replaceChildren(nameEl, metaEl);
+                    row.replaceChildren(iconWrap, textWrap);
+                    item.appendChild(row);
+
+                    if (!isUpdated) {
+                        const badgeRow = document.createElement('div');
+                        badgeRow.className = 'flex justify-end mt-3';
+                        const statusBadge = document.createElement('span');
+                        statusBadge.className = `flex-shrink-0 px-2 py-1 ${badgeBgClass} text-[10px] font-bold uppercase rounded-lg tracking-wider`;
+                        statusBadge.textContent = badgeText;
+                        badgeRow.appendChild(statusBadge);
+                        item.appendChild(badgeRow);
+                    }
+
                     listEl.appendChild(item);
                 });
             }
@@ -516,6 +622,54 @@ document.addEventListener("DOMContentLoaded", () => {
     const favFallback = document.getElementById('faviconFallback');
     const fileInput = document.getElementById('favFileInput');
 
+    // --- RESIZE LOGIC (Max 512x512) ---
+    function processAndResizeImage(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const img = new Image();
+            img.onload = function () {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const maxSize = 512;
+
+                // Calculate aspect ratio
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = Math.round(height * (maxSize / width));
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = Math.round(width * (maxSize / height));
+                        height = maxSize;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // To Base64 (PNG)
+                const dataUrl = canvas.toDataURL('image/png');
+
+                // Insert into input
+                favInput.value = dataUrl;
+                updateFaviconPreview();
+
+                const msg = (typeof window.I18N !== 'undefined' && window.I18N.web_image_uploaded)
+                    ? window.I18N.web_image_uploaded
+                    : "Image resized & loaded!";
+                if (window.showToast) window.showToast(msg);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+    // ----------------------------------
+
     if (favInput && favImg) {
         favInput.addEventListener('input', updateFaviconPreview);
 
@@ -524,63 +678,13 @@ document.addEventListener("DOMContentLoaded", () => {
             if (favFallback) favFallback.style.display = 'block';
         });
 
-        // --- RESIZE LOGIC (Max 512x512) ---
-        const processAndResizeImage = (file) => {
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                const img = new Image();
-                img.onload = function () {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    const maxSize = 512;
-
-                    // Calculate aspect ratio
-                    if (width > height) {
-                        if (width > maxSize) {
-                            height = Math.round(height * (maxSize / width));
-                            width = maxSize;
-                        }
-                    } else {
-                        if (height > maxSize) {
-                            width = Math.round(width * (maxSize / height));
-                            height = maxSize;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    // To Base64 (PNG)
-                    const dataUrl = canvas.toDataURL('image/png');
-
-                    // Insert into input
-                    favInput.value = dataUrl;
-                    updateFaviconPreview();
-
-                    const msg = (typeof window.I18N !== 'undefined' && window.I18N.web_image_uploaded)
-                        ? window.I18N.web_image_uploaded
-                        : "Image resized & loaded!";
-                    if (window.showToast) window.showToast(msg);
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        };
-        // ----------------------------------
-
         // Paste Handler
         favInput.addEventListener('paste', (e) => {
             const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf("image") === 0) {
-                    e.preventDefault();
-                    processAndResizeImage(items[i].getAsFile());
-                    break;
-                }
+            const imageItem = Array.from(items).find(item => item.type.indexOf("image") === 0);
+            if (imageItem) {
+                e.preventDefault();
+                processAndResizeImage(imageItem.getAsFile());
             }
         });
 
@@ -656,10 +760,11 @@ function initSystemSettingsTracking() {
         const btn = document.getElementById(config.btnId);
         if (!btn) continue;
 
+        const groupSnapshot = Reflect.get(initialConfig, groupName);
         config.ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
-                initialConfig[groupName][id] = el.value;
+                if (groupSnapshot) Reflect.set(groupSnapshot, id, el.value);
                 el.addEventListener('input', () => checkForChanges(groupName));
                 el.addEventListener('change', () => checkForChanges(groupName));
             }
@@ -756,7 +861,8 @@ function showError(fieldId, message) {
 }
 
 function checkForChanges(groupName) {
-    const config = groups[groupName];
+    const config = Reflect.get(groups, groupName);
+    const groupSnapshot = Reflect.get(initialConfig, groupName);
     let hasChanges = false;
 
     config.ids.forEach(id => {
@@ -769,7 +875,7 @@ function checkForChanges(groupName) {
                     displayEl.innerText = el.value + '%';
                 }
             }
-            if (el.value !== initialConfig[groupName][id]) {
+            if (groupSnapshot && el.value !== Reflect.get(groupSnapshot, id)) {
                 hasChanges = true;
             }
         }
@@ -792,7 +898,7 @@ function toggleSaveButton(btnId, enable) {
 }
 
 window.saveSystemConfig = async function(groupName) {
-    const config = groups[groupName];
+    const config = Reflect.get(groups, groupName);
     const btn = document.getElementById(config.btnId);
     if (!btn) return;
 
@@ -864,9 +970,10 @@ window.saveSystemConfig = async function(groupName) {
         });
         if (res.ok) {
             for (const [grp, cfg] of Object.entries(groups)) {
+                const grpSnapshot = Reflect.get(initialConfig, grp);
                 cfg.ids.forEach(id => {
                     const el = document.getElementById(id);
-                    if (el) initialConfig[grp][id] = el.value;
+                    if (el && grpSnapshot) Reflect.set(grpSnapshot, id, el.value);
                 });
             }
             btn.innerText = window.I18N.web_saved_btn;
@@ -1402,19 +1509,15 @@ function urlBase64ToUint8Array(base64String) {
         .replace(/\-/g, '+')
         .replace(/_/g, '/');
     const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
+    return Uint8Array.from(rawData, ch => ch.charCodeAt(0));
 }
 
 function arrayBufferToBase64Url(buffer) {
     if (!buffer) return '';
     const bytes = new Uint8Array(buffer);
     let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
     }
     return window.btoa(binary)
         .replace(/\+/g, '-')
@@ -1925,7 +2028,8 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 
         textSpan.textContent = message;
         statusEl.appendChild(textSpan);
     }
-    statusEl.classList.add('opacity-100', ...(stateClasses[state] || stateClasses.neutral));
+    const activeClasses = Reflect.get(stateClasses, state) || stateClasses.neutral;
+    statusEl.classList.add('opacity-100', ...activeClasses);
 
     if (autoHideMs > 0) {
         notifStatusHideTimer = setTimeout(() => {
@@ -2450,6 +2554,7 @@ async function fetchSessions() {
             renderSessionsMainWidget(data.sessions);
         }
     } catch (e) {
+        console.debug('Failed to load active sessions:', e);
         const errorLoading = (typeof window.I18N !== 'undefined' && window.I18N.web_error_loading_sessions) ? window.I18N.web_error_loading_sessions : "Error loading sessions";
         window.setSafeHTML(container, `<div class="text-red-500 text-sm text-center">${errorLoading}</div>`);
     }
@@ -2626,15 +2731,30 @@ async function revokeSession(token) {
     }
 }
 
+function createButtonCheckSvg() {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('xmlns', svgNS);
+    svg.setAttribute('class', 'h-5 w-5');
+    svg.setAttribute('viewBox', '0 0 20 20');
+    svg.setAttribute('fill', 'currentColor');
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('fill-rule', 'evenodd');
+    path.setAttribute('clip-rule', 'evenodd');
+    path.setAttribute('d', 'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z');
+    svg.appendChild(path);
+    return svg;
+}
+
 async function revokeAllSessions() {
     if (!await window.showModalConfirm(window.I18N.web_sessions_revoke_all + "?", window.I18N.modal_title_confirm)) return;
 
     const btn = document.getElementById('btnRevokeAllSessions');
-    const originalText = btn ? btn.innerHTML : "";
+    const originalNodes = btn ? Array.from(btn.childNodes) : [];
 
     if (btn) {
         btn.disabled = true;
-        window.setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+        btn.replaceChildren(createSpinnerSvg('animate-spin h-5 w-5 text-white'));
     }
 
     try {
@@ -2647,7 +2767,7 @@ async function revokeAllSessions() {
         if (res.ok) {
             if (btn) {
                 btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";
-                window.setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${window.I18N.web_sessions_revoked_alert}`);
+                btn.replaceChildren(createButtonCheckSvg(), document.createTextNode(' ' + window.I18N.web_sessions_revoked_alert));
             }
             await fetchSessions();
             const content = document.getElementById('sessionsModalContent');
@@ -2666,14 +2786,14 @@ async function revokeAllSessions() {
             await window.showModalAlert(data.error || "Failed", errorShort);
             if (btn) {
                 btn.disabled = false;
-                window.setSafeHTML(btn, originalText);
+                btn.replaceChildren(...originalNodes);
             }
         }
     } catch (e) {
         console.error(e);
         if (btn) {
             btn.disabled = false;
-            window.setSafeHTML(btn, originalText);
+            btn.replaceChildren(...originalNodes);
         }
     }
 }
@@ -2739,9 +2859,9 @@ window.saveMetaData = async function () {
         }
     }
 
-    const originalText = btn.innerHTML;
+    const originalNodes = Array.from(btn.childNodes);
     btn.disabled = true;
-    window.setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+    btn.replaceChildren(createSpinnerSvg('animate-spin h-5 w-5 text-white'));
 
     const data = {
         favicon: document.getElementById('meta_favicon').value.trim(),
@@ -2763,7 +2883,7 @@ window.saveMetaData = async function () {
         try {
             json = JSON.parse(responseText);
         } catch (e) {
-            console.error("Server Response:", responseText);
+            console.error("Server Response:", responseText, e);
             throw new Error(`Server Error (${res.status}): ${responseText.substring(0, 150)}...`);
         }
 
@@ -2784,19 +2904,19 @@ window.saveMetaData = async function () {
                 location.reload();
             } else {
                 window.closeMetaModal();
-                window.setSafeHTML(btn, originalText);
+                btn.replaceChildren(...originalNodes);
                 btn.disabled = false;
             }
         } else {
             const errorTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
             await window.showModalAlert(json.error || "Failed to save", errorTitle);
-            window.setSafeHTML(btn, originalText);
+            btn.replaceChildren(...originalNodes);
             btn.disabled = false;
         }
     } catch (e) {
         const errorTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_conn_error_short) ? window.I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(e.message || e.toString(), errorTitle);
-        window.setSafeHTML(btn, originalText);
+        btn.replaceChildren(...originalNodes);
         btn.disabled = false;
     }
 };
