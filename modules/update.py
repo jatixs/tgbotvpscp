@@ -47,11 +47,127 @@ def validate_branch_name(branch: str) -> str:
     return branch
 
 
+async def _run_git(subcmd: str, *rest: str):
+    if subcmd == "fetch" and rest == ("origin",):
+        return await asyncio.create_subprocess_exec(
+            "git", "fetch", "origin",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    if subcmd == "show" and len(rest) == 1:
+        return await asyncio.create_subprocess_exec(
+            "git", "show", rest[0],
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    if subcmd == "rev-parse" and rest == ("--abbrev-ref", "HEAD"):
+        return await asyncio.create_subprocess_exec(
+            "git", "rev-parse", "--abbrev-ref", "HEAD",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    if subcmd == "rev-parse" and len(rest) == 1:
+        return await asyncio.create_subprocess_exec(
+            "git", "rev-parse", rest[0],
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    if subcmd == "rev-parse" and len(rest) == 2 and rest[0] == "--verify":
+        return await asyncio.create_subprocess_exec(
+            "git", "rev-parse", "--verify", rest[1],
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    if subcmd == "reset" and len(rest) == 2 and rest[0] == "--hard":
+        return await asyncio.create_subprocess_exec(
+            "git", "reset", "--hard", rest[1],
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    if subcmd == "cat-file" and len(rest) == 2 and rest[0] == "-e":
+        return await asyncio.create_subprocess_exec(
+            "git", "cat-file", "-e", rest[1],
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+    raise ValueError(f"Unsupported git command: {subcmd!r} {rest!r}")
+
+
+async def _run_apt(in_container: bool, action: str):
+    if in_container:
+        if action == "update":
+            return await asyncio.create_subprocess_exec(
+                "nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--",
+                "env", "DEBIAN_FRONTEND=noninteractive", "apt", "update",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+        if action == "upgrade":
+            return await asyncio.create_subprocess_exec(
+                "nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--",
+                "env", "DEBIAN_FRONTEND=noninteractive", "apt", "upgrade", "-y",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+        if action == "autoremove":
+            return await asyncio.create_subprocess_exec(
+                "nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--",
+                "env", "DEBIAN_FRONTEND=noninteractive", "apt", "autoremove", "-y",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+    else:
+        if action == "update":
+            return await asyncio.create_subprocess_exec(
+                "sudo", "DEBIAN_FRONTEND=noninteractive", "apt", "update",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+        if action == "upgrade":
+            return await asyncio.create_subprocess_exec(
+                "sudo", "DEBIAN_FRONTEND=noninteractive", "apt", "upgrade", "-y",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+        if action == "autoremove":
+            return await asyncio.create_subprocess_exec(
+                "sudo", "DEBIAN_FRONTEND=noninteractive", "apt", "autoremove", "-y",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+        if action == "clean":
+            return await asyncio.create_subprocess_exec(
+                "sudo", "DEBIAN_FRONTEND=noninteractive", "apt", "clean",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+    raise ValueError(f"Unsupported apt action: {action!r}")
+
+
 async def run_command(*args):
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
+        if not args:
+            raise ValueError("Empty command")
+        program = args[0]
+        if program == "git":
+            proc = await _run_git(args[1], *args[2:])
+        elif program == sys.executable and args == (
+            sys.executable, "-m", "pip", "install", "--upgrade", "-r", "requirements.txt"
+        ):
+            child_env = os.environ.copy()
+            exe_dir = os.path.dirname(sys.executable)
+            if exe_dir:
+                current_path = child_env.get("PATH", "")
+                child_env["PATH"] = f"{exe_dir}{os.pathsep}{current_path}" if current_path else exe_dir
+            if os.name == "nt":
+                proc = await asyncio.create_subprocess_exec(
+                    "python", "-m", "pip", "install", "--upgrade", "-r", "requirements.txt",
+                    env=child_env,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+            else:
+                proc = await asyncio.create_subprocess_exec(
+                    "python3", "-m", "pip", "install", "--upgrade", "-r", "requirements.txt",
+                    env=child_env,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+        elif args == ("sudo", "/opt/tg-bot/scripts/update_os.sh"):
+            proc = await asyncio.create_subprocess_exec(
+                "sudo", "/opt/tg-bot/scripts/update_os.sh",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+        elif program == "sudo" and len(args) in (4, 5) and args[1] == "DEBIAN_FRONTEND=noninteractive" and args[2] == "apt":
+            proc = await _run_apt(False, args[3])
+        elif program == "nsenter" and len(args) in (13, 14) and args[10:12] == ("DEBIAN_FRONTEND=noninteractive", "apt"):
+            proc = await _run_apt(True, args[12])
+        else:
+            raise ValueError(f"Unsupported command: {args!r}")
         stdout, stderr = await proc.communicate()
         return (proc.returncode, stdout.decode().strip(), stderr.decode().strip())
     except Exception as e:

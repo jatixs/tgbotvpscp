@@ -226,17 +226,33 @@ async def cmd_restart(args):
             compose = await _docker_compose_command()
             profile = _docker_compose_profile()
             container = f"tg-bot-{profile}"
-            command = [*compose, "--profile", profile, "restart", container]
+            if compose[1:2] == ["compose"]:
+                result = subprocess.run(
+                    ["docker", "compose", "--profile", profile, "restart", container],
+                    cwd=base_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+            else:
+                result = subprocess.run(
+                    ["docker-compose", "--profile", profile, "restart", container],
+                    cwd=base_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
         else:
-            command = ["sudo", "systemctl", "restart", "tg-bot"]
-        result = subprocess.run(
-            command,
-            cwd=base_dir,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
+            result = subprocess.run(
+                ["sudo", "systemctl", "restart", "tg-bot"],
+                cwd=base_dir,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
         if result.returncode:
             raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "restart command failed")
         print("Restart command completed.")
@@ -287,14 +303,24 @@ async def cmd_status(args):
     if os.environ.get("DEPLOY_MODE") == "docker":
         compose = await _docker_compose_command()
         profile = _docker_compose_profile()
-        result = subprocess.run(
-            [*compose, "--profile", profile, "ps", "--format", "json"],
-            cwd=base_dir,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
+        if compose[1:2] == ["compose"]:
+            result = subprocess.run(
+                ["docker", "compose", "--profile", profile, "ps", "--format", "json"],
+                cwd=base_dir,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        else:
+            result = subprocess.run(
+                ["docker-compose", "--profile", profile, "ps", "--format", "json"],
+                cwd=base_dir,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
         if result.returncode:
             raise RuntimeError(result.stderr.strip() or "docker compose ps failed")
         print("Docker mode:")

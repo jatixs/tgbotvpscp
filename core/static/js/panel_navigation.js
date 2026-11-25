@@ -74,7 +74,7 @@
         if (url.origin !== location.origin || !pages.has(normPath)) return;
         const currentMain = document.querySelector('main[data-panel-page]');
         const currentDomPage = currentMain ? currentMain.dataset.panelPage : null;
-        const expectedPage = pageKeyMap[normPath];
+        const expectedPage = Reflect.get(pageKeyMap, normPath);
         if (history && currentDomPage === expectedPage && url.search === location.search) {
             if (pending) {
                 pending.abort();
@@ -99,6 +99,12 @@
         pendingTarget = targetUrl;
         const mainEl = document.querySelector('main');
         if (mainEl) mainEl.setAttribute('aria-busy', 'true');
+
+        function finishTransition(transition) {
+            if (activeTransition !== transition) return;
+            activeTransition = null;
+            if (document.documentElement?.dataset) delete document.documentElement.dataset.panelNavigating;
+        }
 
         try {
             const options = {
@@ -135,11 +141,11 @@
             const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
             const main = doc.querySelector('main[data-panel-page]');
             const nav = doc.querySelector('nav');
-            const expectedPage = pageKeyMap[normPath];
+            const expectedPage = Reflect.get(pageKeyMap, normPath);
             if (!main || !nav || main.dataset.panelPage !== expectedPage) throw new Error('Unexpected page');
             if (controller.signal.aborted) return;
 
-            const targetModalId = modalIdMap[expectedPage];
+            const targetModalId = expectedPage ? Reflect.get(modalIdMap, expectedPage) : undefined;
             const sections = [main, nav, targetModalId ? doc.getElementById(targetModalId) : null].filter(Boolean);
             sections.forEach(section => {
                 section.querySelectorAll?.('script')?.forEach(script => {
@@ -220,12 +226,8 @@
                         transition.finished.catch(() => {});
                     }
                     // Keep navigation styles until the visual animation has actually finished.
-                    const finish = () => {
-                        if (activeTransition !== transition) return;
-                        activeTransition = null;
-                        if (document.documentElement?.dataset) delete document.documentElement.dataset.panelNavigating;
-                    };
-                    Promise.resolve(transition.finished).then(finish, finish);
+                    const onTransitionEnd = finishTransition.bind(null, transition);
+                    Promise.resolve(transition.finished).then(onTransitionEnd, onTransitionEnd);
                     await (transition.updateCallbackDone || transition.finished || Promise.resolve());
                 } catch {
                     if (!domUpdated) {

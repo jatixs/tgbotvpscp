@@ -27,7 +27,7 @@
         let expired = false;
 
         function showStatus(key) {
-            indicator.textContent = indicator.dataset[key] || '';
+            indicator.textContent = Reflect.get(indicator.dataset, key) || '';
             indicator.hidden = false;
         }
 

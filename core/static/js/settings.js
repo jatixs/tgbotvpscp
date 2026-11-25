@@ -63,28 +63,15 @@ function createStatusSvg(state) {
     svg.setAttribute('fill', 'none');
     svg.setAttribute('viewBox', '0 0 24 24');
     if (state === 'neutral') {
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('class', 'opacity-25');
-        circle.setAttribute('cx', '12');
-        circle.setAttribute('cy', '12');
-        circle.setAttribute('r', '10');
-        circle.setAttribute('stroke', 'currentColor');
-        circle.setAttribute('stroke-width', '4');
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('class', 'opacity-75');
-        path.setAttribute('fill', 'currentColor');
-        path.setAttribute('d', 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z');
-        svg.appendChild(circle);
-        svg.appendChild(path);
-    } else {
-        svg.setAttribute('stroke', 'currentColor');
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('stroke-linecap', 'round');
-        path.setAttribute('stroke-linejoin', 'round');
-        path.setAttribute('stroke-width', '3');
-        path.setAttribute('d', state === 'success' ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12');
-        svg.appendChild(path);
+        return createSpinnerSvg('w-3 h-3 animate-spin');
     }
+    svg.setAttribute('stroke', 'currentColor');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-width', '3');
+    path.setAttribute('d', state === 'success' ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12');
+    svg.appendChild(path);
     return svg;
 }
 
@@ -117,6 +104,348 @@ window.initSettings = function () {
     const updateProgress = document.getElementById('update-progress');
     let targetBranch = null;
     let nodeUpdatePlan = null;
+    let latestUpdateData = null;
+
+    function renderUpdateStatus(data) {
+        latestUpdateData = data;
+        targetBranch = data.target_branch || null;
+        nodeUpdatePlan = data.node_plan || null;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'w-full flex items-center justify-between gap-2.5 sm:gap-3';
+
+        const leftCol = document.createElement('div');
+        leftCol.className = 'flex items-center gap-2.5 sm:gap-3 min-w-0';
+
+        if (data.update_available) {
+            const iconBox = document.createElement('div');
+            iconBox.className = 'w-7 h-7 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center flex-shrink-0';
+            iconBox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>';
+
+            const textBox = document.createElement('div');
+            textBox.className = 'min-w-0';
+
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'font-bold text-xs sm:text-[13px] text-green-600 dark:text-green-400 leading-tight';
+            titleDiv.textContent = window.I18N?.web_update_available_title || "Update Available!";
+
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate';
+            infoDiv.textContent = (window.I18N?.web_update_info || "Current: {local} → New: {remote}")
+                .replace('{local}', data.local_version)
+                .replace('{remote}', data.remote_version);
+
+            textBox.appendChild(titleDiv);
+            textBox.appendChild(infoDiv);
+            leftCol.appendChild(iconBox);
+            leftCol.appendChild(textBox);
+
+            if (btnDoUpdate) btnDoUpdate.classList.remove('d-none');
+        } else {
+            const iconBox = document.createElement('div');
+            iconBox.className = 'w-7 h-7 rounded-lg bg-green-500/10 text-green-500 flex items-center justify-center flex-shrink-0';
+            iconBox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>';
+
+            const textBox = document.createElement('div');
+            textBox.className = 'min-w-0';
+
+            const uptodateDiv = document.createElement('div');
+            uptodateDiv.className = 'text-xs sm:text-[13px] font-medium text-gray-900 dark:text-white leading-snug';
+            uptodateDiv.textContent = (window.I18N?.web_update_uptodate || "Latest version installed ({version})").replace('{version}', data.local_version);
+
+            textBox.appendChild(uptodateDiv);
+            leftCol.appendChild(iconBox);
+            leftCol.appendChild(textBox);
+
+            if (btnDoUpdate) btnDoUpdate.classList.add('d-none');
+        }
+
+        wrapper.appendChild(leftCol);
+
+        const nodeUpdates = data.node_updates || [];
+        if (nodeUpdates.length > 0) {
+            const rightCol = document.createElement('div');
+            rightCol.className = 'flex items-center flex-shrink-0';
+
+            const total = nodeUpdates.length;
+            const pendingCount = nodeUpdates.filter(n => n.status === 'pending').length;
+            const failedCount = nodeUpdates.filter(n => n.status === 'failed' || n.status === 'expired').length;
+
+            let badgeText = '';
+            let badgeClass = '';
+            let dotClass = '';
+
+            if (pendingCount > 0) {
+                badgeText = (window.I18N?.web_nodes_pending_badge || "Ноды: {count} к обн.").replace('{count}', pendingCount);
+                badgeClass = 'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30';
+                dotClass = 'bg-yellow-500 animate-pulse';
+            } else if (failedCount > 0) {
+                badgeText = (window.I18N?.web_nodes_failed_badge || "Ноды: {count} ошибка").replace('{count}', failedCount);
+                badgeClass = 'bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
+                dotClass = 'bg-red-500';
+            } else {
+                badgeText = (window.I18N?.web_nodes_all_updated_badge || "Ноды: все обновлены ({count})").replace('{count}', total);
+                badgeClass = 'bg-green-500/10 hover:bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
+                dotClass = 'bg-green-500';
+            }
+
+            const nodeBtn = document.createElement('button');
+            nodeBtn.type = 'button';
+            nodeBtn.id = 'btn-open-node-updates-modal';
+            nodeBtn.title = window.I18N?.web_nodes_badge_tooltip || "Нажмите для просмотра списка нод";
+            nodeBtn.className = `inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold border transition shadow-sm active:scale-95 cursor-pointer select-none ${badgeClass}`;
+
+            const dotSpan = document.createElement('span');
+            dotSpan.className = `w-1.5 h-1.5 rounded-full ${dotClass} flex-shrink-0`;
+
+            const badgeSpan = document.createElement('span');
+            badgeSpan.className = 'whitespace-nowrap';
+            badgeSpan.textContent = badgeText;
+
+            const chevronSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            chevronSvg.setAttribute('class', 'h-3 w-3 opacity-60 flex-shrink-0');
+            chevronSvg.setAttribute('fill', 'none');
+            chevronSvg.setAttribute('viewBox', '0 0 24 24');
+            chevronSvg.setAttribute('stroke', 'currentColor');
+            const chevronPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            chevronPath.setAttribute('stroke-linecap', 'round');
+            chevronPath.setAttribute('stroke-linejoin', 'round');
+            chevronPath.setAttribute('stroke-width', '2');
+            chevronPath.setAttribute('d', 'M9 5l7 7-7 7');
+            chevronSvg.appendChild(chevronPath);
+
+            nodeBtn.replaceChildren(dotSpan, badgeSpan, chevronSvg);
+            nodeBtn.addEventListener('click', () => openNodeUpdatesModal(data));
+            rightCol.appendChild(nodeBtn);
+            wrapper.appendChild(rightCol);
+        }
+
+        updateStatusArea.replaceChildren(wrapper);
+
+        if (data.update_available && nodeUpdates.length > 0) {
+            openNodeUpdatesModal(data);
+        }
+    }
+
+    function openNodeUpdatesModal(data) {
+        data = data || latestUpdateData;
+        if (!data) return;
+        const modal = document.getElementById('nodeUpdatesModal');
+        if (!modal) return;
+
+        const nodeUpdates = data.node_updates || [];
+        const listEl = document.getElementById('nodeUpdatesList');
+        const modalBtnDoUpdate = document.getElementById('modalBtnDoUpdate');
+        const modalBtnCloseUpdates = document.getElementById('modalBtnCloseUpdates');
+
+        if (modalBtnCloseUpdates) {
+            const totalNodes = nodeUpdates.length;
+            const updatedNodesCount = nodeUpdates.filter(
+                n => n.status === 'updated' || n.status === 'current'
+            ).length;
+            const pendingNodesCount = totalNodes - updatedNodesCount;
+
+            const baseBtnClass = 'w-full py-3 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2';
+            let statusBtnClass = 'bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-gray-700 dark:text-gray-200';
+            let statusLabel = window.I18N?.btn_close || 'Закрыть';
+            let statusIconPath = '';
+
+            if (totalNodes > 0) {
+                if (pendingNodesCount === 0) {
+                    statusBtnClass = 'is-all-updated bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-500/20';
+                    statusLabel = window.I18N?.web_nodes_modal_all_updated || 'Все ноды обновлены';
+                    statusIconPath = 'M5 13l4 4L19 7';
+                } else if (updatedNodesCount > 0) {
+                    statusBtnClass = 'is-partial-update text-white shadow-lg';
+                    statusLabel = (window.I18N?.web_nodes_modal_partial_update || '{pending} из {total} требует обновления')
+                        .replace('{pending}', String(pendingNodesCount))
+                        .replace('{total}', String(totalNodes));
+                    statusIconPath = 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z';
+                } else {
+                    statusBtnClass = 'is-none-updated bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20';
+                    statusLabel = (window.I18N?.web_nodes_modal_none_updated || '{total} требует обновления')
+                        .replace('{total}', String(totalNodes));
+                    statusIconPath = 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z';
+                }
+            }
+
+            modalBtnCloseUpdates.className = `${baseBtnClass} ${statusBtnClass}`;
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = statusLabel;
+            if (statusIconPath) {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('class', 'h-5 w-5 flex-shrink-0');
+                svg.setAttribute('fill', 'none');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('stroke', 'currentColor');
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('stroke-linecap', 'round');
+                path.setAttribute('stroke-linejoin', 'round');
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('d', statusIconPath);
+                svg.appendChild(path);
+                modalBtnCloseUpdates.replaceChildren(svg, labelSpan);
+            } else {
+                modalBtnCloseUpdates.replaceChildren(labelSpan);
+            }
+        }
+
+        if (modalBtnDoUpdate && modalBtnCloseUpdates) {
+            if (data.update_available) {
+                modalBtnDoUpdate.classList.remove('hidden');
+                modalBtnCloseUpdates.classList.add('hidden');
+            } else {
+                modalBtnDoUpdate.classList.add('hidden');
+                modalBtnCloseUpdates.classList.remove('hidden');
+            }
+        }
+
+        if (listEl) {
+            listEl.replaceChildren();
+
+            if (nodeUpdates.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'col-span-full text-center text-gray-500 py-4';
+                empty.textContent = window.I18N?.web_nodes_not_found || "Ноды не найдены";
+                listEl.appendChild(empty);
+            } else {
+                nodeUpdates.forEach(node => {
+                    const isUpdated = (node.status === 'updated' || node.status === 'current');
+                    const isPending = (node.status === 'pending');
+                    const isFailed = (node.status === 'failed' || node.status === 'expired');
+
+                    let bgClass = 'bg-gray-50 dark:bg-black/20 border-gray-100 dark:border-white/5';
+                    let iconBgClass = 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400';
+                    let badgeBgClass = 'bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-400';
+                    let badgeText = String(node.status || '').toUpperCase();
+                    let statusDesc = window.I18N?.web_nodes_client_synced || 'Нода синхронизирована';
+
+                    if (isUpdated) {
+                        bgClass = 'is-updated';
+                        iconBgClass = 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+                        badgeBgClass = 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+                        badgeText = (window.I18N?.web_nodes_badge_updated || 'ОБНОВЛЁН').toUpperCase();
+                        statusDesc = window.I18N?.web_nodes_client_synced || 'Нода синхронизирована';
+                    } else if (isPending) {
+                        bgClass = 'is-pending';
+                        iconBgClass = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400';
+                        badgeBgClass = 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400';
+                        badgeText = (window.I18N?.web_nodes_badge_pending || 'ОЖИДАЕТ').toUpperCase();
+                        statusDesc = window.I18N?.web_nodes_client_pending || 'Требуется обновление';
+                    } else if (isFailed) {
+                        bgClass = 'is-failed';
+                        iconBgClass = 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400';
+                        badgeBgClass = 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400';
+                        badgeText = (window.I18N?.web_nodes_badge_failed || 'ОШИБКА').toUpperCase();
+                        statusDesc = window.I18N?.web_nodes_client_failed || 'Сбой клиента';
+                    }
+
+                    let nodeVersion = node.version || '';
+                    if (!nodeVersion && isUpdated && data.local_version) {
+                        nodeVersion = data.local_version;
+                    }
+                    if (nodeVersion && /^\d/.test(nodeVersion)) {
+                        nodeVersion = 'v' + nodeVersion;
+                    }
+                    const versionLabel = nodeVersion || (window.I18N?.web_notif_source_node || 'Нода');
+
+                    const rawName = String(node.name || 'Unnamed');
+
+                    const item = document.createElement('div');
+                    item.className = `node-update-item min-w-0 p-3 rounded-xl border ${bgClass} transition hover:shadow-sm`;
+
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center gap-3 min-w-0';
+
+                    const iconWrap = document.createElement('div');
+                    iconWrap.className = `node-update-icon relative p-2 rounded-lg ${iconBgClass} flex-shrink-0`;
+
+                    const serverSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    serverSvg.setAttribute('class', 'h-5 w-5');
+                    serverSvg.setAttribute('fill', 'none');
+                    serverSvg.setAttribute('viewBox', '0 0 24 24');
+                    serverSvg.setAttribute('stroke', 'currentColor');
+                    const serverPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    serverPath.setAttribute('stroke-linecap', 'round');
+                    serverPath.setAttribute('stroke-linejoin', 'round');
+                    serverPath.setAttribute('stroke-width', '2');
+                    serverPath.setAttribute('d', 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01');
+                    serverSvg.appendChild(serverPath);
+                    iconWrap.appendChild(serverSvg);
+
+                    if (isUpdated) {
+                        const checkSpan = document.createElement('span');
+                        checkSpan.className = 'node-update-check flex h-4 w-4 items-center justify-center rounded-full bg-green-500 text-white ring-2 ring-white dark:ring-gray-900';
+                        checkSpan.setAttribute('role', 'img');
+                        checkSpan.setAttribute('aria-label', badgeText);
+                        checkSpan.title = badgeText;
+
+                        const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                        checkSvg.setAttribute('class', 'h-3 w-3');
+                        checkSvg.setAttribute('fill', 'none');
+                        checkSvg.setAttribute('viewBox', '0 0 24 24');
+                        checkSvg.setAttribute('stroke', 'currentColor');
+                        checkSvg.setAttribute('aria-hidden', 'true');
+                        const checkPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        checkPath.setAttribute('stroke-linecap', 'round');
+                        checkPath.setAttribute('stroke-linejoin', 'round');
+                        checkPath.setAttribute('stroke-width', '3');
+                        checkPath.setAttribute('d', 'M5 13l4 4L19 7');
+                        checkSvg.appendChild(checkPath);
+                        checkSpan.appendChild(checkSvg);
+                        iconWrap.appendChild(checkSpan);
+                    }
+
+                    const textWrap = document.createElement('div');
+                    textWrap.className = 'min-w-0 flex-1';
+
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'text-sm font-bold text-gray-900 dark:text-white truncate data-sensitive';
+                    nameEl.title = rawName;
+                    nameEl.textContent = rawName;
+
+                    const metaEl = document.createElement('div');
+                    metaEl.className = 'text-xs text-gray-500 dark:text-gray-400';
+
+                    const verSpan = document.createElement('span');
+                    verSpan.textContent = versionLabel;
+                    const sepSpan = document.createElement('span');
+                    sepSpan.setAttribute('aria-hidden', 'true');
+                    sepSpan.textContent = ' · ';
+                    const descSpan = document.createElement('span');
+                    descSpan.textContent = statusDesc;
+
+                    metaEl.replaceChildren(verSpan, sepSpan, descSpan);
+                    textWrap.replaceChildren(nameEl, metaEl);
+                    row.replaceChildren(iconWrap, textWrap);
+                    item.appendChild(row);
+
+                    if (!isUpdated) {
+                        const badgeRow = document.createElement('div');
+                        badgeRow.className = 'flex justify-end mt-3';
+                        const statusBadge = document.createElement('span');
+                        statusBadge.className = `flex-shrink-0 px-2 py-1 ${badgeBgClass} text-[10px] font-bold uppercase rounded-lg tracking-wider`;
+                        statusBadge.textContent = badgeText;
+                        badgeRow.appendChild(statusBadge);
+                        item.appendChild(badgeRow);
+                    }
+
+                    listEl.appendChild(item);
+                });
+            }
+        }
+
+        window.animateModalOpen(modal);
+    }
+
+    function closeNodeUpdatesModal() {
+        const modal = document.getElementById('nodeUpdatesModal');
+        if (modal) {
+            window.animateModalClose(modal);
+        }
+    }
+    window.openNodeUpdatesModal = openNodeUpdatesModal;
+    window.closeNodeUpdatesModal = closeNodeUpdatesModal;
 
     if (btnCheckUpdate) {
         const newBtn = btnCheckUpdate.cloneNode(true);
@@ -137,39 +466,7 @@ window.initSettings = function () {
                 const data = await window.sseRequest('/api/update/check', 'update_check');
                 if (data && data.error) throw new Error(data.error);
 
-                if (data.update_available) {
-                    const infoText = (window.I18N.web_update_info || "Current: {local} -> New: {remote}").replace('{local}', data.local_version).replace('{remote}', data.remote_version);
-                    const updateAvailTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_update_available_title) ? window.I18N.web_update_available_title : "Update Available!";
-                    const availContainer = document.createElement('div');
-                    const titleDiv = document.createElement('div');
-                    titleDiv.className = "font-bold text-green-600 dark:text-green-400";
-                    titleDiv.textContent = updateAvailTitle;
-                    const infoDiv = document.createElement('div');
-                    infoDiv.className = "text-xs text-gray-500 dark:text-gray-400 mt-1";
-                    infoDiv.textContent = infoText;
-                    availContainer.appendChild(titleDiv);
-                    availContainer.appendChild(infoDiv);
-                    updateStatusArea.replaceChildren(availContainer);
-                    targetBranch = data.target_branch;
-                    nodeUpdatePlan = data.node_plan;
-                    if (btnDoUpdate) btnDoUpdate.classList.remove('d-none');
-                } else {
-                    const uptodateText = (window.I18N.web_update_uptodate || "Latest version installed ({version})").replace('{version}', data.local_version);
-                    const span = document.createElement('span');
-                    span.className = 'text-gray-500 dark:text-gray-400 text-sm';
-                    const icon = document.createElement('i');
-                    icon.className = 'fas fa-check-circle text-green-500 mr-1';
-                    span.appendChild(icon);
-                    span.appendChild(document.createTextNode(' ' + uptodateText));
-                    updateStatusArea.replaceChildren(span);
-                }
-                for (const node of data.node_updates || []) {
-                    const row = document.createElement('div');
-                    row.className = 'text-xs text-gray-500 dark:text-gray-400 mt-1';
-                    const nodeStatusText = (typeof window.I18N !== 'undefined') ? Reflect.get(window.I18N, `node_client_update_${node.status}`) : undefined;
-                    row.textContent = `${node.name} · ${nodeStatusText || node.status}`;
-                    updateStatusArea.appendChild(row);
-                }
+                renderUpdateStatus(data);
             } catch (error) {
                 const errorText = (window.I18N.web_update_error || "Error: {error}").replace('{error}', error.message);
                 const span = document.createElement('span');
@@ -325,6 +622,54 @@ document.addEventListener("DOMContentLoaded", () => {
     const favFallback = document.getElementById('faviconFallback');
     const fileInput = document.getElementById('favFileInput');
 
+    // --- RESIZE LOGIC (Max 512x512) ---
+    function processAndResizeImage(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const img = new Image();
+            img.onload = function () {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                const maxSize = 512;
+
+                // Calculate aspect ratio
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = Math.round(height * (maxSize / width));
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = Math.round(width * (maxSize / height));
+                        height = maxSize;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // To Base64 (PNG)
+                const dataUrl = canvas.toDataURL('image/png');
+
+                // Insert into input
+                favInput.value = dataUrl;
+                updateFaviconPreview();
+
+                const msg = (typeof window.I18N !== 'undefined' && window.I18N.web_image_uploaded)
+                    ? window.I18N.web_image_uploaded
+                    : "Image resized & loaded!";
+                if (window.showToast) window.showToast(msg);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+    // ----------------------------------
+
     if (favInput && favImg) {
         favInput.addEventListener('input', updateFaviconPreview);
 
@@ -333,63 +678,13 @@ document.addEventListener("DOMContentLoaded", () => {
             if (favFallback) favFallback.style.display = 'block';
         });
 
-        // --- RESIZE LOGIC (Max 512x512) ---
-        const processAndResizeImage = (file) => {
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                const img = new Image();
-                img.onload = function () {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    const maxSize = 512;
-
-                    // Calculate aspect ratio
-                    if (width > height) {
-                        if (width > maxSize) {
-                            height = Math.round(height * (maxSize / width));
-                            width = maxSize;
-                        }
-                    } else {
-                        if (height > maxSize) {
-                            width = Math.round(width * (maxSize / height));
-                            height = maxSize;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    // To Base64 (PNG)
-                    const dataUrl = canvas.toDataURL('image/png');
-
-                    // Insert into input
-                    favInput.value = dataUrl;
-                    updateFaviconPreview();
-
-                    const msg = (typeof window.I18N !== 'undefined' && window.I18N.web_image_uploaded)
-                        ? window.I18N.web_image_uploaded
-                        : "Image resized & loaded!";
-                    if (window.showToast) window.showToast(msg);
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        };
-        // ----------------------------------
-
         // Paste Handler
         favInput.addEventListener('paste', (e) => {
             const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf("image") === 0) {
-                    e.preventDefault();
-                    processAndResizeImage(items[i].getAsFile());
-                    break;
-                }
+            const imageItem = Array.from(items).find(item => item.type.indexOf("image") === 0);
+            if (imageItem) {
+                e.preventDefault();
+                processAndResizeImage(imageItem.getAsFile());
             }
         });
 
@@ -465,10 +760,11 @@ function initSystemSettingsTracking() {
         const btn = document.getElementById(config.btnId);
         if (!btn) continue;
 
+        const groupSnapshot = Reflect.get(initialConfig, groupName);
         config.ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
-                initialConfig[groupName][id] = el.value;
+                if (groupSnapshot) Reflect.set(groupSnapshot, id, el.value);
                 el.addEventListener('input', () => checkForChanges(groupName));
                 el.addEventListener('change', () => checkForChanges(groupName));
             }
@@ -565,7 +861,8 @@ function showError(fieldId, message) {
 }
 
 function checkForChanges(groupName) {
-    const config = groups[groupName];
+    const config = Reflect.get(groups, groupName);
+    const groupSnapshot = Reflect.get(initialConfig, groupName);
     let hasChanges = false;
 
     config.ids.forEach(id => {
@@ -578,7 +875,7 @@ function checkForChanges(groupName) {
                     displayEl.innerText = el.value + '%';
                 }
             }
-            if (el.value !== initialConfig[groupName][id]) {
+            if (groupSnapshot && el.value !== Reflect.get(groupSnapshot, id)) {
                 hasChanges = true;
             }
         }
@@ -601,7 +898,7 @@ function toggleSaveButton(btnId, enable) {
 }
 
 window.saveSystemConfig = async function(groupName) {
-    const config = groups[groupName];
+    const config = Reflect.get(groups, groupName);
     const btn = document.getElementById(config.btnId);
     if (!btn) return;
 
@@ -673,9 +970,10 @@ window.saveSystemConfig = async function(groupName) {
         });
         if (res.ok) {
             for (const [grp, cfg] of Object.entries(groups)) {
+                const grpSnapshot = Reflect.get(initialConfig, grp);
                 cfg.ids.forEach(id => {
                     const el = document.getElementById(id);
-                    if (el) initialConfig[grp][id] = el.value;
+                    if (el && grpSnapshot) Reflect.set(grpSnapshot, id, el.value);
                 });
             }
             btn.innerText = window.I18N.web_saved_btn;
@@ -1211,19 +1509,15 @@ function urlBase64ToUint8Array(base64String) {
         .replace(/\-/g, '+')
         .replace(/_/g, '/');
     const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
+    return Uint8Array.from(rawData, ch => ch.charCodeAt(0));
 }
 
 function arrayBufferToBase64Url(buffer) {
     if (!buffer) return '';
     const bytes = new Uint8Array(buffer);
     let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
     }
     return window.btoa(binary)
         .replace(/\+/g, '-')
@@ -1584,7 +1878,7 @@ function renderNotifNodesList() {
         <button data-action="switch-notif-view" data-token="${n.id}" class="flex items-center justify-between w-full bg-gray-50 dark:bg-black/20 p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-black/30 transition border border-gray-200 dark:border-white/5 cursor-pointer group">
             <div class="flex items-center gap-3 min-w-0">
                 <i class="icon icon-monitor icon-lg text-blue-500 group-hover:scale-110 transition-transform flex-shrink-0"></i>
-                <span class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
+                <span data-sensitive class="text-sm font-bold text-gray-900 dark:text-white text-left truncate">${escapeHtml(n.name)}</span>
             </div>
             <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
         </button>`;
@@ -1734,7 +2028,8 @@ function showNotifStatus(message, state = 'neutral', autoHideMs = 1800, scope = 
         textSpan.textContent = message;
         statusEl.appendChild(textSpan);
     }
-    statusEl.classList.add('opacity-100', ...(stateClasses[state] || stateClasses.neutral));
+    const activeClasses = Reflect.get(stateClasses, state) || stateClasses.neutral;
+    statusEl.classList.add('opacity-100', ...activeClasses);
 
     if (autoHideMs > 0) {
         notifStatusHideTimer = setTimeout(() => {
@@ -2259,6 +2554,7 @@ async function fetchSessions() {
             renderSessionsMainWidget(data.sessions);
         }
     } catch (e) {
+        console.debug('Failed to load active sessions:', e);
         const errorLoading = (typeof window.I18N !== 'undefined' && window.I18N.web_error_loading_sessions) ? window.I18N.web_error_loading_sessions : "Error loading sessions";
         window.setSafeHTML(container, `<div class="text-red-500 text-sm text-center">${errorLoading}</div>`);
     }
@@ -2348,7 +2644,7 @@ function renderSessionItem(s) {
                 ${userBadge}
                 <div class="text-sm font-bold text-gray-900 dark:text-white truncate" title="${escapeHtml(s.ua)}">${escapeHtml(deviceText)}</div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                    <span class="font-mono">${escapeHtml(window.decryptData(s.ip))}</span>
+                    <span data-sensitive class="font-mono">${escapeHtml(window.decryptData(s.ip))}</span>
                     <span>•</span>
                     <span>${date}</span>
                 </div>
@@ -2435,15 +2731,30 @@ async function revokeSession(token) {
     }
 }
 
+function createButtonCheckSvg() {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('xmlns', svgNS);
+    svg.setAttribute('class', 'h-5 w-5');
+    svg.setAttribute('viewBox', '0 0 20 20');
+    svg.setAttribute('fill', 'currentColor');
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('fill-rule', 'evenodd');
+    path.setAttribute('clip-rule', 'evenodd');
+    path.setAttribute('d', 'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z');
+    svg.appendChild(path);
+    return svg;
+}
+
 async function revokeAllSessions() {
     if (!await window.showModalConfirm(window.I18N.web_sessions_revoke_all + "?", window.I18N.modal_title_confirm)) return;
 
     const btn = document.getElementById('btnRevokeAllSessions');
-    const originalText = btn ? btn.innerHTML : "";
+    const originalNodes = btn ? Array.from(btn.childNodes) : [];
 
     if (btn) {
         btn.disabled = true;
-        window.setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+        btn.replaceChildren(createSpinnerSvg('animate-spin h-5 w-5 text-white'));
     }
 
     try {
@@ -2456,7 +2767,7 @@ async function revokeAllSessions() {
         if (res.ok) {
             if (btn) {
                 btn.className = "w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition-all duration-300 flex items-center justify-center gap-2";
-                window.setSafeHTML(btn, `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg> ${window.I18N.web_sessions_revoked_alert}`);
+                btn.replaceChildren(createButtonCheckSvg(), document.createTextNode(' ' + window.I18N.web_sessions_revoked_alert));
             }
             await fetchSessions();
             const content = document.getElementById('sessionsModalContent');
@@ -2475,14 +2786,14 @@ async function revokeAllSessions() {
             await window.showModalAlert(data.error || "Failed", errorShort);
             if (btn) {
                 btn.disabled = false;
-                window.setSafeHTML(btn, originalText);
+                btn.replaceChildren(...originalNodes);
             }
         }
     } catch (e) {
         console.error(e);
         if (btn) {
             btn.disabled = false;
-            window.setSafeHTML(btn, originalText);
+            btn.replaceChildren(...originalNodes);
         }
     }
 }
@@ -2548,9 +2859,9 @@ window.saveMetaData = async function () {
         }
     }
 
-    const originalText = btn.innerHTML;
+    const originalNodes = Array.from(btn.childNodes);
     btn.disabled = true;
-    window.setSafeHTML(btn, `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`);
+    btn.replaceChildren(createSpinnerSvg('animate-spin h-5 w-5 text-white'));
 
     const data = {
         favicon: document.getElementById('meta_favicon').value.trim(),
@@ -2572,7 +2883,7 @@ window.saveMetaData = async function () {
         try {
             json = JSON.parse(responseText);
         } catch (e) {
-            console.error("Server Response:", responseText);
+            console.error("Server Response:", responseText, e);
             throw new Error(`Server Error (${res.status}): ${responseText.substring(0, 150)}...`);
         }
 
@@ -2593,19 +2904,19 @@ window.saveMetaData = async function () {
                 location.reload();
             } else {
                 window.closeMetaModal();
-                window.setSafeHTML(btn, originalText);
+                btn.replaceChildren(...originalNodes);
                 btn.disabled = false;
             }
         } else {
             const errorTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_error_short) ? window.I18N.web_error_short : "Error";
             await window.showModalAlert(json.error || "Failed to save", errorTitle);
-            window.setSafeHTML(btn, originalText);
+            btn.replaceChildren(...originalNodes);
             btn.disabled = false;
         }
     } catch (e) {
         const errorTitle = (typeof window.I18N !== 'undefined' && window.I18N.web_conn_error_short) ? window.I18N.web_conn_error_short : "Conn Error";
         await window.showModalAlert(e.message || e.toString(), errorTitle);
-        window.setSafeHTML(btn, originalText);
+        btn.replaceChildren(...originalNodes);
         btn.disabled = false;
     }
 };
@@ -2812,6 +3123,7 @@ window.destroySettings = function () {
     if (typeof window.closeHintModal === 'function') window.closeHintModal();
     if (typeof window.closeKeyboardModal === 'function') window.closeKeyboardModal();
     if (typeof window.closePingTargetModal === 'function') window.closePingTargetModal();
+    if (typeof window.closeNodeUpdatesModal === 'function') window.closeNodeUpdatesModal();
 };
 
 

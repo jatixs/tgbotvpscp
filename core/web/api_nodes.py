@@ -35,7 +35,7 @@ from ..config import (
 )
 from ..i18n import STRINGS, get_user_lang
 from ..i18n import get_text as _
-from ..network_addresses import node_ip_addresses
+from ..network_addresses import get_preferred_reverse_ptr, node_ip_addresses
 from ..messaging import send_alert
 from ..rbac import get_role_level as get_user_role_level
 from ..rbac import is_admin as _is_admin
@@ -185,6 +185,10 @@ async def process_node_result_background(
                 else:
                     resolved_params[param_key] = param_value
             final_text = _(key, lang, **resolved_params)
+            if cmd == "selftest" and key == "node_selftest_results_body":
+                ptr = await get_preferred_reverse_ptr(params.get("ipv4", ""), params.get("ipv6", ""))
+                if ptr:
+                    final_text += "\n" + _("selftest_reverse_ptr", lang, ptr=escape_html(ptr))
         except Exception as exc:
             logging.error("Error processing i18n node result: %s", exc)
             final_text = str(text)
@@ -381,6 +385,8 @@ async def handle_heartbeat(request: web.Request) -> web.StreamResponse:
     stats = data.get("stats", {})
     client_report = node_updates.normalize_report(data.get("client_update"))
     stats["client_update"] = client_report
+    if client_report.get("version"):
+        stats["client_version"] = client_report["version"]
     results = data.get("results", [])
     if isinstance(data.get("agent_https"), bool):
         await nodes_db.update_node_extra(token, "agent_https", data["agent_https"])

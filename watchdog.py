@@ -72,8 +72,8 @@ def run_crash_alert_oneshot():
             )
             if res.stdout:
                 error_tail = res.stdout.strip()
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.debug(f"Failed to read journalctl error tail: {exc}")
 
     safe_tail = (error_tail or "No log traceback available")[:1200]
     safe_tail = (
@@ -126,8 +126,8 @@ def run_crash_alert_oneshot():
         with open(os.path.join(watchdog_log_dir, "watchdog.log"), "a", encoding="utf-8") as f:
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"{now_str} [CRASH_ALERT] Sent crash notification for {bot_service}\n")
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"Failed to write watchdog crash log: {exc}", file=sys.stderr)
 
     sys.exit(0)
 
@@ -290,8 +290,8 @@ def process_startup_flags():
         finally:
             try:
                 os.remove(RESTART_FLAG_FILE)
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.debug(f"Failed to remove restart flag file: {exc}")
 
     if os.path.exists(REBOOT_FLAG_FILE):
         try:
@@ -315,8 +315,8 @@ def process_startup_flags():
         finally:
             try:
                 os.remove(REBOOT_FLAG_FILE)
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.debug(f"Failed to remove reboot flag file: {exc}")
 
 
 def send_or_edit_telegram_alert(

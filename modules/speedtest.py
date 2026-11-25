@@ -157,21 +157,44 @@ async def get_ping_async(host: str) -> float | None:
         logging.debug("Ignoring speedtest host without a public address")
         return None
     os_type = platform.system().lower()
-    
-    if os_type == "windows":
-        cmd = ["ping", "-n", str(PING_COUNT), "-w", str(PING_TIMEOUT_SEC * 1000), host]
-        regex = r"Average = ([\d.]+)ms"
-    elif os_type == "linux":
-        cmd = ["ping", "-c", str(PING_COUNT), "-W", str(PING_TIMEOUT_SEC), host]
-        regex = r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/"
-    else:
-        cmd = ["ping", "-c", str(PING_COUNT), "-t", str(PING_TIMEOUT_SEC), host]
-        regex = r"round-trip min/avg/max/stddev = [\d.]+/([\d.]+)/"
-        
+
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "ping", *cmd[1:], stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
+        if os_type == "windows":
+            regex = r"Average = ([\d.]+)ms"
+            proc = await asyncio.create_subprocess_exec(
+                "ping",
+                "-n",
+                str(PING_COUNT),
+                "-w",
+                str(PING_TIMEOUT_SEC * 1000),
+                host,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        elif os_type == "linux":
+            regex = r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/"
+            proc = await asyncio.create_subprocess_exec(
+                "ping",
+                "-c",
+                str(PING_COUNT),
+                "-W",
+                str(PING_TIMEOUT_SEC),
+                host,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            regex = r"round-trip min/avg/max/stddev = [\d.]+/([\d.]+)/"
+            proc = await asyncio.create_subprocess_exec(
+                "ping",
+                "-c",
+                str(PING_COUNT),
+                "-t",
+                str(PING_TIMEOUT_SEC),
+                host,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
         stdout, _ = await proc.communicate()
         output = stdout.decode("utf-8", "ignore")
         match = re.search(regex, output)
@@ -388,9 +411,38 @@ async def run_iperf_test_async(
         lang,
     )
     
-    cmd_dl = ["-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-R", "-4"]
-    cmd_ul = ["-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-4"]
-    
+    async def _run_phase(direction: str) -> tuple[float | None, str | None]:
+        summary_key = "sum_received" if direction == "download" else "sum_sent"
+        fail_prefix = "DOWNLOAD_FAIL" if direction == "download" else "UPLOAD_FAIL"
+        log_label = "Download" if direction == "download" else "Upload"
+        short_label = "DL" if direction == "download" else "UL"
+        try:
+            if direction == "download":
+                proc = await asyncio.create_subprocess_exec(
+                    "iperf3", "-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-R", "-4",
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+            else:
+                proc = await asyncio.create_subprocess_exec(
+                    "iperf3", "-c", host, "-p", port, "-J", "-t", str(IPERF_TEST_DURATION), "-4",
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
+            if proc.returncode != 0:
+                return None, _handle_iperf_error_output(out, err, proc.returncode, direction)
+            try:
+                data = json.loads(out)
+                if summary_key not in data["end"]:
+                    return None, f"{fail_prefix}: No {summary_key} in final report"
+                speed = data["end"][summary_key]["bits_per_second"] / 1000000
+                logging.info(f"{log_label} speed: {speed:.2f} Mbps")
+                return speed, None
+            except json.JSONDecodeError:
+                return None, f"{fail_prefix}: JSON Decode Error"
+        except Exception as e:
+            logging.error(f"{short_label} Error: {e}")
+            return None, str(e)
+
     results = {"download": 0.0, "upload": 0.0, "ping": ping}
     await edit_status_safe(
         bot,
@@ -401,26 +453,13 @@ async def run_iperf_test_async(
     )
     dl_updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "speedtest_progress_downloading"))
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "iperf3", *cmd_dl, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
-        if proc.returncode != 0:
-            return _handle_iperf_error_output(out, err, proc.returncode, "download")
-        try:
-            data = json.loads(out)
-            if "sum_received" not in data["end"]:
-                return "DOWNLOAD_FAIL: No sum_received in final report"
-            results["download"] = data["end"]["sum_received"]["bits_per_second"] / 1000000
-            logging.info(f"Download speed: {results['download']:.2f} Mbps")
-        except json.JSONDecodeError:
-            return "DOWNLOAD_FAIL: JSON Decode Error"
-    except Exception as e:
-        logging.error(f"DL Error: {e}")
-        return str(e)
+        dl_speed, dl_err = await _run_phase("download")
+        if dl_err is not None or dl_speed is None:
+            return dl_err or "DOWNLOAD_FAIL"
+        results["download"] = dl_speed
     finally:
         dl_updater.cancel()
-        
+
     await edit_status_safe(
         bot,
         chat_id,
@@ -430,23 +469,10 @@ async def run_iperf_test_async(
     )
     ul_updater = asyncio.create_task(speedtest_progress_updater(bot, chat_id, message_id, time.time(), lang, "speedtest_progress_uploading"))
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "iperf3", *cmd_ul, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=IPERF_PROCESS_TIMEOUT)
-        if proc.returncode != 0:
-            return _handle_iperf_error_output(out, err, proc.returncode, "upload")
-        try:
-            data = json.loads(out)
-            if "sum_sent" not in data["end"]:
-                return "UPLOAD_FAIL: No sum_sent in final report"
-            results["upload"] = data["end"]["sum_sent"]["bits_per_second"] / 1000000
-            logging.info(f"Upload speed: {results['upload']:.2f} Mbps")
-        except json.JSONDecodeError:
-            return "UPLOAD_FAIL: JSON Decode Error"
-    except Exception as e:
-        logging.error(f"UL Error: {e}")
-        return str(e)
+        ul_speed, ul_err = await _run_phase("upload")
+        if ul_err is not None or ul_speed is None:
+            return ul_err or "UPLOAD_FAIL"
+        results["upload"] = ul_speed
     finally:
         ul_updater.cancel()
         
@@ -464,7 +490,6 @@ async def run_iperf_test_async(
 
 async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str) -> str:
     """Run Ookla Speedtest CLI and return formatted result"""
-    cmd = ["--accept-license", "--accept-gdpr", "--format=json"]
     updater = asyncio.create_task(
         speedtest_progress_updater(
             bot,
@@ -484,9 +509,12 @@ async def run_ookla_speedtest(bot: Bot, chat_id: int, message_id: int, lang: str
     
     try:
         proc = await asyncio.create_subprocess_exec(
-            "speedtest", *cmd, 
-            stdout=asyncio.subprocess.PIPE, 
-            stderr=asyncio.subprocess.PIPE
+            "speedtest",
+            "--accept-license",
+            "--accept-gdpr",
+            "--format=json",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         

@@ -110,8 +110,7 @@ self.addEventListener('notificationclick', (event) => {
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
             // Check if there is already a window open
-            for (let i = 0; i < windowClients.length; i++) {
-                const client = windowClients[i];
+            for (const client of windowClients) {
                 if ('focus' in client) {
                     if (targetUrl !== '/' && 'navigate' in client) {
                         client.navigate(targetUrl);

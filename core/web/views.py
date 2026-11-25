@@ -35,6 +35,58 @@ from .avatar import get_avatar_html as _get_avatar_html
 
 routes = web.RouteTableDef()
 
+_SHARED_UI_PREFS_I18N_KEYS: Final[tuple[str, ...]] = (
+    "web_theme_label",
+    "web_vibration_label",
+    "web_agent_ping_label",
+    "web_hidden_widgets",
+    "web_hidden_widgets_empty",
+    "web_save_layout",
+    "web_chart_expand",
+    "web_chart_collapse",
+    "web_uptime_history_7d",
+    "unit_kbps",
+    "web_screenshot_mode",
+    "web_screenshot_mode_hint",
+    "web_screenshot_mode_enabled",
+    "web_screenshot_mode_disabled",
+    "web_haptics_unsupported",
+)
+
+_SHARED_UPDATE_MODAL_I18N_KEYS: Final[tuple[str, ...]] = (
+    "web_update_placeholder",
+    "web_update_check_btn",
+    "web_update_do_btn",
+    "web_nodes_modal_title",
+    "web_nodes_modal_search",
+    "web_nodes_modal_all_updated",
+    "web_nodes_modal_partial_update",
+    "web_nodes_modal_none_updated",
+    "web_nodes_all_updated_badge",
+    "web_nodes_pending_badge",
+    "web_nodes_failed_badge",
+    "web_nodes_badge_tooltip",
+    "web_nodes_modal_subtitle",
+    "web_nodes_badge_updated",
+    "web_nodes_badge_pending",
+    "web_nodes_badge_failed",
+    "web_nodes_client_synced",
+    "web_nodes_client_pending",
+    "web_nodes_client_failed",
+    "web_nodes_status_btn",
+    "web_nodes_modal_total",
+    "web_nodes_modal_updated",
+    "web_nodes_modal_pending",
+    "web_nodes_modal_failed",
+    "web_nodes_not_found",
+    "btn_close",
+    "web_notifications_title",
+)
+
+
+def _i18n_bundle(keys: tuple[str, ...], lang: str) -> dict[str, str]:
+    return {key: _(key, lang) for key in keys}
+
 
 @routes.get("/operations")
 async def handle_operations_page(request: web.Request) -> web.StreamResponse:
@@ -213,9 +265,25 @@ async def _ensure_generated_favicons() -> None:
 
 
 def _render_html_response(template_name: str, context: dict[str, Any], request: web.Request) -> web.Response:
-    if "web_toggle_holiday_mode" not in context:
-        lang = context.get("lang") or DEFAULT_LANGUAGE
-        context["web_toggle_holiday_mode"] = _("web_toggle_holiday_mode", lang)
+    lang = context.get("lang") or DEFAULT_LANGUAGE
+    shared_defaults = {
+        "web_theme_label": "web_theme_label",
+        "web_vibration_label": "web_vibration_label",
+        "web_screenshot_mode": "web_screenshot_mode",
+        "web_screenshot_mode_hint": "web_screenshot_mode_hint",
+        "web_screenshot_mode_enabled": "web_screenshot_mode_enabled",
+        "web_screenshot_mode_disabled": "web_screenshot_mode_disabled",
+        "web_haptics_unsupported": "web_haptics_unsupported",
+        "web_toggle_perf_mode": "web_toggle_perf_mode",
+        "web_toggle_a11y_mode": "web_toggle_a11y_mode",
+        "web_toggle_holiday_mode": "web_toggle_holiday_mode",
+    }
+    for key, i18n_key in shared_defaults.items():
+        if key not in context:
+            context[key] = _(i18n_key, lang)
+
+
+
     template = JINJA_ENV.get_template(template_name)
     response = web.Response(text=template.render(**context), content_type="text/html")
     if hasattr(web_auth, "_set_csrf_cookie"):
@@ -504,8 +572,7 @@ async def handle_dashboard(request: web.Request) -> web.StreamResponse:
         "web_node_mgmt_title": _("web_node_mgmt_title", lang),
         "web_monitor_btn": _("web_monitor_btn", lang),
         "web_monitor_title": _("web_monitor_title", lang),
-        "web_vibration_label": _("web_vibration_label", lang),
-        "web_haptics_unsupported": _("web_haptics_unsupported", lang),
+        **_i18n_bundle(_SHARED_UI_PREFS_I18N_KEYS, lang),
         "web_filter_sort_name": _("web_nodes_monitor_filter_sort_name", lang),
         "web_filter_sort_ping": _("web_nodes_monitor_filter_sort_ping", lang),
         "web_filter_sort_custom": _("web_nodes_monitor_filter_sort_custom", lang),
@@ -832,8 +899,7 @@ async def handle_nodes_monitor_page(request: web.Request) -> web.StreamResponse:
         "web_filter_restarting": _("web_nodes_monitor_filter_restarting", lang),
         "web_filter_btn": _("web_nodes_monitor_filter_btn", lang),
         "web_filter_title": _("web_nodes_monitor_filter_title", lang),
-        "web_vibration_label": _("web_vibration_label", lang),
-        "web_haptics_unsupported": _("web_haptics_unsupported", lang),
+        **_i18n_bundle(_SHARED_UI_PREFS_I18N_KEYS, lang),
         "web_filter_status": _("web_nodes_monitor_filter_status", lang),
         "web_filter_cpu_load": _("web_nodes_monitor_filter_cpu_load", lang),
         "web_filter_high": _("web_nodes_monitor_filter_high", lang),
@@ -1150,10 +1216,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_sessions_revoked_alert": _("web_sessions_revoked_alert", lang),
         "web_session_current_label": _("web_session_current_label", lang),
         "web_sessions_revoke_all": _("web_sessions_revoke_all", lang),
-        "web_update_placeholder": _("web_update_placeholder", lang),
-        "web_update_check_btn": _("web_update_check_btn", lang),
-        "web_update_do_btn": _("web_update_do_btn", lang),
-        "web_notifications_title": _("web_notifications_title", lang),
+        **_i18n_bundle(_SHARED_UPDATE_MODAL_I18N_KEYS, lang),
         "web_fill_field": _("web_fill_field", lang),
         "web_conn_error_short": _("web_conn_error_short", lang),
         "web_error_short": _("web_error_short", lang),
@@ -1220,6 +1283,9 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_billing_status": _("web_billing_status", lang),
         "web_ping_target_internal": _("web_ping_target_internal", lang),
         "web_ping_target_internal_short": _("web_ping_target_internal_short", lang),
+        "web_ping_target_title": _("web_ping_target_title", lang),
+        "web_ping_target_internal_desc": _("web_ping_target_internal_desc", lang),
+        "web_apply": _("web_apply", lang),
         "web_ping_target_no_nodes": _("web_ping_target_no_nodes", lang),
         "web_push_title": _("web_push_title", lang),
         "web_push_desc": _("web_push_desc", lang),
@@ -1297,6 +1363,9 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "val_ping_target": getattr(current_config, "PING_TARGET", "google"),
         "web_ping_target_internal": _("web_ping_target_internal", lang),
         "web_ping_target_internal_short": _("web_ping_target_internal_short", lang),
+        "web_ping_target_title": _("web_ping_target_title", lang),
+        "web_ping_target_internal_desc": _("web_ping_target_internal_desc", lang),
+        "web_apply": _("web_apply", lang),
         "val_timeout": str(current_config.NODE_OFFLINE_TIMEOUT),
         "web_settings_page_title": _("web_settings_page_title", lang),
         "web_back": _("web_back", lang),
@@ -1321,8 +1390,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_save_btn": _("web_save_btn", lang),
         "web_users_section": _("web_users_section", lang),
         "web_add_user_btn": _("web_add_user_btn", lang),
-        "web_vibration_label": _("web_vibration_label", lang),
-        "web_haptics_unsupported": _("web_haptics_unsupported", lang),
+        **_i18n_bundle(_SHARED_UI_PREFS_I18N_KEYS, lang),
         "web_user_id": _("web_user_id", lang),
         "web_user_name": _("web_user_name", lang),
         "web_user_role": _("web_user_role", lang),
@@ -1372,10 +1440,7 @@ async def handle_settings_page(request: web.Request) -> web.StreamResponse:
         "web_version": APP_VERSION.lstrip("v"),
         "cache_ver": CACHE_VER,
         "web_update_section": _("web_update_section", lang),
-        "web_update_placeholder": _("web_update_placeholder", lang),
-        "web_update_check_btn": _("web_update_check_btn", lang),
-        "web_update_do_btn": _("web_update_do_btn", lang),
-        "web_notifications_title": _("web_notifications_title", lang),
+        **_i18n_bundle(_SHARED_UPDATE_MODAL_I18N_KEYS, lang),
         "web_clear_notifications": _("web_clear_notifications", lang),
         "web_notifications_cleared": _("web_notifications_cleared", lang),
         "web_logout": _("web_logout", lang),

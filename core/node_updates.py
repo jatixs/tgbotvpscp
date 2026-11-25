@@ -1,5 +1,6 @@
 """Confirmation and heartbeat delivery for node client updates."""
 import asyncio
+import logging
 import re
 import secrets
 import time
@@ -60,6 +61,9 @@ def normalize_report(report) -> dict:
         "supported": report.get("supported") is True,
         "busy": report.get("busy") is True,
     }
+    version = report.get("version")
+    if isinstance(version, str) and version:
+        normalized["version"] = version[:32]
     failed = report.get("failed")
     if type(failed) is int and 0 < failed <= 2**31 - 1:
         normalized["failed"] = failed
@@ -71,10 +75,32 @@ def _is_eligible(node, now: float) -> bool:
     return report.get("supported") is True and not report["busy"] and now - node.last_seen < config.NODE_OFFLINE_TIMEOUT
 
 
+def _get_agent_version() -> str:
+    try:
+        from .utils import get_app_version
+        return get_app_version()
+    except Exception:
+        logging.debug("Unable to read agent application version", exc_info=True)
+        return ""
+
+
 async def eligible_nodes():
     now = time.time()
     nodes = await Node.all().order_by("id")
-    eligible = [{"id": node.id, "name": node.name} for node in nodes if _is_eligible(node, now)]
+    agent_ver = _get_agent_version()
+    eligible = []
+    for node in nodes:
+        if _is_eligible(node, now):
+            node_stats = node.stats or {}
+            client_update = node_stats.get("client_update") or {}
+            ver = node_stats.get("client_version") or client_update.get("version")
+            if not ver and client_update.get("commit"):
+                ver = client_update["commit"][:7]
+            eligible.append({
+                "id": node.id,
+                "name": node.name,
+                "version": ver or agent_ver or "",
+            })
     return eligible, len(nodes) - len(eligible)
 
 
@@ -149,10 +175,22 @@ async def latest_results(user_id: int) -> list[dict]:
         return []
     now = time.time()
     jobs = await NodeClientUpdate.filter(rollout=latest.rollout).prefetch_related("node").order_by("node_id")
-    return [
-        {
+    agent_ver = _get_agent_version()
+    results = []
+    for job in jobs:
+        node_stats = job.node.stats or {}
+        client_update = node_stats.get("client_update") or {}
+        ver = node_stats.get("client_version") or client_update.get("version")
+        if not ver:
+            if job.status in ("updated", "current"):
+                ver = agent_ver
+            elif client_update.get("commit"):
+                ver = client_update["commit"][:7]
+            else:
+                ver = agent_ver
+        results.append({
             "name": job.node.name,
             "status": "expired" if job.status == "pending" and job.expires_at <= now else job.status,
-        }
-        for job in jobs
-    ]
+            "version": ver or agent_ver or "",
+        })
+    return results

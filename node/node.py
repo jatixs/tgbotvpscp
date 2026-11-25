@@ -2,7 +2,9 @@
 Metrics Collection Agent (Node Agent).
 Script running on remote servers (nodes). Collects system metrics and reports them to the master bot via HTTP.
 """
+import asyncio
 import collections
+import concurrent.futures
 import hashlib
 import hmac
 import html
@@ -247,15 +249,44 @@ def get_speedtest_mode():
     return 'AUTO'
 
 
+def _run_async_coro(coro):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
+async def _communicate_with_timeout(proc, timeout_sec: float):
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
+        return proc.returncode, stdout, stderr
+    except asyncio.TimeoutError:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+        raise
+
+
 def run_ookla_speedtest():
     """Run Ookla Speedtest CLI and return result dict."""
-    cmd = ["speedtest", "--accept-license", "--accept-gdpr", "--format=json"]
-    
+    async def _spawn_and_run():
+        proc = await asyncio.create_subprocess_exec(
+            "speedtest",
+            "--accept-license",
+            "--accept-gdpr",
+            "--format=json",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        return await _communicate_with_timeout(proc, 120)
+
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=120)
-        
-        if result.returncode == 0:
-            output = result.stdout.decode('utf-8', errors='ignore')
+        returncode, stdout, stderr = _run_async_coro(_spawn_and_run())
+
+        if returncode == 0:
+            output = stdout.decode('utf-8', errors='ignore')
             data = json.loads(output)
             
             download_speed = data.get("download", {}).get("bandwidth", 0) / 125000
@@ -276,9 +307,9 @@ def run_ookla_speedtest():
                 "url": result_url
             }
         else:
-            error = result.stderr.decode('utf-8', errors='ignore') or result.stdout.decode('utf-8', errors='ignore')
+            error = stderr.decode('utf-8', errors='ignore') or stdout.decode('utf-8', errors='ignore')
             return {"success": False, "error": error[:500]}
-    except subprocess.TimeoutExpired:
+    except (asyncio.TimeoutError, TimeoutError):
         return {"success": False, "error": "Timeout (120s)"}
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"JSON parse error: {e}"}
@@ -510,8 +541,8 @@ class SSHMonitor:
                 self.file_handle.close()
                 self._open_log_file()
                 return []
-        except Exception:
-            pass
+        except OSError as exc:
+            logging.debug(f"Failed to stat log file {self.current_file}: {exc}")
 
         events = []
         try:
@@ -765,8 +796,9 @@ def get_top_processes(metric):
                 pass
 
         if metric == 'cpu':
+            cpu_count = psutil.cpu_count() or 1
             sorted_procs = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:3]
-            info_list = [f"{p['name']} ({p['cpu_percent']}%)" for p in sorted_procs]
+            info_list = [f"{p['name']} ({p['cpu_percent'] / cpu_count:.1f}%)" for p in sorted_procs]
         elif metric == 'ram':
             sorted_procs = sorted(procs, key=lambda p: p['memory_percent'], reverse=True)[:3]
             info_list = [f"{p['name']} ({p['memory_percent']:.1f}%)" for p in sorted_procs]
@@ -873,8 +905,8 @@ def get_system_stats():
                     parsed = urlparse(AGENT_BASE_URL)
                     target_ip = socket.gethostbyname(parsed.hostname) if parsed.hostname else "8.8.8.8"
                     target_port = parsed.port if parsed.port else (443 if parsed.scheme == "https" else 80)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug(f"Failed to resolve AGENT_BASE_URL for ping: {exc}")
 
             ping_mode = GLOBAL_PING_MODE
             if ping_mode == "icmp":
@@ -901,8 +933,8 @@ def get_system_stats():
                     if resp.status_code in {200, 204, 301, 302, 403, 404, 405, 500}:
                         LAST_PING_MS = round((time.time() - t_http) * 1000, 1)
                         success = True
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug(f"HTTP ping to {target_http} failed: {exc}")
             
             if not success:
                 icmp_ms = _do_icmp_ping(target_ip)
@@ -1060,20 +1092,34 @@ def get_public_iperf_server(exclude_ru=True):
 
 def measure_ping(host: str) -> float:
     """Measure ping to a host, returns average ping in ms or None on failure"""
-    if parse_public_ip(host) is None:
+    target_ip = parse_public_ip(host)
+    if target_ip is None:
         logging.warning("Skipping ping to invalid host from server list: %r", host)
         return None
+
+    async def _spawn_and_ping():
+        proc = await asyncio.create_subprocess_exec(
+            "ping",
+            "-c",
+            "2",
+            "-W",
+            "2",
+            str(target_ip),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        return await _communicate_with_timeout(proc, 5)
+
     try:
         # Linux ping command
-        cmd = ["ping", "-c", "2", "-W", "2", host]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
+        returncode, stdout, _ = _run_async_coro(_spawn_and_ping())
+        if returncode == 0:
             # Parse: rtt min/avg/max/mdev = 1.234/5.678/9.012/1.234 ms
-            match = re.search(r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/", result.stdout)
+            match = re.search(r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/", stdout.decode("utf-8", errors="ignore"))
             if match:
                 return float(match.group(1))
     except Exception as e:
-        logging.debug(f"Ping to {host} failed: {e}")
+        logging.debug(f"Ping to {target_ip} failed: {e}")
     return None
 
 def record_command_result(task, result):

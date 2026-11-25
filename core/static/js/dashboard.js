@@ -802,6 +802,7 @@ function renderNextNodeBatch() {
     }).join('');
 
     container.insertAdjacentHTML('beforeend', html);
+    window.initializeIpBadges(container);
     renderedCount += batch.length;
 }
 

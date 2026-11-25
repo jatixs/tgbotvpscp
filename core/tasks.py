@@ -9,7 +9,6 @@ import ipaddress
 import logging
 import platform
 import re
-import subprocess
 import time
 from collections import deque
 
@@ -35,22 +34,41 @@ BACKGROUND_TASKS_KEY = "background_tasks"
 
 
 async def _do_icmp_ping(target_ip: str = "8.8.8.8") -> str | None:
+    proc = None
     try:
         target_ip = str(ipaddress.ip_address(target_ip))
         if platform.system().lower() == "windows":
-            cmd = ["ping", "-n", "1", "-w", "2000", target_ip]
             pattern = r"[=<](\d+)\s*ms"
+            proc = await asyncio.create_subprocess_exec(
+                "ping",
+                "-n",
+                "1",
+                "-w",
+                "2000",
+                target_ip,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
         else:
-            cmd = ["ping", "-c", "1", "-W", "2", target_ip]
             pattern = r"time=([\d\.]+)\s*ms"
-
-        proc = await asyncio.to_thread(
-            lambda: subprocess.run(cmd, capture_output=True, timeout=5)
-        )
-        ping_match = re.search(pattern, proc.stdout.decode(errors="ignore"))
+            proc = await asyncio.create_subprocess_exec(
+                "ping",
+                "-c",
+                "1",
+                "-W",
+                "2",
+                target_ip,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        ping_match = re.search(pattern, stdout.decode(errors="ignore"))
         if ping_match:
             return str(round(float(ping_match.group(1)), 1))
     except Exception as exc:
+        if proc is not None and proc.returncode is None:
+            proc.kill()
+            await proc.wait()
         logging.debug("ICMP ping to %s failed: %s", target_ip, exc)
     return None
 

@@ -2,9 +2,9 @@
 """Finalize HTTPS migration from the VPS host, including Docker deployments."""
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -54,67 +54,131 @@ def update_env(path: Path, values: dict[str, str]) -> None:
             os.unlink(temporary)
 
 
-def compose_command() -> list[str]:
-    docker = shutil.which("docker")
-    if docker:
-        result = subprocess.run([docker, "compose", "version"], capture_output=True, timeout=10)
-        if result.returncode == 0:
-            return [docker, "compose"]
-    docker_compose = shutil.which("docker-compose")
-    if docker_compose:
-        result = subprocess.run([docker_compose, "version"], capture_output=True, timeout=10)
-        if result.returncode == 0:
-            return [docker_compose]
+async def _await_exit(
+    proc: asyncio.subprocess.Process,
+    label: str,
+    timeout: int,
+    *,
+    check: bool = True,
+) -> int:
+    try:
+        returncode = await asyncio.wait_for(proc.wait(), timeout=timeout)
+    except asyncio.TimeoutError as exc:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+        raise RuntimeError(f"Command timed out: {label}") from exc
+    if check and returncode:
+        raise RuntimeError(f"Command failed ({returncode}): {label}")
+    return returncode
+
+
+async def compose_command() -> list[str]:
+    search_path = "/usr/local/bin:/usr/bin:/bin:/snap/bin" if os.name == "posix" else None
+    if shutil.which("docker", path=search_path):
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "compose",
+            "version",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        if await _await_exit(proc, "docker compose version", 10, check=False) == 0:
+            return ["docker", "compose"]
+    if shutil.which("docker-compose", path=search_path):
+        proc = await asyncio.create_subprocess_exec(
+            "docker-compose",
+            "version",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        if await _await_exit(proc, "docker-compose version", 10, check=False) == 0:
+            return ["docker-compose"]
     raise RuntimeError("Docker Compose is not installed")
 
 
-def run(command: list[str]) -> None:
-    result = subprocess.run(command, cwd=INSTALL_DIR, check=False, timeout=180)
-    if result.returncode:
-        raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(command)}")
+async def _run_deploy_action(
+    action: str,
+    deploy_mode: str,
+    compose: list[str] | None,
+    profile: str,
+    container: str,
+) -> None:
+    if deploy_mode != "docker":
+        if action == "restart":
+            proc = await asyncio.create_subprocess_exec("systemctl", "restart", "tg-bot", cwd=INSTALL_DIR)
+            await _await_exit(proc, "systemctl restart tg-bot", 180)
+        else:
+            proc = await asyncio.create_subprocess_exec("/usr/local/bin/tgcp-bot", "tls", "check", cwd=INSTALL_DIR)
+            await _await_exit(proc, "/usr/local/bin/tgcp-bot tls check", 180)
+        return
+
+    use_v2 = compose == ["docker", "compose"]
+    if action == "restart":
+        if use_v2:
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "compose", "--profile", profile, "restart", container,
+                cwd=INSTALL_DIR,
+            )
+            label = f"docker compose --profile {profile} restart {container}"
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                "docker-compose", "--profile", profile, "restart", container,
+                cwd=INSTALL_DIR,
+            )
+            label = f"docker-compose --profile {profile} restart {container}"
+    else:
+        if use_v2:
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "compose", "--profile", profile, "exec", "-T", container, "python", "manage.py", "tls", "check",
+                cwd=INSTALL_DIR,
+            )
+            label = f"docker compose --profile {profile} exec -T {container} python manage.py tls check"
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                "docker-compose", "--profile", profile, "exec", "-T", container, "python", "manage.py", "tls", "check",
+                cwd=INSTALL_DIR,
+            )
+            label = f"docker-compose --profile {profile} exec -T {container} python manage.py tls check"
+    await _await_exit(proc, label, 180)
 
 
-def main() -> int:
+async def _main_async() -> int:
     try:
         _lines, config = read_env()
         deploy_mode = config.get("DEPLOY_MODE", "systemd")
         profile = config.get("COMPOSE_PROFILES") or config.get("INSTALL_MODE", "secure")
         if deploy_mode == "docker" and profile not in {"secure", "root"}:
             raise RuntimeError(f"Unsupported Docker Compose profile: {profile!r}")
-        compose = compose_command() if deploy_mode == "docker" else None
+        compose = await compose_command() if deploy_mode == "docker" else None
         container = f"tg-bot-{profile}"
 
         if len(sys.argv) > 1 and sys.argv[1] == "clear-initial-password":
             init_pwd_var = "TG_WEB_INITIAL_" + "PASSWORD"
             update_env(ENV_FILE, {init_pwd_var: ""})
-            if deploy_mode == "docker":
-                run([*compose, "--profile", profile, "restart", container])
-            else:
-                run(["systemctl", "restart", "tg-bot"])
+            await _run_deploy_action("restart", deploy_mode, compose, profile, container)
             print("Initial plaintext password removed; service restarted.")
             return 0
 
         if not config.get("WEB_PUBLIC_URL", "").startswith("https://"):
             raise RuntimeError("WEB_PUBLIC_URL must be configured with HTTPS")
-        if deploy_mode == "docker":
-            run([*compose, "--profile", profile, "exec", "-T", container, "python", "manage.py", "tls", "check"])
-        else:
-            run(["/usr/local/bin/tgcp-bot", "tls", "check"])
+        await _run_deploy_action("tls-check", deploy_mode, compose, profile, container)
 
         updates = {"LEGACY_NODE_BRIDGE": "false"}
         if deploy_mode != "docker" and config.get("WEB_TLS_MODE") == "managed":
             updates["WEB_SERVER_HOST"] = "127.0.0.1"
         update_env(ENV_FILE, updates)
 
-        if deploy_mode == "docker":
-            run([*compose, "--profile", profile, "restart", container])
-        else:
-            run(["systemctl", "restart", "tg-bot"])
+        await _run_deploy_action("restart", deploy_mode, compose, profile, container)
         print("HTTPS migration finalized; legacy bridge disabled.")
         return 0
     except Exception as exc:
         print(f"HTTPS migration was not finalized: {exc}", file=sys.stderr)
         return 1
+
+
+def main() -> int:
+    return asyncio.run(_main_async())
 
 
 if __name__ == "__main__":

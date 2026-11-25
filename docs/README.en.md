@@ -7,8 +7,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.28.1-blue?style=for-the-badge" alt="Version 1.28.1"/></a>
-  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-100-purple?style=for-the-badge" alt="Build 100"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/version-v1.28.2-blue?style=for-the-badge" alt="Version 1.28.2"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/codename-Argus-0ea5e9?style=for-the-badge" alt="Codename Argus"/></a>
+  <a href="https://github.com/jatixs/tgbotvpscp/releases/latest"><img src="https://img.shields.io/badge/build-101-purple?style=for-the-badge" alt="Build 101"/></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-%233670A0.svg?style=for-the-badge&logo=python&logoColor=ffdd54" alt="Python"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/stargazers"><img src="https://img.shields.io/github/stars/jatixs/tgbotvpscp?style=for-the-badge&logo=github&color=gold" alt="GitHub Stars"/></a>
   <a href="https://github.com/jatixs/tgbotvpscp/releases"><img src="https://img.shields.io/github/downloads/jatixs/tgbotvpscp/total?style=for-the-badge&logo=github&color=blue" alt="Downloads"/></a>
@@ -20,7 +21,7 @@
 </p>
 
 <p align="center">
-  <b>v1.28.1</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
+  <b>v1.28.2 "Argus"</b> — a professional ecosystem for monitoring and managing server infrastructure<br>
   (Systemd / Docker / API / WebUI / PWA / Multi-Node / Remote SSH / Backup Manager)
 </p>
 
@@ -32,11 +33,11 @@
 
 ## 📋 Table of Contents
 
-1. [About](#%EF%B8%8F-about-the-project)
+1. [About](#-about-the-project)
 2. [Key Features](#-key-features)
-3. [Architecture](#%EF%B8%8F-architecture)
+3. [Architecture](#-architecture)
 4. [Quick Start](#-quick-start)
-5. [Web Interface](#%EF%B8%8F-web-interface)
+5. [Web Interface](#-web-interface)
 6. [Security](#-security)
 7. [Project Structure](#-project-structure)
 8. [Documentation](#-documentation)
@@ -44,7 +45,7 @@
 
 ---
 
-## ℹ️ About the Project
+## 📖 About the Project
 
 **VPS Manager Telegram Bot** is a comprehensive enterprise-class solution for managing server infrastructure via Telegram and web interface.
 
@@ -137,7 +138,7 @@
 
 ---
 
-## 🏗️ Architecture
+## 🧩 Architecture
 
 **Agent-Client Pattern** with centralized management:
 
@@ -255,7 +256,7 @@ Agent routes: `GET /api/agent/https` advertises the HTTPS origin without a token
 
 ---
 
-## 🖥️ Web Interface
+## 💻 Web Interface
 
 ### Main Features
 
@@ -667,8 +668,8 @@ If you find this project useful, support it:
 ---
 
 <p align="center">
-  <b>Version:</b> 1.28.1 (Build 100)<br>
-  <b>Release Date:</b> November 21, 2026<br>
+  <b>Version:</b> 1.28.2 "Argus" (Build 101)<br>
+  <b>Release Date:</b> November 24, 2026<br>
   <b>License:</b> GPL-3.0 license<br>
   <b>Status:</b> Release<br>
   <br>
